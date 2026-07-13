@@ -16,25 +16,25 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Sanity gate: the workflow only runs when the dispatcher types the exact token.
   EXPECTED_INPUT: DEPLOY_UI_TRUTHFULNESS_V1
-  # Pinned candidate commit produced by the sanitized publication pipeline.
-  # Functional provenance: 68f267b1cd113c5b100bbf74f69502e75e2e49ff
-  # Patch provenance:      9ebff70d1fa6b56077728873a14dc6326363ac30b7adcf33f3f70e2e3d2c171f
   DEPLOY_SHA: 68be3495ed35a4081dfa4fcec32fbcb06a6a0743
+  BASE_URL: https://santaninverter-oracle.simondalmasso44.workers.dev
 
 jobs:
   deploy:
     name: Deploy sanitized UI truthfulness candidate
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+
     steps:
       - name: Verify explicit dispatch token
+        shell: bash
         run: |
+          set -euo pipefail
           if [ "${{ github.event.inputs.DEPLOY_UI_TRUTHFULNESS_V1 }}" != "$EXPECTED_INPUT" ]; then
-            echo "::error::Aborting: DEPLOY_UI_TRUTHFULNESS_V1 input did not match the expected literal token."
+            echo "::error::Confirmation input did not match DEPLOY_UI_TRUTHFULNESS_V1."
             exit 1
           fi
-          echo "Dispatch token verified."
 
       - name: Checkout pinned sanitized candidate
         uses: actions/checkout@v4
@@ -42,13 +42,12 @@ jobs:
           ref: 68be3495ed35a4081dfa4fcec32fbcb06a6a0743
           fetch-depth: 0
 
-      - name: Verify checkout SHA matches pinned candidate
+      - name: Verify checkout SHA
+        shell: bash
         run: |
+          set -euo pipefail
           ACTUAL_SHA="$(git rev-parse HEAD)"
-          if [ "$ACTUAL_SHA" != "$DEPLOY_SHA" ]; then
-            echo "::error::Checkout SHA $ACTUAL_SHA does not match pinned DEPLOY_SHA $DEPLOY_SHA"
-            exit 1
-          fi
+          test "$ACTUAL_SHA" = "$DEPLOY_SHA"
           echo "Checkout SHA verified: $ACTUAL_SHA"
 
       - name: Setup Bun
@@ -62,8 +61,31 @@ jobs:
       - name: Run focused UI truthfulness tests
         run: node scripts/ui-truthfulness-tests.mjs
 
-      - name: TypeScript check (no new errors vs baseline)
-        run: bunx tsc --noEmit || true
+      - name: TypeScript check against validated baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment-evidence
+
+          set +e
+          TSC_OUTPUT="$(bunx tsc --noEmit 2>&1)"
+          TSC_STATUS=$?
+          set -e
+
+          printf '%s\n' "$TSC_OUTPUT" > deployment-evidence/tsc-output.txt
+
+          TSC_ERROR_COUNT="$(
+            printf '%s\n' "$TSC_OUTPUT" |
+            grep -cE 'error TS[0-9]+:' || true
+          )"
+
+          echo "TypeScript exit status: $TSC_STATUS"
+          echo "TypeScript error count: $TSC_ERROR_COUNT"
+
+          if [ "$TSC_ERROR_COUNT" -ne 86 ]; then
+            echo "::error::TypeScript diagnostic count changed from validated baseline 86 to $TSC_ERROR_COUNT."
+            exit 1
+          fi
 
       - name: Build with OpenNext for Cloudflare
         run: bunx opennextjs-cloudflare build
@@ -71,86 +93,260 @@ jobs:
       - name: Wrap worker with cron
         run: node scripts/wrap-worker-with-cron.mjs
 
-      - name: Configure Wrangler
+      - name: Validate canonical Wrangler configuration
+        shell: bash
         run: |
+          set -euo pipefail
           test -f ./wrangler.jsonc
-          echo "Using wrangler config: $(realpath ./wrangler.jsonc)"
+          test -f ./.open-next/worker-with-cron.js
+          test -d ./.open-next/assets
 
-      - name: Record active Cloudflare version before deploy
+          jq -e '
+            .name == "santaninverter-oracle" and
+            .main == ".open-next/worker-with-cron.js" and
+            .assets.binding == "ASSETS" and
+            .assets.directory == ".open-next/assets" and
+            .compatibility_date == "2026-06-16" and
+            .triggers.crons == ["0 23 * * 1-5"] and
+            ([.kv_namespaces[].binding] | sort) == (["ORACLE_ASSETS_HISTORY", "ORACLE_FCI_HISTORY", "ORACLE_PREDICTIONS"] | sort) and
+            ([.services[].binding] | index("MACRO_PROXY")) != null
+          ' ./wrangler.jsonc >/dev/null
+
+      - name: Record active Cloudflare deployment before deploy
         id: previous_version
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
         run: |
           set -euo pipefail
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::error::CLOUDFLARE_API_TOKEN secret is not set"
-            exit 1
-          fi
-          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::error::CLOUDFLARE_ACCOUNT_ID secret is not set"
-            exit 1
-          fi
-          WORKER_NAME="$(jq -r .name ./wrangler.jsonc)"
-          echo "Worker name: $WORKER_NAME"
-          PREVIOUS_ACTIVE_VERSION="$(
-            curl -sS --fail-with-body               -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"             | jq -r '.result.default_environment.deployment_id // empty'
+          mkdir -p deployment-evidence
+
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+
+          WORKER_NAME="$(jq -er '.name' ./wrangler.jsonc)"
+          API_URL="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/deployments"
+
+          DEPLOYMENTS_JSON="$(
+            curl -fsS \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "$API_URL"
           )"
-          echo "previous_active_version=$PREVIOUS_ACTIVE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Previous active version: $PREVIOUS_ACTIVE_VERSION"
+
+          printf '%s\n' "$DEPLOYMENTS_JSON" | jq -e '.success == true' >/dev/null
+
+          LATEST_DEPLOYMENT="$(
+            printf '%s\n' "$DEPLOYMENTS_JSON" |
+            jq -cer '
+              .result.deployments as $items
+              | if ($items | length) == 0 then
+                  error("No existing Cloudflare deployment found")
+                elif $items[0].created_on? != null then
+                  ($items | max_by(.created_on))
+                else
+                  $items[0]
+                end
+            '
+          )"
+
+          PREVIOUS_DEPLOYMENT_ID="$(
+            printf '%s\n' "$LATEST_DEPLOYMENT" | jq -er '.id'
+          )"
+
+          PREVIOUS_VERSION_ID="$(
+            printf '%s\n' "$LATEST_DEPLOYMENT" |
+            jq -er '
+              .versions
+              | ((map(select((.percentage | tonumber) == 100)) | first)
+                 // max_by(.percentage | tonumber))
+              | .version_id
+            '
+          )"
+
+          test -n "$PREVIOUS_DEPLOYMENT_ID"
+          test -n "$PREVIOUS_VERSION_ID"
+
+          echo "previous_deployment_id=$PREVIOUS_DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+          echo "previous_version_id=$PREVIOUS_VERSION_ID" >> "$GITHUB_OUTPUT"
+
+          jq -n \
+            --arg deployment_id "$PREVIOUS_DEPLOYMENT_ID" \
+            --arg version_id "$PREVIOUS_VERSION_ID" \
+            '{previous_deployment_id: $deployment_id, previous_version_id: $version_id}' \
+            > deployment-evidence/pre-deploy-cloudflare.json
+
+          echo "Rollback target captured."
 
       - name: Deploy to Cloudflare Workers
         id: deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
         run: |
           set -euo pipefail
-          bunx wrangler deploy ./wrangler.jsonc
-          WORKER_NAME="$(jq -r .name ./wrangler.jsonc)"
-          DEPLOYED_VERSION="$(
-            curl -sS --fail-with-body               -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"             | jq -r '.result.default_environment.deployment_id // empty'
-          )"
-          echo "deployed_version=$DEPLOYED_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Deployed version: $DEPLOYED_VERSION"
+          echo "attempted=true" >> "$GITHUB_OUTPUT"
 
-      - name: Smoke GET against deployed worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          set -euo pipefail
-          # The worker serves the dashboard at its custom domain or workers.dev route.
-          # Probe the workers.dev subdomain as the canonical smoke endpoint.
-          WORKER_NAME="$(jq -r .name ./wrangler.jsonc)"
-          SMOKE_URL="https://$WORKER_NAME.$CLOUDFLARE_ACCOUNT_ID.workers.dev/"
-          echo "Smoke GET: $SMOKE_URL"
-          STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$SMOKE_URL" || true)"
-          echo "Smoke status: $STATUS"
-          if [ "$STATUS" != "200" ]; then
-            echo "::error::Smoke GET returned $STATUS (expected 200)"
+          bunx wrangler deploy --config ./wrangler.jsonc
+
+          WORKER_NAME="$(jq -er '.name' ./wrangler.jsonc)"
+          API_URL="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/deployments"
+
+          DEPLOYMENTS_JSON="$(
+            curl -fsS \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "$API_URL"
+          )"
+
+          printf '%s\n' "$DEPLOYMENTS_JSON" | jq -e '.success == true' >/dev/null
+
+          LATEST_DEPLOYMENT="$(
+            printf '%s\n' "$DEPLOYMENTS_JSON" |
+            jq -cer '
+              .result.deployments as $items
+              | if ($items | length) == 0 then
+                  error("No Cloudflare deployment found after deploy")
+                elif $items[0].created_on? != null then
+                  ($items | max_by(.created_on))
+                else
+                  $items[0]
+                end
+            '
+          )"
+
+          NEW_DEPLOYMENT_ID="$(printf '%s\n' "$LATEST_DEPLOYMENT" | jq -er '.id')"
+          NEW_VERSION_ID="$(
+            printf '%s\n' "$LATEST_DEPLOYMENT" |
+            jq -er '.versions | max_by(.percentage | tonumber) | .version_id'
+          )"
+
+          test -n "$NEW_DEPLOYMENT_ID"
+          test -n "$NEW_VERSION_ID"
+
+          if [ "$NEW_DEPLOYMENT_ID" = "${{ steps.previous_version.outputs.previous_deployment_id }}" ]; then
+            echo "::error::Cloudflare deployment ID did not change."
             exit 1
           fi
 
-      - name: Rollback to previous active version on failure
-        if: failure()
+          echo "deployed_deployment_id=$NEW_DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+          echo "deployed_version_id=$NEW_VERSION_ID" >> "$GITHUB_OUTPUT"
+
+          jq -n \
+            --arg deployment_id "$NEW_DEPLOYMENT_ID" \
+            --arg version_id "$NEW_VERSION_ID" \
+            '{deployed_deployment_id: $deployment_id, deployed_version_id: $version_id}' \
+            > deployment-evidence/post-deploy-cloudflare.json
+
+      - name: Smoke production GET endpoints and JavaScript asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment-evidence
+          ROOT_HTML="deployment-evidence/root.html"
+          : > deployment-evidence/smoke.txt
+
+          echo "GET $BASE_URL/" | tee -a deployment-evidence/smoke.txt
+          curl -fsS --retry 5 --retry-delay 3 --retry-all-errors \
+            "$BASE_URL/" \
+            -o "$ROOT_HTML"
+
+          for PATHNAME in "/api/macro" "/api/oracle/rankings"; do
+            echo "GET $BASE_URL$PATHNAME" | tee -a deployment-evidence/smoke.txt
+            OUTPUT_FILE="deployment-evidence/$(printf '%s' "$PATHNAME" | tr '/' '_' | sed 's/^_//').json"
+            curl -fsS --retry 5 --retry-delay 3 --retry-all-errors \
+              "$BASE_URL$PATHNAME" \
+              -o "$OUTPUT_FILE"
+            jq -e . "$OUTPUT_FILE" >/dev/null
+          done
+
+          JS_PATH="$(
+            grep -oE 'src="[^"]+\.js[^"]*"' "$ROOT_HTML" |
+            head -n 1 |
+            cut -d'"' -f2
+          )"
+
+          test -n "$JS_PATH"
+
+          case "$JS_PATH" in
+            http://*|https://*) JS_URL="$JS_PATH" ;;
+            /*) JS_URL="$BASE_URL$JS_PATH" ;;
+            *) JS_URL="$BASE_URL/$JS_PATH" ;;
+          esac
+
+          echo "GET $JS_URL" | tee -a deployment-evidence/smoke.txt
+          curl -fsS --retry 5 --retry-delay 3 --retry-all-errors \
+            "$JS_URL" \
+            -o /dev/null
+
+      - name: Rollback to previous Cloudflare version on deploy or smoke failure
+        if: ${{ failure() && steps.deploy.outputs.attempted == 'true' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
         run: |
           set -euo pipefail
-          PREVIOUS="${{ steps.previous_version.outputs.previous_active_version }}"
-          if [ -z "$PREVIOUS" ]; then
-            echo "::warning::Cannot rollback: previous_active_version was empty (worker did not exist before this deploy)."
-            exit 0
-          fi
-          echo "::warning::Deploy failed — attempting Cloudflare rollback to previous_active_version=$PREVIOUS"
-          WORKER_NAME="$(jq -r .name ./wrangler.jsonc)"
-          curl -sS --fail-with-body -X POST             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/versions/rollback"             -H "Content-Type: application/json"             --data "{ \"deployment_id\": \"$PREVIOUS\" }"
-          echo "Rollback request submitted for deployment_id=$PREVIOUS"
 
-      - name: Abort without silent git-based recovery
-        if: failure()
-        run: |
-          echo "::error::Deploy or smoke step failed. The previous_active_version was restored via Cloudflare API if available. No git checkout, no force-push, no tag mutation was performed."
-          exit 1
+          PREVIOUS_VERSION_ID="${{ steps.previous_version.outputs.previous_version_id }}"
+          test -n "$PREVIOUS_VERSION_ID"
+
+          WORKER_NAME="$(jq -er '.name' ./wrangler.jsonc)"
+          API_URL="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/deployments"
+
+          PAYLOAD="$(
+            jq -nc \
+              --arg version_id "$PREVIOUS_VERSION_ID" \
+              '{
+                strategy: "percentage",
+                versions: [{percentage: 100, version_id: $version_id}],
+                annotations: {
+                  "workers/message": "Automated rollback after UI truthfulness deployment failure",
+                  "workers/triggered_by": "deployment"
+                }
+              }'
+          )"
+
+          RESPONSE="$(
+            curl -fsS \
+              -X POST \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data "$PAYLOAD" \
+              "$API_URL"
+          )"
+
+          printf '%s\n' "$RESPONSE" | jq -e '.success == true' >/dev/null
+          sleep 2
+
+          VERIFY_JSON="$(
+            curl -fsS \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "$API_URL"
+          )"
+
+          RESTORED_VERSION_ID="$(
+            printf '%s\n' "$VERIFY_JSON" |
+            jq -er '
+              .result.deployments as $items
+              | (if $items[0].created_on? != null then
+                   ($items | max_by(.created_on))
+                 else
+                   $items[0]
+                 end)
+              | .versions
+              | max_by(.percentage | tonumber)
+              | .version_id
+            '
+          )"
+
+          test "$RESTORED_VERSION_ID" = "$PREVIOUS_VERSION_ID"
+          echo "Rollback restored version: $RESTORED_VERSION_ID"
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-truthfulness-deployment-evidence
+          path: deployment-evidence/
+          if-no-files-found: warn
