@@ -107,6 +107,7 @@ export function MainDashboard() {
   const [macroFetchStatus, setMacroFetchStatus] = useState<'loading' | 'syncing' | 'success' | 'error'>('loading');
   const latestMacroRequest = useRef(0);
   const macroAbortController = useRef<AbortController | null>(null);
+  const syncInFlight = useRef(false);
   const displayDataLabel =
     macroFetchStatus === 'loading' ? 'CARGANDO' :
     macroFetchStatus === 'syncing' ? 'SINCRONIZANDO' :
@@ -308,9 +309,19 @@ export function MainDashboard() {
       });
   }, [computeOracleFromMacro]);
 
-  const syncDashboard = useCallback(() => {
-    sync();
-    void loadMacro(true);
+  const syncDashboard = useCallback(async () => {
+    if (syncInFlight.current) return;
+    syncInFlight.current = true;
+    macroAbortController.current?.abort();
+    latestMacroRequest.current += 1;
+    setMacroFetchStatus('syncing');
+
+    try {
+      await sync();
+      await loadMacro(true);
+    } finally {
+      syncInFlight.current = false;
+    }
   }, [loadMacro, sync]);
 
   useEffect(() => {
@@ -319,7 +330,7 @@ export function MainDashboard() {
   }, [loadMacro]);
 
   useEffect(() => {
-    const interval = setInterval(() => { syncDashboard(); }, 60000);
+    const interval = setInterval(() => { void syncDashboard(); }, 60000);
     return () => clearInterval(interval);
   }, [syncDashboard]);
 

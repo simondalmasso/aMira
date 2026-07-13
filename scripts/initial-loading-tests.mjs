@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 let passed = 0;
 async function test(name, run) {
@@ -187,4 +188,84 @@ await test('unknown success provenance never turns into ERROR', async () => {
   assert.equal(model.label, 'PARTIAL_FALLBACK');
 });
 
+
+async function runSerializedSync(model, syncImpl, loadMacroImpl) {
+  if (model.inFlight) return false;
+  model.inFlight = true;
+  model.status = 'syncing';
+  model.latestRequest += 1;
+
+  try {
+    await syncImpl();
+    await loadMacroImpl(true);
+    return true;
+  } finally {
+    model.inFlight = false;
+  }
+}
+
+await test('portfolio sync completes before the macro refresh starts', async () => {
+  const syncDone = deferred();
+  const events = [];
+  const model = { inFlight: false, status: 'success', latestRequest: 1 };
+  const pending = runSerializedSync(
+    model,
+    async () => {
+      events.push('sync:start');
+      await syncDone.promise;
+      events.push('sync:end');
+    },
+    async (manual) => {
+      assert.equal(manual, true);
+      events.push('macro');
+    },
+  );
+
+  assert.equal(model.status, 'syncing');
+  assert.deepEqual(events, ['sync:start']);
+  syncDone.resolve();
+  assert.equal(await pending, true);
+  assert.deepEqual(events, ['sync:start', 'sync:end', 'macro']);
+  assert.equal(model.inFlight, false);
+});
+
+await test('a second automatic cycle is ignored while sync is in flight', async () => {
+  const syncDone = deferred();
+  const model = { inFlight: false, status: 'success', latestRequest: 0 };
+  let syncCalls = 0;
+  let macroCalls = 0;
+  const syncImpl = async () => {
+    syncCalls += 1;
+    await syncDone.promise;
+  };
+  const loadMacroImpl = async () => { macroCalls += 1; };
+
+  const first = runSerializedSync(model, syncImpl, loadMacroImpl);
+  const second = await runSerializedSync(model, syncImpl, loadMacroImpl);
+  assert.equal(second, false);
+  assert.equal(syncCalls, 1);
+  assert.equal(macroCalls, 0);
+  syncDone.resolve();
+  await first;
+  assert.equal(syncCalls, 1);
+  assert.equal(macroCalls, 1);
+});
+
+await test('production syncDashboard is directly wired to the tested ordering', () => {
+  const source = readFileSync(
+    new URL('../src/components/dashboard/main-dashboard.tsx', import.meta.url),
+    'utf8',
+  );
+  const block = source.match(
+    /const syncDashboard = useCallback\(async \(\) => \{([\s\S]*?)\n  \}, \[loadMacro, sync\]\);/,
+  )?.[1];
+
+  assert.ok(block, 'syncDashboard async block must exist');
+  assert.match(block, /if \(syncInFlight\.current\) return;/);
+  assert.match(block, /setMacroFetchStatus\('syncing'\);/);
+  assert.ok(block.indexOf('await sync();') < block.indexOf('await loadMacro(true);'));
+  assert.match(source, /setInterval\(\(\) => \{ void syncDashboard\(\); \}, 60000\)/);
+});
+
 console.log(`\n${passed} behavioral tests passed`);
+
