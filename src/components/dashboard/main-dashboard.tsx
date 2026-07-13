@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useHedgeFundStore, type RiskAppetite, type ReturnTargetMode, type PortfolioProfile } from '@/store/hedge-fund-store';
 import { type MacroState } from '@/lib/live-data';
@@ -58,8 +58,10 @@ import { RENDER_SCOPES } from '@/lib/amira-portfolio-view-model';
 // ============================================================================
 // DATA LABEL BADGE — [OBSERVADO] / [REAL] / [PARTIAL_FALLBACK] / [SIMULADO] / [RECONSTRUIDO] / [STALE] / [ERROR]
 // ============================================================================
-function DataBadge({ label }: { label: 'OBSERVADO' | 'REAL' | 'PARTIAL_FALLBACK' | 'ERROR' | 'STALE' | 'SIMULADO' | 'RECONSTRUIDO' }) {
+function DataBadge({ label }: { label: 'OBSERVADO' | 'REAL' | 'PARTIAL_FALLBACK' | 'ERROR' | 'STALE' | 'SIMULADO' | 'RECONSTRUIDO' | 'CARGANDO' | 'SINCRONIZANDO' }) {
   const config = {
+    CARGANDO: { bg: 'bg-[#6b7280]', text: 'text-[#ffffff]', tooltip: 'Esperando la primera respuesta de macro' },
+    SINCRONIZANDO: { bg: 'bg-[#2563eb]', text: 'text-[#ffffff]', tooltip: 'Actualizando datos macro' },
     OBSERVADO: { bg: 'bg-[#0066cc]', text: 'text-[#ffffff]', tooltip: 'Retorno efectivamente ocurrido — verificado con fuente' },
     REAL: { bg: 'bg-[#16a34a]', text: 'text-[#ffffff]', tooltip: 'Dato obtenido de API real' },
     PARTIAL_FALLBACK: { bg: 'bg-[#999999]', text: 'text-[#ffffff]', tooltip: 'Calculado a partir de inputs reales' },
@@ -102,35 +104,55 @@ export function MainDashboard() {
   } = useHedgeFundStore();
 
   const [now, setNow] = useState(new Date());
+  const [macroFetchStatus, setMacroFetchStatus] = useState<'loading' | 'syncing' | 'success' | 'error'>('loading');
+  const latestMacroRequest = useRef(0);
+  const macroAbortController = useRef<AbortController | null>(null);
+  const displayDataLabel =
+    macroFetchStatus === 'loading' ? 'CARGANDO' :
+    macroFetchStatus === 'syncing' ? 'SINCRONIZANDO' :
+    dataLabel;
 
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
-  useEffect(() => {
-    const interval = setInterval(() => { sync(); }, 60000);
-    return () => clearInterval(interval);
-  }, [sync]);
   useEffect(() => {
     const interval = setInterval(() => { setNow(new Date()); }, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    fetch('/api/macro')
-      .then(res => res.json())
+  const loadMacro = useCallback((manual = false) => {
+    macroAbortController.current?.abort();
+    const controller = new AbortController();
+    macroAbortController.current = controller;
+    const requestId = ++latestMacroRequest.current;
+    let timedOut = false;
+    const requestTimeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 15000);
+    setMacroFetchStatus(manual ? 'syncing' : 'loading');
+
+    return fetch('/api/macro', { signal: controller.signal })
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then(data => {
-        if (data.success) {
+        if (requestId !== latestMacroRequest.current) return;
+        if (!data?.success) throw new Error('Macro API returned success:false');
+        {
           const macro = buildMacroFromAPI(data);
-          if (macro) {
-            // ─── FIX HIDRATACIÓN DEFINITIVO ───
-            // Mapeo EXPLÍCITO de data.source → dataMode/dataLabel.
-            // Antes pasábamos `data.source` directo, que podía ser
-            // 'PARTIAL_FALLBACK' o 'SIMULADO' y el badge no lo trataba como ERROR.
-            // Ahora: REAL → REAL, STALE → STALE, cualquier otra cosa → ERROR.
-            const apiSource = (data.source as string) || macro.source || 'ERROR';
+          if (!macro) throw new Error('Invalid macro payload');
+          {
+            // A successful response must retain its reported provenance; ERROR
+            // is reserved for a confirmed request or payload failure below.
+            const apiSource = (data.source as string) || macro.source || 'PARTIAL_FALLBACK';
             const mappedMode =
               apiSource === 'REAL' ? 'REAL' :
               apiSource === 'STALE' ? 'STALE' :
               apiSource === 'OBSERVADO' ? 'OBSERVADO' :
-              'ERROR';
+              apiSource === 'PARTIAL_FALLBACK' ? 'PARTIAL_FALLBACK' :
+              apiSource === 'SIMULADO' ? 'SIMULADO' :
+              apiSource === 'RECONSTRUIDO' ? 'RECONSTRUIDO' :
+              'PARTIAL_FALLBACK';
 
             // ─── Provenance: mergear legacy + nuevos campos top-level del proxy ───
             // Los campos tpm/ipc/fx/badlar vienen del proxy (vía service binding)
@@ -265,11 +287,41 @@ export function MainDashboard() {
               assetClasses: ['CEDEARS', 'ETF_CEDEARS'],
               windowDate,
             });
+            setMacroFetchStatus('success');
           }
         }
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        if (requestId !== latestMacroRequest.current) return;
+        if (error instanceof DOMException && error.name === 'AbortError' && !timedOut) return;
+        useHedgeFundStore.setState({
+          dataMode: 'ERROR' as MacroState['source'],
+          dataLabel: 'ERROR' as MacroState['source'],
+        });
+        setMacroFetchStatus('error');
+      })
+      .finally(() => {
+        window.clearTimeout(requestTimeout);
+        if (macroAbortController.current === controller) {
+          macroAbortController.current = null;
+        }
+      });
   }, [computeOracleFromMacro]);
+
+  const syncDashboard = useCallback(() => {
+    sync();
+    void loadMacro(true);
+  }, [loadMacro, sync]);
+
+  useEffect(() => {
+    void loadMacro();
+    return () => macroAbortController.current?.abort();
+  }, [loadMacro]);
+
+  useEffect(() => {
+    const interval = setInterval(() => { syncDashboard(); }, 60000);
+    return () => clearInterval(interval);
+  }, [syncDashboard]);
 
   // V9.2: `totalUSD` is the LEGACY holdings total (from /api/portfolio via
   // hedge-fund-store allocations). It is DIFFERENT from the MultiOraclePanel's
@@ -296,7 +348,11 @@ export function MainDashboard() {
     : 0;
 
   const formatTime = (iso: string | null) => {
-    if (!iso) return '--:--:--';
+    if (!iso) {
+      return macroFetchStatus === 'loading' ? 'esperando datos' :
+        macroFetchStatus === 'syncing' ? 'sincronizando' :
+        '--:--:--';
+    }
     return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
@@ -337,7 +393,7 @@ export function MainDashboard() {
                   {REGIME_LABELS[oracle.regime]}
                 </span>
               )}
-              <DataBadge label={dataLabel} />
+              <DataBadge label={displayDataLabel} />
               <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full tracking-[0.05em] whitespace-nowrap ${
                 realDataPct >= 70 ? 'bg-[#16a34a]/10 text-[#16a34a]' :
                 realDataPct >= 40 ? 'bg-[#ca8a04]/10 text-[#ca8a04]' :
@@ -356,7 +412,7 @@ export function MainDashboard() {
             <GlobalActionButtons
               onRebalance={rebalance}
               isRebalancing={isRebalancing}
-              onSync={sync}
+              onSync={syncDashboard}
               syncStatus={syncStatus}
             />
           </div>
@@ -364,7 +420,7 @@ export function MainDashboard() {
       </div>
 
       {/* ─── SIMULADO WARNING BANNER ─── */}
-      {dataLabel === 'ERROR' && (
+      {macroFetchStatus === 'error' && dataLabel === 'ERROR' && (
         <div className="max-w-4xl mx-auto px-6 pt-3">
           <div className="flex items-center gap-2 bg-[#fefce8] border border-[#ca8a04]/20 rounded-lg p-2.5">
             <AlertTriangle className="w-3.5 h-3.5 text-[#ca8a04] flex-shrink-0" />
@@ -604,7 +660,7 @@ export function MainDashboard() {
                     {REGIME_LABELS[oracle.regime]}
                   </span>
                 )}
-                <DataBadge label={dataLabel} />
+                <DataBadge label={displayDataLabel} />
               </div>
               <p className="text-[11px] font-semibold text-[#999999] tracking-[0.2em] uppercase mt-1">
                 Régimen · Perfil · Cobertura · Proyección 30d
@@ -678,7 +734,7 @@ export function MainDashboard() {
                   <span className="text-[23px] font-extrabold text-[#000000] leading-none">
                     {metrics ? `${metrics.expectedRealReturn30d >= 0 ? '+' : ''}${metrics.expectedRealReturn30d.toFixed(2)}%` : '--'}
                   </span>
-                  <DataBadge label={dataLabel} />
+                  <DataBadge label={displayDataLabel} />
                 </div>
                 <p className="text-[9px] font-semibold text-[#999999] tracking-[0.2em] uppercase mt-1">
                   Real 30d
@@ -711,7 +767,7 @@ export function MainDashboard() {
                   <span className="text-[23px] font-extrabold text-[#000000] leading-none">
                     {metrics ? `${metrics.fxExposure}%` : '--'}
                   </span>
-                  <DataBadge label={dataLabel} />
+                  <DataBadge label={displayDataLabel} />
                 </div>
                 <p className="text-[9px] font-semibold text-[#999999] tracking-[0.2em] uppercase mt-1">
                   Exposición TC
@@ -722,7 +778,7 @@ export function MainDashboard() {
                   <span className="text-[23px] font-extrabold text-[#000000] leading-none">
                     {metrics ? `${metrics.inflationExposure}%` : '--'}
                   </span>
-                  <DataBadge label={dataLabel} />
+                  <DataBadge label={displayDataLabel} />
                 </div>
                 <p className="text-[9px] font-semibold text-[#999999] tracking-[0.2em] uppercase mt-1">
                   Cobertura inflación
@@ -733,7 +789,7 @@ export function MainDashboard() {
                   <span className="text-[23px] font-extrabold text-[#000000] leading-none">
                     {metrics ? `${metrics.volatility30d.toFixed(1)}%` : '--'}
                   </span>
-                  <DataBadge label={dataLabel} />
+                  <DataBadge label={displayDataLabel} />
                 </div>
                 <p className="text-[9px] font-semibold text-[#999999] tracking-[0.2em] uppercase mt-1">
                   Volatilidad 30d
@@ -896,7 +952,7 @@ export function MainDashboard() {
         <ActionButtons
           onRebalance={rebalance}
           isRebalancing={isRebalancing}
-          onSync={sync}
+          onSync={syncDashboard}
           syncStatus={syncStatus}
         />
 
