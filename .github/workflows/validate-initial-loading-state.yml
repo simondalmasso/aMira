@@ -1,0 +1,143 @@
+name: Validate Initial Loading State
+
+on:
+  workflow_dispatch:
+    inputs:
+      VALIDATE_INITIAL_LOADING_STATE_V1:
+        description: 'Type VALIDATE_INITIAL_LOADING_STATE_V1 to confirm validation'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-initial-loading-state-v1
+  cancel-in-progress: false
+
+env:
+  EXPECTED_INPUT: VALIDATE_INITIAL_LOADING_STATE_V1
+  BASELINE_SHA: 68be3495ed35a4081dfa4fcec32fbcb06a6a0743
+  CANDIDATE_SHA: 05c5fd1b9a324ef4acb970c64752609df7f91885
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Verify dispatch input
+        run: |
+          set -euo pipefail
+          test "${{ github.event.inputs.VALIDATE_INITIAL_LOADING_STATE_V1 }}" = "$EXPECTED_INPUT"
+
+      - name: Checkout pinned candidate
+        uses: actions/checkout@v4
+        with:
+          ref: 05c5fd1b9a324ef4acb970c64752609df7f91885
+          fetch-depth: 0
+
+      - name: Verify candidate and diff scope
+        run: |
+          set -euo pipefail
+          mkdir -p validation-evidence
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          git cat-file -e "${BASELINE_SHA}^{commit}"
+          test "$(git rev-list --count "${BASELINE_SHA}..${CANDIDATE_SHA}")" = "2"
+          git diff --name-only "$BASELINE_SHA" "$CANDIDATE_SHA" | sort > validation-evidence/changed-files.txt
+          printf '%s\n' scripts/initial-loading-tests.mjs src/components/dashboard/main-dashboard.tsx | sort > validation-evidence/expected-files.txt
+          diff -u validation-evidence/expected-files.txt validation-evidence/changed-files.txt
+          git log --oneline "${BASELINE_SHA}..${CANDIDATE_SHA}" > validation-evidence/commits.txt
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run focused tests
+        run: |
+          set -euo pipefail
+          node scripts/initial-loading-tests.mjs
+          node scripts/ui-truthfulness-tests.mjs
+
+      - name: TypeScript no-new-errors gate
+        run: |
+          set -euo pipefail
+          mkdir -p validation-evidence
+          BASELINE_DIR="$RUNNER_TEMP/ts-baseline"
+          git worktree add --detach "$BASELINE_DIR" "$BASELINE_SHA"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$BASELINE_DIR/node_modules"
+
+          run_tsc() {
+            local dir="$1" raw="$2" normalized="$3"
+            set +e
+            (cd "$dir" && NO_COLOR=1 "$GITHUB_WORKSPACE/node_modules/.bin/tsc" --noEmit --pretty false) > "$raw" 2>&1
+            local status=$?
+            set -e
+            grep -E 'error TS[0-9]+:' "$raw" | sed -E -e "s#${dir%/}/##g" -e 's/\([0-9]+,[0-9]+\): error/(): error/' | sort > "$normalized" || true
+            printf '%s' "$status"
+          }
+
+          BASE_STATUS="$(run_tsc "$BASELINE_DIR" validation-evidence/tsc-baseline.txt validation-evidence/tsc-baseline.normalized.txt)"
+          CAND_STATUS="$(run_tsc "$GITHUB_WORKSPACE" validation-evidence/tsc-candidate.txt validation-evidence/tsc-candidate.normalized.txt)"
+          comm -13 validation-evidence/tsc-baseline.normalized.txt validation-evidence/tsc-candidate.normalized.txt > validation-evidence/tsc-new-errors.txt
+          {
+            echo "baseline_status=$BASE_STATUS"
+            echo "candidate_status=$CAND_STATUS"
+            echo "baseline_count=$(grep -cE 'error TS[0-9]+:' validation-evidence/tsc-baseline.txt || true)"
+            echo "candidate_count=$(grep -cE 'error TS[0-9]+:' validation-evidence/tsc-candidate.txt || true)"
+            echo "new_diagnostics=$(wc -l < validation-evidence/tsc-new-errors.txt)"
+          } | tee validation-evidence/tsc-summary.txt
+          test ! -s validation-evidence/tsc-new-errors.txt
+
+      - name: Build OpenNext and wrap worker
+        run: |
+          set -euo pipefail
+          bunx opennextjs-cloudflare build
+          node scripts/wrap-worker-with-cron.mjs
+
+      - name: Validate build and configuration
+        run: |
+          set -euo pipefail
+          mkdir -p validation-evidence
+          test -f .open-next/worker-with-cron.js
+          test -d .open-next/assets
+          test -f src/app/api/audit/route.ts
+          jq -e '
+            .name == "santaninverter-oracle" and
+            .main == ".open-next/worker-with-cron.js" and
+            .assets.binding == "ASSETS" and
+            .assets.directory == ".open-next/assets" and
+            .compatibility_date == "2026-06-16" and
+            .triggers.crons == ["0 23 * * 1-5"] and
+            ([.kv_namespaces[].binding] | sort) == (["ORACLE_ASSETS_HISTORY", "ORACLE_FCI_HISTORY", "ORACLE_PREDICTIONS"] | sort) and
+            ([.services[].binding] | index("MACRO_PROXY")) != null
+          ' wrangler.jsonc >/dev/null
+          find .open-next/assets -type f | sort > validation-evidence/assets.txt
+          test -s validation-evidence/assets.txt
+          git diff --check "$BASELINE_SHA" "$CANDIDATE_SHA"
+          sha256sum wrangler.jsonc .open-next/worker-with-cron.js > validation-evidence/build-sha256.txt
+
+      - name: Write manifest
+        if: always()
+        run: |
+          mkdir -p validation-evidence
+          cat > validation-evidence/manifest.txt <<EOF
+          baseline_sha=$BASELINE_SHA
+          candidate_sha=$CANDIDATE_SHA
+          deploy_attempted=false
+          cloudflare_accessed=false
+          secrets_required=false
+          conclusion=${{ job.status }}
+          EOF
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: initial-loading-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: validation-evidence/
+          if-no-files-found: error
+          retention-days: 14
