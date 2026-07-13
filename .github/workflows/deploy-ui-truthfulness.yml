@@ -17,6 +17,7 @@ concurrency:
 
 env:
   EXPECTED_INPUT: DEPLOY_UI_TRUTHFULNESS_V1
+  BASELINE_SHA: 0ac948dfd150617d5934b38eeadaffca0fb4bc26
   DEPLOY_SHA: 68be3495ed35a4081dfa4fcec32fbcb06a6a0743
   BASE_URL: https://santaninverter-oracle.simondalmasso44.workers.dev
 
@@ -48,7 +49,9 @@ jobs:
           set -euo pipefail
           ACTUAL_SHA="$(git rev-parse HEAD)"
           test "$ACTUAL_SHA" = "$DEPLOY_SHA"
+          git cat-file -e "${BASELINE_SHA}^{commit}"
           echo "Checkout SHA verified: $ACTUAL_SHA"
+          echo "Baseline SHA verified: $BASELINE_SHA"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -61,31 +64,82 @@ jobs:
       - name: Run focused UI truthfulness tests
         run: node scripts/ui-truthfulness-tests.mjs
 
-      - name: TypeScript check against validated baseline
+      - name: TypeScript no-new-errors gate against sanitized baseline
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p deployment-evidence
 
-          set +e
-          TSC_OUTPUT="$(bunx tsc --noEmit 2>&1)"
-          TSC_STATUS=$?
-          set -e
+          BASELINE_DIR="$RUNNER_TEMP/ts-baseline"
+          rm -rf "$BASELINE_DIR"
+          git worktree add --detach "$BASELINE_DIR" "$BASELINE_SHA"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$BASELINE_DIR/node_modules"
 
-          printf '%s\n' "$TSC_OUTPUT" > deployment-evidence/tsc-output.txt
+          run_tsc() {
+            local workdir="$1"
+            local raw_output="$2"
+            local normalized_output="$3"
 
-          TSC_ERROR_COUNT="$(
-            printf '%s\n' "$TSC_OUTPUT" |
-            grep -cE 'error TS[0-9]+:' || true
+            set +e
+            (
+              cd "$workdir"
+              NO_COLOR=1 "$GITHUB_WORKSPACE/node_modules/.bin/tsc" --noEmit --pretty false
+            ) >"$raw_output" 2>&1
+            local status=$?
+            set -e
+
+            grep -E 'error TS[0-9]+:' "$raw_output" |
+              sed -E \
+                -e "s#${workdir%/}/##g" \
+                -e 's/\([0-9]+,[0-9]+\): error/(): error/' |
+              sort >"$normalized_output" || true
+
+            printf '%s' "$status"
+          }
+
+          BASELINE_STATUS="$(
+            run_tsc \
+              "$BASELINE_DIR" \
+              "$GITHUB_WORKSPACE/deployment-evidence/tsc-baseline.txt" \
+              "$GITHUB_WORKSPACE/deployment-evidence/tsc-baseline.normalized.txt"
           )"
 
-          echo "TypeScript exit status: $TSC_STATUS"
-          echo "TypeScript error count: $TSC_ERROR_COUNT"
+          CANDIDATE_STATUS="$(
+            run_tsc \
+              "$GITHUB_WORKSPACE" \
+              "$GITHUB_WORKSPACE/deployment-evidence/tsc-candidate.txt" \
+              "$GITHUB_WORKSPACE/deployment-evidence/tsc-candidate.normalized.txt"
+          )"
 
-          if [ "$TSC_ERROR_COUNT" -ne 86 ]; then
-            echo "::error::TypeScript diagnostic count changed from validated baseline 86 to $TSC_ERROR_COUNT."
+          BASELINE_COUNT="$(
+            grep -cE 'error TS[0-9]+:' deployment-evidence/tsc-baseline.txt || true
+          )"
+          CANDIDATE_COUNT="$(
+            grep -cE 'error TS[0-9]+:' deployment-evidence/tsc-candidate.txt || true
+          )"
+
+          comm -13 \
+            deployment-evidence/tsc-baseline.normalized.txt \
+            deployment-evidence/tsc-candidate.normalized.txt \
+            > deployment-evidence/tsc-new-errors.txt
+
+          comm -23 \
+            deployment-evidence/tsc-baseline.normalized.txt \
+            deployment-evidence/tsc-candidate.normalized.txt \
+            > deployment-evidence/tsc-resolved-errors.txt
+
+          echo "Baseline TypeScript status/count: $BASELINE_STATUS/$BASELINE_COUNT"
+          echo "Candidate TypeScript status/count: $CANDIDATE_STATUS/$CANDIDATE_COUNT"
+          echo "New normalized diagnostics: $(wc -l < deployment-evidence/tsc-new-errors.txt)"
+          echo "Resolved normalized diagnostics: $(wc -l < deployment-evidence/tsc-resolved-errors.txt)"
+
+          if [ -s deployment-evidence/tsc-new-errors.txt ]; then
+            echo "::error::Candidate introduces TypeScript diagnostics absent from the sanitized baseline."
+            cat deployment-evidence/tsc-new-errors.txt
             exit 1
           fi
+
+          echo "TypeScript gate passed: no new diagnostics relative to $BASELINE_SHA."
 
       - name: Build with OpenNext for Cloudflare
         run: bunx opennextjs-cloudflare build
