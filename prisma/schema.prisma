@@ -1,0 +1,158 @@
+// ============================================================================
+// PRISMA SCHEMA — Mini Hedge Fund App (D1-compatible SQLite)
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Portfolio snapshots — one per sync cycle
+model PortfolioSnapshot {
+  id                  String   @id @default(cuid())
+  timestamp           DateTime @default(now())
+  totalUSD            Float
+  totalARS            Float
+  realReturn30d       Float
+  nominalReturn30d    Float
+  volatility30d       Float
+  maxDrawdown30d      Float
+  capitalSafetyScore  Int
+  sharpeRatio         Float
+  fxExposure          Float
+  inflationExposure   Float
+  allocationsJson     String   // JSON string of allocations
+}
+
+// Market data snapshots — one per sync cycle
+model MarketSnapshot {
+  id                  String   @id @default(cuid())
+  timestamp           DateTime @default(now())
+  mepRate             Float    // ARS/USD MEP
+  officialRate        Float    // ARS/USD official
+  gapPercent          Float    // MEP vs official gap %
+  inflationMonthly    Float    // % monthly
+  inflationExpected30d Float   // % expected next 30d
+  bcraPolicyRate      Float    // % TNA
+  crawlingPeg         Float    // % monthly
+  cerIndex            Float
+  cerMonthlyChange    Float
+  moneyMarketTNA      Float    // % TNA
+  plazoFijoTNA        Float
+  plazoFijoUVATNA     Float
+  bluelticsRaw        String?  // Raw JSON from Bluelytics API
+}
+
+// Allocation records — current and historical
+model Allocation {
+  id          String   @id @default(cuid())
+  productId   String
+  weight      Float    // 0-1
+  amountARS   Float
+  amountUSD   Float
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Rebalance history
+model RebalanceLog {
+  id              String   @id @default(cuid())
+  timestamp       DateTime @default(now())
+  previousAllocs  String   // JSON
+  newAllocs       String   // JSON
+  reason          String   // "drift", "manual", "market_change", "scheduled"
+  metricsJson     String   // JSON of portfolio metrics after rebalance
+}
+
+// Sync log — tracks hourly sync runs
+model SyncLog {
+  id              String   @id @default(cuid())
+  timestamp       DateTime @default(now())
+  status          String   // "success", "partial", "failed"
+  mepUpdated      Boolean  @default(false)
+  macroUpdated    Boolean  @default(false)
+  portfolioUpdated Boolean @default(false)
+  rebalanceNeeded Boolean  @default(false)
+  errorDetail     String?
+  durationMs      Int?
+}
+
+// ============================================================================
+// VALIDATION & AUDIT TABLES — ENGINEERING_DISCIPLINE_PHASE
+// ============================================================================
+
+// X10 Engine decision log — every allocation decision with full context
+model DecisionLog {
+  id                String   @id @default(cuid())
+  timestamp         DateTime @default(now())
+  decisionType      String   // ALLOCATION_COMPUTED, REGIME_TRANSITION, KILL_SWITCH, etc.
+  severity          String   // "info", "warning", "critical"
+  summary           String
+  action            String   // What was decided
+  reasoningJson     String   // JSON array of reasoning strings
+  contextJson       String   // Full decision context (signals, regime, confidence, etc.)
+  dataQuality       String   // DataLabel at decision time
+  confidence        Float    // Aggregate confidence [0,1]
+  regime            String   // CapitalRegime at decision time
+  activeDirectives  String   // JSON array of active X10 directives
+  outcomeJson       String?  // Filled later: was the decision correct?
+  relatedDecisions  String?  // JSON array of related decision IDs
+}
+
+// Data integrity audit log — every API validation result
+model DataIntegrityLog {
+  id                  String   @id @default(cuid())
+  timestamp           DateTime @default(now())
+  source              String   // "Bluelytics API", "BCRA API", etc.
+  url                 String
+  validationSuccess   Boolean
+  errorsJson          String   // JSON array of validation errors
+  warningsJson        String   // JSON array of validation warnings
+  responseTimeMs      Int?
+  dataLabel           String   // REAL, SIMULADO, ERROR, STALE
+  dataDate            String?
+}
+
+// Paper broker order history — every simulated trade
+model PaperOrderLog {
+  id                  String   @id @default(cuid())
+  timestamp           DateTime @default(now())
+  orderId             String   // PaperBroker order ID
+  productId           String
+  side                String   // BUY, SELL
+  orderType           String   // MARKET, LIMIT
+  quantity            Float
+  targetWeight        Float
+  fillPrice           Float?
+  fillCurrency        String   // ARS, USD
+  filledQuantity      Float
+  status              String   // FILLED, PARTIALLY_FILLED, CANCELLED, REJECTED
+  strategySource      String
+  bucketId            String?
+  regime              String
+  confidence          Float
+  slippageBps         Float
+  commissionARS       Float
+  rejectionReason     String?
+  executionLatencyMs  Int
+}
+
+// Backtest execution results
+model BacktestLog {
+  id                  String   @id @default(cuid())
+  timestamp           DateTime @default(now())
+  mode                String   // CONSERVATIVE, MODERATE, AGGRESSIVE
+  capitalUSD          Float
+  totalScenarios      Int
+  regimeAccuracy      Float
+  avgReturnError      Float
+  maxDrawdown         Float
+  assessment          String   // VALIDATION_PASSED, MARGINAL, FAILED, INSUFFICIENT_DATA
+  resultsJson         String   // Full backtest results
+  durationMs          Int
+}

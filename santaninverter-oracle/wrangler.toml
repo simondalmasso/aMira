@@ -1,0 +1,71 @@
+#: ============================================================================
+#: Ω-MYTHOS_X10_ENGINE — Cloudflare Worker Configuration
+#: Santander Argentina Macro Oracle + X10 Decision Engine
+#: ============================================================================
+
+name = "santaninverter-oracle"
+main = "src/worker.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+#: ============================================================================
+#: KV NAMESPACE — Macro state cache + decision log
+#: ============================================================================
+
+[[kv_namespaces]]
+binding = "ORACLE_KV"
+id = "b95f695ecf9c441d85ebf02588cf23a5"
+
+#: ============================================================================
+#: D1 DATABASE — Persistent storage for decisions, snapshots, backtests
+#: ============================================================================
+
+[[d1_databases]]
+binding = "ORACLE_DB"
+database_name = "oracle_db"
+database_id = "9c7480b5-82dc-4c84-9834-5da47aa05274"
+
+#: ============================================================================
+#: SECRETS (set via `wrangler secret put <KEY>`)
+#:   - BCRA_API_KEY      (optional — BCRA public APIs may not need one)
+#:   - INDEC_API_KEY     (optional)
+#:   - BLUELYTICS_API_KEY (optional — public API)
+#: ============================================================================
+
+#: ============================================================================
+#: BUILD CONFIG — Wrangler bundles TypeScript automatically, no build step needed
+#: ============================================================================
+
+#: ============================================================================
+#: ROUTES (uncomment after custom domain setup)
+#: ============================================================================
+
+# [[routes]]
+# pattern = "api.santaninverter.com/macro*"
+# zone_name = "santaninverter.com"
+
+# [[routes]]
+# pattern = "api.santaninverter.com/x10*"
+# zone_name = "santaninverter.com"
+
+# [[routes]]
+# pattern = "api.santaninverter.com/regime*"
+# zone_name = "santaninverter.com"
+
+# [[routes]]
+# pattern = "api.santaninverter.com/backtest-lite*"
+# zone_name = "santaninverter.com"
+
+#: ============================================================================
+#: OBSERVABILITY — Consistent across all deployments
+#: ============================================================================
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true

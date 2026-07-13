@@ -1,0 +1,1 @@
+This folder contains the built output assets for the worker "nextjs-tailwind-shadcn-ts" generated at 2026-06-16T11:37:08.300Z.

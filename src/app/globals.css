@@ -1,0 +1,355 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* V7: add xs breakpoint (480px) for mobile-first responsive design.
+   V8: added md (768px) and lg (1200px) explicit breakpoints to match the
+       mobile-rebuild spec (480 stacked / 768 2-col / 1200 dashboard-grid).
+   Used by GlobalActionButtons to show labels on >=480px, icons-only below.
+   In Tailwind v4 (CSS-first config), breakpoints go in @theme as --breakpoint-*. */
+@theme {
+  --breakpoint-xs: 480px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1200px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   V8 MOBILE REBUILD — adaptive responsive system (single UI, not dual)
+   Breakpoints:
+     <480px  : stacked cards, fontScale 1.15, spacingScale 1.4
+     <768px  : 2-column grid, fontScale 1.05, spacingScale 1.2
+     <1200px : dashboard grid, fontScale 1.0, spacingScale 1.0
+   Rules:
+     - rem-based padding minimums (14-16px mobile)
+     - card padding override on small screens
+     - remove tight KPI clustering on mobile
+     - one-screen-one-intent per module on mobile
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 479px) {
+  /* Mobile <480px: stacked cards, generous padding, larger fonts */
+  .max-w-4xl {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+  /* Cards get 14-16px padding minimum on mobile (was 8-10px) */
+  [class*="border-[#e5e7eb]"][class*="rounded"]:not([class*="p-0"]):not([class*="p-1"]):not([class*="p-1.5"]) {
+    padding: 14px !important;
+  }
+  /* KPI grids stack vertically on <480px (avoid tight clustering) */
+  .grid-cols-2.md\:grid-cols-6 {
+    grid-template-columns: 1fr !important;
+  }
+  /* Tabs wrap cleaner with more breathing room on mobile */
+  [data-testid="asset-class-filter-bar"] {
+    gap: 6px !important;
+  }
+  /* Profile cards stack on mobile (already done in V7, enforce) */
+  [class*="auto-fit"][class*="minmax"] {
+    grid-template-columns: 1fr !important;
+  }
+  /* Body font scale 1.15 for readability — V11 +1pt bump */
+  body {
+    font-size: 15.5px;
+  }
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  /* 480-767px: 2-column grid, slight font bump — V11 +1pt */
+  .max-w-4xl {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  body {
+    font-size: 15px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  /* 768-1199px: dashboard grid, normal density — V11 +1pt */
+  body {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 1200px) {
+  /* >=1200px: full dashboard, normal density — V11 +1pt */
+  body {
+    font-size: 14px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   V12 — MOBILE READABILITY BOOST
+   "Las hormigas": 597 instancias de text-[8-13px] en componentes
+   hacían el dashboard ilegible en móvil incluso tras el V11 +1pt.
+   Esta capa aplica un PISO MÍNIMO mobile-only vía CSS, sin tocar
+   componentes. Solo afecta a viewports < 768px.
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* Body base: 17px en móvil (era 15.5px) — minimum legible */
+  body {
+    font-size: 17px !important;
+  }
+
+  /* Piso mínimo para literales px chiquitos — bump +3 a +5px */
+  .text-\[6px\]  { font-size: 11px !important; }
+  .text-\[7px\]  { font-size: 12px !important; }
+  .text-\[8px\]  { font-size: 12px !important; }
+  .text-\[9px\]  { font-size: 13px !important; }
+  .text-\[10px\] { font-size: 14px !important; }
+  .text-\[11px\] { font-size: 14px !important; }
+  .text-\[12px\] { font-size: 15px !important; }
+  .text-\[13px\] { font-size: 16px !important; }
+  .text-\[14px\] { font-size: 16px !important; }
+  .text-\[15px\] { font-size: 17px !important; }
+  .text-\[16px\] { font-size: 17px !important; }
+  .text-\[17px\] { font-size: 18px !important; }
+  .text-\[18px\] { font-size: 19px !important; }
+  .text-\[19px\] { font-size: 20px !important; }
+  .text-\[20px\] { font-size: 21px !important; }
+
+  /* Named Tailwind sizes — piso mobile */
+  .text-xs   { font-size: 14px !important; }
+  .text-sm   { font-size: 16px !important; }
+  .text-base { font-size: 18px !important; }
+  .text-lg   { font-size: 20px !important; }
+  .text-xl   { font-size: 22px !important; }
+  .text-2xl  { font-size: 26px !important; }
+  .text-3xl  { font-size: 32px !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   V11 — TYPOGRAPHY +1pt BUMP
+   Bumps Tailwind named text utilities by +1px WITHOUT touching
+   rem-based spacing (so layout grids don't shift).
+   Each named size keeps its rem ratio but adds +1px on top.
+   ═══════════════════════════════════════════════════════════ */
+@layer base {
+  .text-xs   { font-size: 13px !important; }  /* was 12px */
+  .text-sm   { font-size: 15px !important; }  /* was 14px */
+  .text-base { font-size: 17px !important; }  /* was 16px */
+  .text-lg   { font-size: 19px !important; }  /* was 18px */
+  .text-xl   { font-size: 21px !important; }  /* was 20px */
+  .text-2xl  { font-size: 25px !important; }  /* was 24px */
+  .text-3xl  { font-size: 31px !important; }  /* was 30px */
+  .text-4xl  { font-size: 37px !important; }  /* was 36px */
+  .text-5xl  { font-size: 49px !important; }  /* was 48px */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.5rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0 0 0);
+  --primary: oklch(0 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.917 0 0);
+  --input: oklch(0.917 0 0);
+  --ring: oklch(0 0 0);
+  --chart-1: oklch(0 0 0);
+  --chart-2: oklch(0.4 0 0);
+  --chart-3: oklch(0.6 0 0);
+  --chart-4: oklch(0.7 0 0);
+  --chart-5: oklch(0.8 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0 0 0);
+  --sidebar-primary: oklch(0 0 0);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0 0 0);
+  --sidebar-border: oklch(0.917 0 0);
+  --sidebar-ring: oklch(0 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COMPACT TERMINAL — PROFESSIONAL DENSITY TYPOGRAPHY
+   ═══════════════════════════════════════════════════════════ */
+@layer base {
+  h1 {
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  h2 {
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  h3 {
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+
+  /* Tabular nums for all metric values */
+  .font-extrabold {
+    font-variant-numeric: tabular-nums;
+  }
+  .font-bold {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Remove tap highlight on mobile */
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Selection color */
+  ::selection {
+    background: #000000;
+    color: #ffffff;
+  }
+
+  /* Compact scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #ffffff;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #eaeaea;
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #999999;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   V3.2 — CAPITAL INPUT VISIBILITY BACKUP CLASS
+   Forces white background + black text + visible border on the
+   capital input even if Tailwind utilities get overridden by
+   global dark-mode or parent cascade.
+   ═══════════════════════════════════════════════════════════ */
+.capital-input {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
+  font-size: 17px !important; /* V11 +1pt */
+  font-weight: 700 !important;
+  width: 100% !important;
+  min-width: 220px !important;
+  outline: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  box-sizing: border-box !important;
+}
+
+.capital-input::placeholder {
+  color: #6b7280 !important;
+  font-weight: 500 !important;
+}
+
+.capital-input:focus {
+  border-color: #0066cc !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.4) !important;
+}
+
+/* Hide number input spinners on capital-input for cleaner look */
+.capital-input::-webkit-outer-spin-button,
+.capital-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.capital-input[type=number] {
+  -moz-appearance: textfield;
+}

@@ -1,0 +1,58 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "santaninverter-oracle",
+  "compatibility_date": "2026-06-16",
+  "main": ".open-next/worker-with-cron.js",
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "PROXY_URL": "https://macro-oracle-proxy.simondalmasso44.workers.dev",
+    "NEXT_PUBLIC_PROXY_URL": "https://macro-oracle-proxy.simondalmasso44.workers.dev"
+  },
+  "services": [
+    {
+      "binding": "MACRO_PROXY",
+      "service": "macro-oracle-proxy"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "ORACLE_FCI_HISTORY",
+      "id": "b95f695ecf9c441d85ebf02588cf23a5",
+      "preview_id": "b95f695ecf9c441d85ebf02588cf23a5"
+    },
+    {
+      "binding": "ORACLE_ASSETS_HISTORY",
+      "id": "630b5eb6c3f64da1b808bbb67928bf2d",
+      "preview_id": "630b5eb6c3f64da1b808bbb67928bf2d"
+    },
+    {
+      "binding": "ORACLE_PREDICTIONS",
+      "id": "968f1bce04ec4949bf37cfbc3a053153",
+      "preview_id": "968f1bce04ec4949bf37cfbc3a053153"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 23 * * 1-5"]
+  },
+  "observability": {
+    "enabled": false,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": false,
+      "persist": true,
+      "head_sampling_rate": 1
+    }
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}

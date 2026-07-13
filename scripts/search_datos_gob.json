@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://www.datos.gob.ar/series/api/series/?ids=171.1_FRENTA_IJA_0_0_14",
+    "name": "Series de tiempo - Datos Argentina",
+    "snippet": "Desde aquí podés buscar las series de tiempo del tema que necesites, podés seleccionar más de una opcion de los resultados para compararlos.",
+    "host_name": "www.datos.gob.ar",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://datos.gob.ar/series/api/series/?ids=171.3_FRENTA_XTA_0_0_15",
+    "name": "Series de tiempo - Datos Argentina",
+    "snippet": "Desde aquí podés buscar las series de tiempo del tema que necesites, podés seleccionar más de una opcion de los resultados para compararlos.",
+    "host_name": "datos.gob.ar",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://datos.gob.ar/ar/dataset/sspm-fondos-comunes-inversion",
+    "name": "Fondos Comunes de Inversión - Datos Argentina",
+    "snippet": "Recursos del dataset · Fondos Comunes de Inversión por tipo. Datos anuales · Fondos Comunes de Inversión por tipo. Datos mensuales.",
+    "host_name": "datos.gob.ar",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.datos.gob.ar/id/dataset/sspm-fondos-comunes-inversion/archivo/sspm_171.1",
+    "name": "Fondos Comunes de Inversión por tipo. Datos anuales",
+    "snippet": "Datos mensuales. Fondos Comunes de Inversión por tipo. csv · http://datos.gob.ar/ · Publicá datos · Herramientas · Indicadores · Marco legal · Glosario.",
+    "host_name": "www.datos.gob.ar",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.argentina.gob.ar/cnv/proteccion-al-inversor/fondos-comunes-de-inversion-0",
+    "name": "Fondos Comunes de Inversión | Argentina.gob.ar",
+    "snippet": "Los Fondos Comunes de Inversión (FCI) no son sociedades ni personas jurídicas, sino patrimonios que se forman con los aportes que realizan los inversores ...",
+    "host_name": "www.argentina.gob.ar",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://datos.gob.ar/cs_CZ/dataset/sspm-fondos-comunes-inversion/archivo/sspm_171.3",
+    "name": "Fondos Comunes de Inversión por tipo. Datos mensuales",
+    "snippet": "Fondos Comunes de Inversión por tipo. Datos anuales. Fondos Comunes de Inversión por tipo. csv. http://datos.gob.ar/ · Publicá datos · Herramientas.",
+    "host_name": "datos.gob.ar",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=GxAdWNQHapk",
+    "name": "CLASE 1 – FONDOS COMUNES DE INVERSIÓN - YouTube",
+    "snippet": "BYMAEDUCA https://www.byma.com.ar/productos/conoce-el-mercado-parte-iv/",
+    "host_name": "www.youtube.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://datos.gob.ar/dataset?tags=Finanzas",
+    "name": "Datasets - Datos Argentina",
+    "snippet": "Fondos Comunes de Inversión. Subsecretaría de Programación Macroeconómica. Fondos Comunes de Inversión por tipo. csv · Financiamiento privado en mercado de ...",
+    "host_name": "datos.gob.ar",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.hipotecario.com.ar/personas/inversiones/fondos-comunes-de-inversion",
+    "name": "Fondos Comunes de Inversión - Banco Hipotecario",
+    "snippet": "La cuotaparte tiene un valor de cotización que se calcula diariamente por parte de la Sociedad Gerente y el mismo surge de dividir el patrimonio ...",
+    "host_name": "www.hipotecario.com.ar",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.invertironline.com/productos/fondos-comunes-de-inversion",
+    "name": "Fondos Comunes de Inversión | IOL invertironline",
+    "snippet": "Los Fondos Comunes de Inversión son paquetes de inversiones diseñados y administrados por expertos, para invertir tus ahorros de forma sencilla.",
+    "host_name": "www.invertironline.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

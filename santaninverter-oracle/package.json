@@ -1,0 +1,24 @@
+{
+  "name": "santaninverter-oracle",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "echo 'No build step needed — wrangler bundles TypeScript'",
+    "db:init": "wrangler d1 execute oracle_db --file=src/schema.sql",
+    "kv:create": "wrangler kv namespace create oracle-kv",
+    "secret:bcra": "wrangler secret put BCRA_API_KEY",
+    "secret:indec": "wrangler secret put INDEC_API_KEY",
+    "secret:bluelytics": "wrangler secret put BLUELYTICS_API_KEY",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250614.0",
+    "typescript": "^5.8.0",
+    "wrangler": "^4.100.0"
+  },
+  "dependencies": {
+    "zod": "^3.23.0"
+  }
+}

@@ -1,0 +1,2621 @@
+#!/bin/bash
+# ════════════════════════════════════════════════════════════════════════════
+# SANTANINVERTER ORACLE — FULL SOURCE DUMP (1 BLOQUE, 1 COPY-PASTE)
+# ════════════════════════════════════════════════════════════════════════════
+# NOTA DE RUTAS: las rutas reales difieren de las pedidas:
+#   src/lib/oracle/multi-oracle.ts  → src/lib/oracle-multi/index.ts
+#   src/lib/oracle/storage.ts       → src/lib/oracle-multi/storage.ts
+#   src/lib/oracle/cron.ts          → src/lib/oracle-multi/cron.ts
+#   src/lib/oracle/live-data.ts     → src/lib/live-data.ts
+#   src/lib/oracle/fci-data.ts      → src/lib/oracle-fci/fetch.ts
+#   src/lib/oracle/scoring-engine.ts → src/lib/oracle-multi/rank.ts + predict.ts
+# ════════════════════════════════════════════════════════════════════════════
+
+mkdir -p /home/z/my-project/{src/app/api/or```bash
+#!/bin/bash
+# ════════════════════════════════════════════════════════════════════════════
+# SANTANINVERTER ORACLE — FULL SOURCE DUMP (1 BLOQUE, 1 COPY-PASTE)
+# ════════════════════════════════════════════════════════════════════════════
+# NOTA DE RUTAS: las rutas reales difieren de las pedidas:
+#   src/lib/oracle/multi-oracle.ts  → src/lib/oracle-multi/index.ts
+#   src/lib/oracle/storage.ts       → src/lib/oracle-multi/storage.ts
+#   src/lib/oracle/cron.ts          → src/lib/oracle-multi/cron.ts
+#   src/lib/oracle/live-data.ts     → src/lib/live-data.ts
+#   src/lib/oracle/fci-data.ts      → src/lib/oracle-fci/fetch.ts
+#   src/lib/oracle/scoring-engine.ts → src/lib/oracle-multi/rank.ts + predict.ts
+# ════════════════════════════════════════════════════════════════════════════
+
+mkdir -p /home/z/my-project/{src/app/api/oracle/predictions,src/lib/oracle-multi,src/lib/oracle-fci,src/lib,scripts}
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECCIÓN 1: CONFIGURACIÓN DEL PROYECTO Y BUILD
+# ════════════════════════════════════════════════════════════════════════════
+
+# ─── 1.1 package.json ──────────────────────────────────────────────────────
+cat > /home/z/my-project/package.json << 'SANTANINVERTER_EOF_PKG_JSON'
+{
+  "name": "nextjs_tailwind_shadcn_ts",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "dev": "next dev -p 3000 2>&1 | tee dev.log",
+    "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
+    "lint": "eslint .",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:reset": "prisma migrate reset",
+    "preview": "opennextjs-cloudflare build && node scripts/wrap-worker-with-cron.mjs && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && node scripts/wrap-worker-with-cron.mjs && opennextjs-cloudflare deploy",
+    "upload": "opennextjs-cloudflare build && node scripts/wrap-worker-with-cron.mjs && opennextjs-cloudflare upload",
+    "wrap-worker": "node scripts/wrap-worker-with-cron.mjs",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@hookform/resolvers": "^5.1.1",
+    "@mdxeditor/editor": "^3.39.1",
+    "@opennextjs/cloudflare": "^1.19.11",
+    "@prisma/client": "^6.11.1",
+    "@radix-ui/react-accordion": "^1.2.11",
+    "@radix-ui/react-alert-dialog": "^1.1.14",
+    "@radix-ui/react-aspect-ratio": "^1.1.7",
+    "@radix-ui/react-avatar": "^1.1.10",
+    "@radix-ui/react-checkbox": "^1.3.2",
+    "@radix-ui/react-collapsible": "^1.1.11",
+    "@radix-ui/react-context-menu": "^2.2.15",
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-dropdown-menu": "^2.1.15",
+    "@radix-ui/react-hover-card": "^1.1.14",
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-menubar": "^1.1.15",
+    "@radix-ui/react-navigation-menu": "^1.2.13",
+    "@radix-ui/react-popover": "^1.1.14",
+    "@radix-ui/react-progress": "^1.1.7",
+    "@radix-ui/react-radio-group": "^1.3.7",
+    "@radix-ui/react-scroll-area": "^1.2.9",
+    "@radix-ui/react-select": "^2.2.5",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-slider": "^1.3.5",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-switch": "^1.2.5",
+    "@radix-ui/react-tabs": "^1.1.12",
+    "@radix-ui/react-toast": "^1.2.14",
+    "@radix-ui/react-toggle": "^1.1.9",
+    "@radix-ui/react-toggle-group": "^1.1.10",
+    "@radix-ui/react-tooltip": "^1.2.7",
+    "@reactuses/core": "^6.0.5",
+    "@tanstack/react-query": "^5.82.0",
+    "@tanstack/react-table": "^8.21.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "date-fns": "^4.1.0",
+    "embla-carousel-react": "^8.6.0",
+    "framer-motion": "^12.23.2",
+    "fuse.js": "^7.4.2",
+    "input-otp": "^1.4.2",
+    "lucide-react": "^0.525.0",
+    "next": "^16.1.1",
+    "next-auth": "^4.24.11",
+    "next-intl": "^4.3.4",
+    "next-themes": "^0.4.6",
+    "prisma": "^6.11.1",
+    "react": "^19.0.0",
+    "react-day-picker": "^9.8.0",
+    "react-dom": "^19.0.0",
+    "react-hook-form": "^7.60.0",
+    "react-markdown": "^10.1.0",
+    "react-resizable-panels": "^3.0.3",
+    "react-syntax-highlighter": "^15.6.1",
+    "recharts": "^2.15.4",
+    "sharp": "^0.34.3",
+    "sonner": "^2.0.6",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7",
+    "uuid": "^11.1.0",
+    "vaul": "^1.1.2",
+    "z-ai-web-dev-sdk": "^0.0.17",
+    "zod": "^4.0.2",
+    "zustand": "^5.0.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "bun-types": "^1.3.4",
+    "eslint": "^9",
+    "eslint-config-next": "^16.1.1",
+    "tailwindcss": "^4",
+    "tw-animate-css": "^1.3.5",
+    "typescript": "^5",
+    "wrangler": "^4.100.0"
+  }
+}
+SANTANINVERTER_EOF_PKG_JSON
+
+# ─── 1.2 next.config.ts ────────────────────────────────────────────────────
+cat > /home/z/my-project/next.config.ts << 'SANTANINVERTER_EOF_NEXT_CONFIG'
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  output: "standalone",
+  /* config options here */
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  reactStrictMode: false,
+};
+
+export default nextConfig;
+
+import('@opennextjs/cloudflare').then(m => m.initOpenNextCloudflareForDev());
+SANTANINVERTER_EOF_NEXT_CONFIG
+
+# ─── 1.3 wrangler.jsonc ────────────────────────────────────────────────────
+cat > /home/z/my-project/wrangler.jsonc << 'SANTANINVERTER_EOF_WRANGLER'
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "santaninverter-oracle",
+  "compatibility_date": "2026-06-16",
+  "main": ".open-next/worker-with-cron.js",
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "PROXY_URL": "https://macro-oracle-proxy.simondalmasso44.workers.dev",
+    "NEXT_PUBLIC_PROXY_URL": "https://macro-oracle-proxy.simondalmasso44.workers.dev"
+  },
+  "services": [
+    {
+      "binding": "MACRO_PROXY",
+      "service": "macro-oracle-proxy"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "ORACLE_FCI_HISTORY",
+      "id": "b95f695ecf9c441d85ebf02588cf23a5",
+      "preview_id": "b95f695ecf9c441d85ebf02588cf23a5"
+    },
+    {
+      "binding": "ORACLE_ASSETS_HISTORY",
+      "id": "630b5eb6c3f64da1b808bbb67928bf2d",
+      "preview_id": "630b5eb6c3f64da1b808bbb67928bf2d"
+    },
+    {
+      "binding": "ORACLE_PREDICTIONS",
+      "id": "968f1bce04ec4949bf37cfbc3a053153",
+      "preview_id": "968f1bce04ec4949bf37cfbc3a053153"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 23 * * 1-5"]
+  },
+  "observability": {
+    "enabled": false,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": false,
+      "persist": true,
+      "head_sampling_rate": 1
+    }
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}
+SANTANINVERTER_EOF_WRANGLER
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECCIÓN 2: FRONTEND — PÁGINA PRINCIPAL DEL ORACLE
+# ════════════════════════════════════════════════════════════════════════════
+
+# ─── 2.1 src/app/page.tsx (entry point — delega a MainDashboard) ───────────
+cat > /home/z/my-project/src/app/page.tsx << 'SANTANINVERTER_EOF_PAGE_TSX'
+'use client';
+
+import { MainDashboard } from '@/components/dashboard/main-dashboard';
+
+export default function Home() {
+  return <MainDashboard />;
+}
+SANTANINVERTER_EOF_PAGE_TSX
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECCIÓN 3: BACKEND — API ROUTES Y LÓGICA CENTRAL
+# ════════════════════════════════════════════════════════════════════════════
+
+# ─── 3.1 src/app/api/oracle/predictions/route.ts (handler con GET + POST) ─
+cat > /home/z/my-project/src/app/api/oracle/predictions/route.ts << 'SANTANINVERTER_EOF_PREDICTIONS_ROUTE'
+// src/app/api/oracle/predictions/route.ts
+// GET /api/oracle/predictions?min_confidence={0-1}&asset_class={class}
+// Returns all assets with predictions, sorted by confidence desc.
+
+import { NextRequest, NextResponse } from 'next/server';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { runMultiOracle, resolveMultiStorage } from '@/lib/oracle-multi';
+import type { PredictionsResponse } from '@/lib/oracle-multi';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 3600;
+
+function getEnv() {
+  // CRON_PERSISTENCE_WIRING_FIX — see /api/oracle/cron/route.ts for rationale.
+  try {
+    const ctx = getCloudflareContext();
+    const env = ctx.env as {
+      ORACLE_FCI_HISTORY?: KVNamespace;
+      ORACLE_ASSETS_HISTORY?: KVNamespace;
+      ORACLE_PREDICTIONS?: KVNamespace;
+    };
+    return {
+      ORACLE_FCI_HISTORY: env.ORACLE_FCI_HISTORY,
+      ORACLE_ASSETS_HISTORY: env.ORACLE_ASSETS_HISTORY,
+      ORACLE_PREDICTIONS: env.ORACLE_PREDICTIONS,
+    };
+  } catch {
+    return {
+      ORACLE_FCI_HISTORY: undefined,
+      ORACLE_ASSETS_HISTORY: undefined,
+      ORACLE_PREDICTIONS: undefined,
+    };
+  }
+}
+
+export async function GET(req: NextRequest): Promise<NextResponse<PredictionsResponse | { success: false; error: string }>> {
+  try {
+    const { searchParams } = new URL(req.url);
+    const minConfidenceParam = searchParams.get('min_confidence');
+    const minConfidence = minConfidenceParam ? Math.max(0, Math.min(1, parseFloat(minConfidenceParam))) : 0.65;
+    const assetClass = searchParams.get('asset_class') as import('@/lib/oracle-multi').AssetClass | null;
+
+    const storage = resolveMultiStorage(getEnv());
+    const classes = assetClass ? [assetClass] : undefined;
+    const full = await runMultiOracle({ storage, classes, topN: 100 });
+
+    const predictions = full.rankings.top10_predicted_30d
+      .concat(full.by_class && Object.values(full.by_class).flat().filter((a) => a.prediction != null && !full.rankings.top10_predicted_30d.includes(a)))
+      .filter((a) => a.prediction != null && a.prediction.confidence >= minConfidence)
+      .map((a) => ({
+        asset_id: a.id,
+        name: a.name,
+        asset_class: a.asset_class,
+        ticker: a.ticker,
+        expected_return_30d: a.prediction!.expected_return_30d,
+        confidence: a.prediction!.confidence,
+        bull_probability: a.prediction!.bull_probability,
+        bear_probability: a.prediction!.bear_probability,
+        volatility_score: a.prediction!.volatility_score,
+        models_used: a.prediction!.models_used,
+      }))
+      .sort((a, b) => b.confidence - a.confidence);
+
+    // Deduplicate by asset_id
+    const seen = new Set<string>();
+    const deduped = predictions.filter((p) => {
+      if (seen.has(p.asset_id)) return false;
+      seen.add(p.asset_id);
+      return true;
+    });
+
+    const highConvictionCount = deduped.filter((p) => p.confidence > 0.85).length;
+
+    const response: PredictionsResponse = {
+      generated_at: full.generated_at,
+      snapshot_date: full.snapshot_date,
+      total_predictions: deduped.length,
+      high_conviction_count: highConvictionCount,
+      predictions: deduped,
+      metadata: {
+        guards: full.metadata.guards,
+        confidence_threshold: 0.65,
+        min_history_days: 9,
+      },
+    };
+
+    return NextResponse.json(response, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200',
+        'X-Oracle-Status': full.source_status,
+        'X-Oracle-Predictions-Count': String(deduped.length),
+      },
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { success: false, error: `ORACLE_PREDICTIONS runtime error: ${msg}` },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * POST /api/oracle/predictions
+ *
+ * P2_PREDICTIONS_POST_HANDLER_FIX_v1 — invoked by scripts/wrap-worker-with-cron.mjs
+ * scheduled() handler with method: 'POST' (line 74 of wrapper). The handler
+ * previously only exported GET, so Next.js returned HTTP 405 Method Not Allowed
+ * on every cron invocation since 2026-06-22 → `refresh_predictions` never ran
+ * → decision engine stuck in confidenceThrottle (recentConfidence=0.33) →
+ * no new DEC-* decisions generated.
+ *
+ * Plumbing-only fix. NO changes to scoring engine, weights, or model.
+ * Mirrors `refresh_predictions` job in src/lib/oracle-multi/cron.ts:81-94
+ * (runMultiOracle with topN:5, no class filter — runs all classes so the
+ * predictor has the latest snapshots).
+ *
+ * Deviations from Qwen's literal snippet (documented for audit):
+ *   1. Uses local `getEnv()` (P1 CRON_PERSISTENCE_WIRING_FIX applied — uses
+ *      getCloudflareContext().env, NOT process.env.*). `getOracleEnv` does
+ *      NOT exist in this codebase. Fail-loudly check in resolveMultiStorage()
+ *      still fires if any KV binding is undefined after the ctx lookup.
+ *   2. Uses `result.predictions_summary.assets_with_predictions` for the
+ *      count. The MultiOracleResponse shape (types.ts:187-192) has no
+ *      `predictions[]` array — only `predictions_summary`. Also surfaces
+ *      `predictions_active` and `high_conviction_count` for cron telemetry.
+ */
+export async function POST(): Promise<NextResponse> {
+  const startedAt = Date.now();
+  try {
+    const storage = resolveMultiStorage(getEnv());
+    const result = await runMultiOracle({ storage, topN: 5 });
+    const durationMs = Date.now() - startedAt;
+
+    return NextResponse.json({
+      success: true,
+      snapshot_date: result.snapshot_date,
+      source_status: result.source_status,
+      predictions_active: result.predictions_summary.active,
+      predictions_count: result.predictions_summary.assets_with_predictions,
+      high_conviction_count: result.predictions_summary.high_conviction_count,
+      duration_ms: durationMs,
+    });
+  } catch (err: unknown) {
+    const durationMs = Date.now() - startedAt;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[predictions/POST] runMultiOracle failed:', msg);
+    return NextResponse.json(
+      { success: false, error: msg, duration_ms: durationMs },
+      { status: 500 },
+    );
+  }
+}
+SANTANINVERTER_EOF_PREDICTIONS_ROUTE
+
+# ─── 3.2 src/lib/oracle-multi/index.ts (runMultiOracle — núcleo) ───────────
+cat > /home/z/my-project/src/lib/oracle-multi/index.ts << 'SANTANINVERTER_EOF_MULTI_INDEX'
+// src/lib/oracle-multi/index.ts
+// ORACLE_MULTI_ASSET_V4 orchestrator.
+// Pipeline: fetch all sources → normalize → snapshot (KV) → rank per class → predict → publish
+// Guards: never_invent_data, require_source_data, forbid_hallucinated_returns,
+//         must_flag_predictions, must_flag_degraded_mode, must_preserve_last_valid_snapshot.
+
+import {
+  type AssetClass,
+  type AssetMetrics,
+  type AssetSnapshot,
+  type ClassOracleResponse,
+  type MultiOracleResponse,
+  type NormalizedAsset,
+  type PricePoint,
+  ASSET_CLASS_LABELS,
+  ASSET_CLASS_ORDER,
+  ORACLE_SCORE_WEIGHTS,
+  CONFIDENCE_THRESHOLD,
+  MIN_HISTORY_DAYS,
+} from './types';
+import { fetchFciAssets, FCI_SOURCE_CONFIDENCE, FCI_EVIDENCE_URLS } from './sources/fci-source';
+import { fetchPlazoFijoAssets, PLAZO_FIJO_SOURCE_CONFIDENCE, PLAZO_FIJO_EVIDENCE_URLS } from './sources/plazo-fijo';
+import { fetchAccionesAssets, ACCIONES_SOURCE_CONFIDENCE, ACCIONES_EVIDENCE_URLS } from './sources/acciones';
+import { fetchBonosAssets, BONOS_SOURCE_CONFIDENCE, BONOS_EVIDENCE_URLS } from './sources/bonds';
+import { fetchCedearsAssets, CEDEARS_SOURCE_CONFIDENCE, CEDEARS_EVIDENCE_URLS } from './sources/cedears';
+import { fetchEtfCedearsAssets, ETF_CEDEARS_SOURCE_CONFIDENCE, ETF_CEDEARS_EVIDENCE_URLS } from './sources/etf-cedears';
+import { fetchMepRate } from './mep';
+import {
+  type MultiStorage,
+  type StorageAdapter,
+  resolveMultiStorage,
+  buildSnapshot,
+  saveSnapshot,
+  loadRecentSnapshots,
+  buildPriceSeries,
+} from './storage';
+import { rankAssets, assignGlobalRanks } from './rank';
+import { MultiAssetSearcher } from './search';
+
+export { MemoryStorageAdapter, KVStorageAdapter, resolveMultiStorage } from './storage';
+export type { StorageAdapter, MultiStorage } from './storage';
+export type {
+  AssetClass,
+  AssetMetrics,
+  AssetPrediction,
+  AssetSnapshot,
+  ClassOracleResponse,
+  MultiOracleResponse,
+  NormalizedAsset,
+  PricePoint,
+  SearchResponse,
+  PredictionsResponse,
+} from './types';
+export { ASSET_CLASS_LABELS, ASSET_CLASS_ORDER, ORACLE_SCORE_WEIGHTS } from './types';
+export { MultiAssetSearcher } from './search';
+
+// ─── Per-source config ─────────────────────────────────────────────────────
+
+interface SourceConfig {
+  confidence: number;
+  evidence: string[];
+  /** True if the source should persist snapshots to the assets KV (FCI has its own KV) */
+  useAssetsKV: boolean;
+}
+
+const SOURCE_CONFIG: Record<AssetClass, SourceConfig> = {
+  FCI: { confidence: FCI_SOURCE_CONFIDENCE, evidence: FCI_EVIDENCE_URLS, useAssetsKV: false },
+  PLAZO_FIJO: { confidence: PLAZO_FIJO_SOURCE_CONFIDENCE, evidence: PLAZO_FIJO_EVIDENCE_URLS, useAssetsKV: true },
+  ACCIONES: { confidence: ACCIONES_SOURCE_CONFIDENCE, evidence: ACCIONES_EVIDENCE_URLS, useAssetsKV: true },
+  BONOS: { confidence: BONOS_SOURCE_CONFIDENCE, evidence: BONOS_EVIDENCE_URLS, useAssetsKV: true },
+  CEDEARS: { confidence: CEDEARS_SOURCE_CONFIDENCE, evidence: CEDEARS_EVIDENCE_URLS, useAssetsKV: true },
+  ETF_CEDEARS: { confidence: ETF_CEDEARS_SOURCE_CONFIDENCE, evidence: ETF_CEDEARS_EVIDENCE_URLS, useAssetsKV: true },
+};
+
+// ─── Options ───────────────────────────────────────────────────────────────
+
+export interface RunMultiOracleOptions {
+  storage?: MultiStorage;
+  env?: {
+    ORACLE_FCI_HISTORY?: KVNamespace;
+    ORACLE_ASSETS_HISTORY?: KVNamespace;
+    ORACLE_PREDICTIONS?: KVNamespace;
+  };
+  /** Asset classes to fetch — defaults to all 6 */
+  classes?: AssetClass[];
+  /** Optional search query — filters output */
+  searchQuery?: string;
+  /** Top N per class in output (default 25) */
+  topN?: number;
+}
+
+// ─── Orchestrator ──────────────────────────────────────────────────────────
+
+const DEFAULT_GUARDS = {
+  never_invent_data: true,
+  require_source_data: true,
+  forbid_hallucinated_returns: true,
+  must_flag_predictions: true,
+  must_flag_degraded_mode: true,
+  must_preserve_last_valid_snapshot: true,
+} as const;
+
+export async function runMultiOracle(options: RunMultiOracleOptions = {}): Promise<MultiOracleResponse> {
+  const storage = options.storage ?? resolveMultiStorage(options.env);
+  const classes = options.classes ?? ASSET_CLASS_ORDER;
+  const topN = options.topN ?? 25;
+
+  const errors: string[] = [];
+  const fallbackChain: string[] = ['multi_oracle_start'];
+  const evidence: string[] = [];
+  for (const cls of classes) {
+    evidence.push(...SOURCE_CONFIG[cls].evidence);
+  }
+
+  // Step 1: Fetch MEP rate (needed for USD-denominated assets)
+  fallbackChain.push('fetch_mep');
+  const mepResult = await fetchMepRate();
+  if (!mepResult.ok) {
+    errors.push(`mep_fetch: ${mepResult.error ?? 'unknown'}`);
+    fallbackChain.push('mep_fallback_default_1500');
+  }
+
+  // Step 2: Fetch each asset class in parallel
+  fallbackChain.push('fetch_all_classes_parallel');
+  const fetchResults = await Promise.allSettled([
+    classes.includes('FCI') ? fetchFciAssets() : Promise.resolve(null),
+    classes.includes('PLAZO_FIJO') ? fetchPlazoFijoAssets() : Promise.resolve(null),
+    classes.includes('ACCIONES') ? fetchAccionesAssets(mepResult.rate) : Promise.resolve(null),
+    classes.includes('BONOS') ? fetchBonosAssets(mepResult.rate) : Promise.resolve(null),
+    classes.includes('CEDEARS') ? fetchCedearsAssets(mepResult.rate) : Promise.resolve(null),
+    classes.includes('ETF_CEDEARS') ? fetchEtfCedearsAssets(mepResult.rate) : Promise.resolve(null),
+  ]);
+
+  const classResults: Partial<Record<AssetClass, { assets: NormalizedAsset[]; errors: string[]; fallback: string[]; degraded: boolean }>> = {};
+  const classesFetched: AssetClass[] = [];
+  const classesFailed: AssetClass[] = [];
+
+  const expectedOrder: AssetClass[] = ['FCI', 'PLAZO_FIJO', 'ACCIONES', 'BONOS', 'CEDEARS', 'ETF_CEDEARS'];
+
+  for (let i = 0; i < expectedOrder.length; i++) {
+    const cls = expectedOrder[i];
+    if (!classes.includes(cls)) continue;
+    const settled = fetchResults[i];
+    if (settled.status !== 'fulfilled' || settled.value === null) {
+      if (settled.status === 'rejected') {
+        errors.push(`${cls}_fetch_rejected: ${String(settled.reason)}`);
+      }
+      classesFailed.push(cls);
+      continue;
+    }
+    const val = settled.value;
+    errors.push(...val.errors);
+    fallbackChain.push(...val.fallback_chain);
+    classResults[cls] = {
+      assets: val.assets,
+      errors: val.errors,
+      fallback: val.fallback_chain,
+      degraded: 'degraded' in val ? val.degraded : false,
+    };
+    if (val.assets.length > 0) {
+      classesFetched.push(cls);
+    } else {
+      classesFailed.push(cls);
+    }
+  }
+
+  // Step 3: Persist today's snapshot per class (idempotent)
+  fallbackChain.push('persist_snapshots');
+  for (const cls of classesFetched) {
+    const result = classResults[cls]!;
+    if (result.assets.length === 0) continue;
+    const snapshot = buildSnapshot(result.assets, cls, 'MULTI_ORACLE_V4');
+    const targetKV: StorageAdapter = cls === 'FCI' ? storage.fci : storage.assets;
+    try {
+      await saveSnapshot(targetKV, snapshot);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`snapshot_save_${cls}: ${msg}`);
+    }
+  }
+
+  // Step 4: Load historical snapshots per class to build price series
+  const priceSeriesByClass = new Map<AssetClass, Map<string, PricePoint[]>>();
+  let totalHistoryDays = 0;
+  for (const cls of classesFetched) {
+    const targetKV: StorageAdapter = cls === 'FCI' ? storage.fci : storage.assets;
+    try {
+      const snapshots = await loadRecentSnapshots(targetKV, cls, 90);
+      totalHistoryDays = Math.max(totalHistoryDays, snapshots.length);
+      const series = buildPriceSeries(snapshots);
+      priceSeriesByClass.set(cls, series);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`history_load_${cls}: ${msg}`);
+    }
+  }
+
+  // Step 5: Rank per class
+  const rankedByClass: Record<AssetClass, AssetMetrics[]> = {} as Record<AssetClass, AssetMetrics[]>;
+  for (const cls of ASSET_CLASS_ORDER) {
+    rankedByClass[cls] = [];
+  }
+  for (const cls of classesFetched) {
+    const result = classResults[cls]!;
+    const series = priceSeriesByClass.get(cls) ?? new Map<string, PricePoint[]>();
+    const ranked = rankAssets({
+      assets: result.assets,
+      priceSeries: series,
+      sourceConfidence: SOURCE_CONFIG[cls].confidence,
+    });
+    rankedByClass[cls] = ranked.metrics;
+  }
+
+  // Step 6: Assign global ranks
+  const allRanked: AssetMetrics[] = [];
+  for (const cls of ASSET_CLASS_ORDER) {
+    allRanked.push(...rankedByClass[cls]);
+  }
+  assignGlobalRanks(allRanked);
+
+  // Step 7: Optional search filter
+  let filtered = allRanked;
+  let searchActive = false;
+  if (options.searchQuery && options.searchQuery.trim().length >= 2) {
+    const searcher = new MultiAssetSearcher(allRanked);
+    const results = searcher.search(options.searchQuery, 200);
+    filtered = results.map((r) => r.asset);
+    searchActive = true;
+    fallbackChain.push(`search_filter_applied`);
+  }
+
+  // Step 8: Build top-10 lists
+  const top10ByScore = [...filtered].sort((a, b) => b.oracle_score - a.oracle_score).slice(0, 10);
+  const top10ByMcap = [...filtered]
+    .filter((a) => a.market_cap_ars != null && a.market_cap_ars > 0)
+    .sort((a, b) => (b.market_cap_ars ?? 0) - (a.market_cap_ars ?? 0))
+    .slice(0, 10);
+  const top10Predicted30d = filtered
+    .filter((a) => a.prediction && a.prediction.expected_return_30d !== null)
+    .sort((a, b) => (b.prediction?.expected_return_30d ?? -Infinity) - (a.prediction?.expected_return_30d ?? -Infinity))
+    .slice(0, 10);
+  const top10MostStable = [...filtered]
+    .filter((a) => a.volatility !== null)
+    .sort((a, b) => (a.volatility ?? 1) - (b.volatility ?? 1))
+    .slice(0, 10);
+  const topGainers7d = [...filtered]
+    .filter((a) => a.momentum_7d !== null)
+    .sort((a, b) => (b.momentum_7d ?? -Infinity) - (a.momentum_7d ?? -Infinity))
+    .slice(0, 10);
+  const topLosers7d = [...filtered]
+    .filter((a) => a.momentum_7d !== null)
+    .sort((a, b) => (a.momentum_7d ?? Infinity) - (b.momentum_7d ?? Infinity))
+    .slice(0, 10);
+
+  // Step 9: Predictions summary
+  const assetsWithPred = filtered.filter((a) => a.prediction != null);
+  const avgConf = assetsWithPred.length > 0
+    ? assetsWithPred.reduce((s, a) => s + (a.prediction?.confidence ?? 0), 0) / assetsWithPred.length
+    : null;
+  const highConvictionCount = assetsWithPred.filter((a) => (a.prediction?.confidence ?? 0) > 0.85).length;
+
+  // Step 10: Build per-class top N
+  const byClassOutput: Record<AssetClass, AssetMetrics[]> = {} as Record<AssetClass, AssetMetrics[]>;
+  for (const cls of ASSET_CLASS_ORDER) {
+    byClassOutput[cls] = filtered
+      .filter((a) => a.asset_class === cls)
+      .slice(0, topN);
+  }
+
+  // Step 11: Determine source status
+  const totalAssets = allRanked.length;
+  const sourceStatus: MultiOracleResponse['source_status'] =
+    totalAssets === 0 ? 'ERROR'
+    : classesFailed.length >= classes.length / 2 ? 'DEGRADED'
+    : classesFailed.length > 0 ? 'PARTIAL_SUCCESS'
+    : 'SUCCESS';
+
+  if (sourceStatus === 'DEGRADED') {
+    fallbackChain.push('degraded_mode_active');
+  }
+
+  const snapshotDate = new Date().toISOString().slice(0, 10);
+
+  return {
+    generated_at: new Date().toISOString(),
+    snapshot_date: snapshotDate,
+    source: 'MULTI_ORACLE_V4',
+    source_status: sourceStatus,
+    total_assets: totalAssets,
+    assets_in_output: filtered.length,
+    rankings: {
+      top10_by_oracle_score: top10ByScore,
+      top10_by_market_cap: top10ByMcap,
+      top10_predicted_30d: top10Predicted30d,
+      top10_most_stable: top10MostStable,
+      top_gainers_7d: topGainers7d,
+      top_losers_7d: topLosers7d,
+    },
+    by_class: byClassOutput,
+    predictions_summary: {
+      active: assetsWithPred.length > 0,
+      assets_with_predictions: assetsWithPred.length,
+      avg_confidence: avgConf,
+      high_conviction_count: highConvictionCount,
+    },
+    metadata: {
+      classes_fetched: classesFetched,
+      classes_failed: classesFailed,
+      history_days_available: totalHistoryDays,
+      prediction_engine_active: totalHistoryDays >= MIN_HISTORY_DAYS,
+      guards: { ...DEFAULT_GUARDS },
+      fallback_chain_used: fallbackChain,
+      score_weights: ORACLE_SCORE_WEIGHTS,
+    },
+    errors,
+    evidence,
+  };
+}
+
+export async function runClassOracle(
+  cls: AssetClass,
+  options: { storage?: MultiStorage; env?: RunMultiOracleOptions['env']; searchQuery?: string; topN?: number } = {},
+): Promise<ClassOracleResponse> {
+  const full = await runMultiOracle({ ...options, classes: [cls] });
+  const allAssets = full.by_class[cls] ?? [];
+  const filtered = options.searchQuery && options.searchQuery.trim().length >= 2
+    ? (() => {
+        const searcher = new MultiAssetSearcher(allAssets);
+        return searcher.search(options.searchQuery!, 100).map((r) => r.asset);
+      })()
+    : allAssets;
+
+  return {
+    generated_at: full.generated_at,
+    snapshot_date: full.snapshot_date,
+    source: full.source,
+    source_status: full.source_status,
+    asset_class: cls,
+    total_assets: full.total_assets,
+    assets_in_output: filtered.length,
+    rankings: {
+      top10_by_oracle_score: filtered.slice(0, 10),
+      top10_by_market_cap: [...filtered]
+        .filter((a) => a.market_cap_ars != null)
+        .sort((a, b) => (b.market_cap_ars ?? 0) - (a.market_cap_ars ?? 0))
+        .slice(0, 10),
+      top10_predicted_30d: filtered
+        .filter((a) => a.prediction && a.prediction.expected_return_30d !== null)
+        .sort((a, b) => (b.prediction?.expected_return_30d ?? -Infinity) - (a.prediction?.expected_return_30d ?? -Infinity))
+        .slice(0, 10),
+      top10_most_stable: [...filtered]
+        .filter((a) => a.volatility !== null)
+        .sort((a, b) => (a.volatility ?? 1) - (b.volatility ?? 1))
+        .slice(0, 10),
+      top_gainers_7d: [...filtered]
+        .filter((a) => a.momentum_7d !== null)
+        .sort((a, b) => (b.momentum_7d ?? -Infinity) - (a.momentum_7d ?? -Infinity))
+        .slice(0, 10),
+      top_losers_7d: [...filtered]
+        .filter((a) => a.momentum_7d !== null)
+        .sort((a, b) => (a.momentum_7d ?? Infinity) - (b.momentum_7d ?? Infinity))
+        .slice(0, 10),
+    },
+    assets: filtered,
+    metadata: {
+      history_days_available: full.metadata.history_days_available,
+      prediction_engine_active: full.metadata.prediction_engine_active,
+      guards: full.metadata.guards,
+      fallback_chain_used: full.metadata.fallback_chain_used,
+      score_weights: full.metadata.score_weights,
+    },
+    errors: full.errors,
+    evidence: full.evidence,
+  };
+}
+SANTANINVERTER_EOF_MULTI_INDEX
+
+# ─── 3.3 src/lib/oracle-multi/storage.ts (KV adapters + resolver) ──────────
+cat > /home/z/my-project/src/lib/oracle-multi/storage.ts << 'SANTANINVERTER_EOF_MULTI_STORAGE'
+// src/lib/oracle-multi/storage.ts
+// Storage layer for V4 multi-asset Oracle.
+// 3 KV namespaces per spec:
+//   ORACLE_FCI_HISTORY       — FCI snapshots (existing)
+//   ORACLE_ASSETS_HISTORY    — non-FCI asset snapshots (stocks/bonds/cedears/etfs/pf)
+//   ORACLE_PREDICTIONS       — cached predictions (7d TTL)
+// Plus a Memory adapter for dev fallback.
+
+import type { AssetSnapshot, AssetClass, PricePoint } from './types';
+
+export interface StorageAdapter {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
+  list(prefix: string, limit?: number): Promise<{ keys: string[] }>;
+}
+
+export class KVStorageAdapter implements StorageAdapter {
+  constructor(private kv: KVNamespace) {}
+  async get(key: string): Promise<string | null> { return await this.kv.get(key); }
+  async put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void> {
+    await this.kv.put(key, value, opts);
+  }
+  async list(prefix: string, limit = 100): Promise<{ keys: string[] }> {
+    const result = await this.kv.list({ prefix, limit });
+    return { keys: result.keys.map((k) => k.name) };
+  }
+}
+
+export class MemoryStorageAdapter implements StorageAdapter {
+  private store = new Map<string, string>();
+  async get(key: string): Promise<string | null> { return this.store.get(key) ?? null; }
+  async put(key: string, value: string): Promise<void> { this.store.set(key, value); }
+  async list(prefix: string, limit = 100): Promise<{ keys: string[] }> {
+    const keys: string[] = [];
+    for (const k of this.store.keys()) {
+      if (k.startsWith(prefix)) {
+        keys.push(k);
+        if (keys.length >= limit) break;
+      }
+    }
+    return { keys };
+  }
+}
+
+const SNAPSHOT_PREFIX = 'snap';
+const HISTORY_RETENTION_DAYS = 3650;
+
+export function buildSnapshot(
+  assets: import('./types').NormalizedAsset[],
+  assetClass: AssetClass,
+  source: string,
+): AssetSnapshot {
+  const dateCounts = new Map<string, number>();
+  for (const a of assets) dateCounts.set(a.date, (dateCounts.get(a.date) ?? 0) + 1);
+  let snapshotDate = new Date().toISOString().slice(0, 10);
+  let maxCount = 0;
+  for (const [d, c] of dateCounts) {
+    if (c > maxCount) { maxCount = c; snapshotDate = d; }
+  }
+  return {
+    date: snapshotDate,
+    fetched_at: new Date().toISOString(),
+    source,
+    asset_class: assetClass,
+    total_assets: assets.length,
+    assets: assets.map((a) => ({
+      id: a.id, name: a.name, ticker: a.ticker, sub_category: a.sub_category,
+      currency: a.currency, date: a.date, price: a.price, volume: a.volume,
+      market_cap_ars: a.market_cap_ars, issuer: a.issuer,
+    })),
+  };
+}
+
+export async function saveSnapshot(storage: StorageAdapter, snapshot: AssetSnapshot): Promise<void> {
+  const key = `${SNAPSHOT_PREFIX}:${snapshot.asset_class}:${snapshot.date}`;
+  await storage.put(key, JSON.stringify(snapshot));
+}
+
+export async function loadRecentSnapshots(
+  storage: StorageAdapter, assetClass: AssetClass, limit: number,
+): Promise<AssetSnapshot[]> {
+  const prefix = `${SNAPSHOT_PREFIX}:${assetClass}:`;
+  const { keys } = await storage.list(prefix, limit * 2);
+  const sortedKeys = keys.sort().reverse().slice(0, limit);
+  const snapshots: AssetSnapshot[] = [];
+  for (const key of sortedKeys) {
+    const raw = await storage.get(key);
+    if (raw) { try { snapshots.push(JSON.parse(raw) as AssetSnapshot); } catch { /* skip */ } }
+  }
+  return snapshots;
+}
+
+export function buildPriceSeries(snapshots: AssetSnapshot[]): Map<string, PricePoint[]> {
+  const map = new Map<string, PricePoint[]>();
+  const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date));
+  for (const snap of sorted) {
+    for (const a of snap.assets) {
+      const arr = map.get(a.id) ?? [];
+      arr.push({ date: a.date, price: a.price });
+      map.set(a.id, arr);
+    }
+  }
+  return map;
+}
+
+export async function savePrediction(
+  storage: StorageAdapter, assetId: string,
+  prediction: import('./types').AssetPrediction, ttlSeconds = 86400,
+): Promise<void> {
+  const key = `pred:${assetId}`;
+  await storage.put(key, JSON.stringify(prediction), { expirationTtl: ttlSeconds });
+}
+
+export interface MultiStorage {
+  fci: StorageAdapter;
+  assets: StorageAdapter;
+  predictions: StorageAdapter;
+}
+
+/** Resolve 3 storage adapters from Cloudflare KV bindings (or memory fallback). */
+export function resolveMultiStorage(env?: {
+  ORACLE_FCI_HISTORY?: KVNamespace;
+  ORACLE_ASSETS_HISTORY?: KVNamespace;
+  ORACLE_PREDICTIONS?: KVNamespace;
+}): MultiStorage {
+  // CRON_PERSISTENCE_VISIBILITY_FIX v2 — FAIL-LOUDLY when env is provided but
+  // KV bindings are missing. This signals a broken env wiring path (typical
+  // when called from scheduled() where `process.env.*` is not populated and
+  // `getCloudflareContext()` was not used to recover the bindings).
+  //
+  // Previously this branch only emitted a `console.warn` and then silently
+  // fell back to `MemoryStorageAdapter` — meaning the cron kept reporting
+  // `jobs_ok` while every KV write died with the isolate (ghost execution,
+  // zero persistence). The 2026-06-22 → 2026-06-26 CASO_B silent-failure
+  // window was caused exactly by this code path.
+  if (env) {
+    const missing: string[] = [];
+    if (!env.ORACLE_FCI_HISTORY || typeof env.ORACLE_FCI_HISTORY.get !== 'function') missing.push('ORACLE_FCI_HISTORY');
+    if (!env.ORACLE_ASSETS_HISTORY || typeof env.ORACLE_ASSETS_HISTORY.get !== 'function') missing.push('ORACLE_ASSETS_HISTORY');
+    if (!env.ORACLE_PREDICTIONS || typeof env.ORACLE_PREDICTIONS.get !== 'function') missing.push('ORACLE_PREDICTIONS');
+    if (missing.length > 0) {
+      const msg = `[storage] FATAL — env provided but KV bindings missing: ${missing.join(', ')} → refusing to fall back to MemoryStorageAdapter (silent persistence loss). Wiring path broken — apply CRON_PERSISTENCE_WIRING_FIX (getCloudflareContext) in the caller.`;
+      console.error(msg);
+      throw new Error(msg);
+    }
+  }
+  const fci = env?.ORACLE_FCI_HISTORY && typeof env.ORACLE_FCI_HISTORY.get === 'function'
+    ? new KVStorageAdapter(env.ORACLE_FCI_HISTORY) : new MemoryStorageAdapter();
+  const assets = env?.ORACLE_ASSETS_HISTORY && typeof env.ORACLE_ASSETS_HISTORY.get === 'function'
+    ? new KVStorageAdapter(env.ORACLE_ASSETS_HISTORY) : new MemoryStorageAdapter();
+  const predictions = env?.ORACLE_PREDICTIONS && typeof env.ORACLE_PREDICTIONS.get === 'function'
+    ? new KVStorageAdapter(env.ORACLE_PREDICTIONS) : new MemoryStorageAdapter();
+  return { fci, assets, predictions };
+}
+
+export { HISTORY_RETENTION_DAYS };
+SANTANINVERTER_EOF_MULTI_STORAGE
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECCIÓN 4: CRON Y WRAPPING
+# ════════════════════════════════════════════════════════════════════════════
+
+# ─── 4.1 scripts/wrap-worker-with-cron.mjs (wrapper con scheduled()) ───────
+cat > /home/z/my-project/scripts/wrap-worker-with-cron.mjs << 'SANTANINVERTER_EOF_WRAP_MJS'
+// scripts/wrap-worker-with-cron.mjs
+// Post-build script: wraps .open-next/worker.js with a `scheduled()` handler
+// that runs all 6 V4 cron jobs (refresh_fci, refresh_stocks, refresh_bonds,
+// refresh_cedears, refresh_predictions, snapshot_archive).
+
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const OPEN_NEXT_WORKER = resolve(__dirname, '../.open-next/worker.js');
+const WRAPPED_WORKER = resolve(__dirname, '../.open-next/worker-with-cron.js');
+
+if (!existsSync(OPEN_NEXT_WORKER)) {
+  console.error(`[wrap-worker] ERROR: OpenNext worker not found at ${OPEN_NEXT_WORKER}`);
+  console.error(`[wrap-worker] Run \`opennextjs-cloudflare build\` first.`);
+  process.exit(1);
+}
+
+const WRAPPER_CODE = `// AUTO-GENERATED by scripts/wrap-worker-with-cron.mjs
+import openNextWorker from './worker.js';
+
+const handler = openNextWorker.default || openNextWorker;
+const workerFetch = handler.fetch
+  ? handler.fetch.bind(handler)
+  : (typeof handler === 'function' ? handler : null);
+
+const CRON_JOBS = [
+  'refresh_fci', 'refresh_stocks', 'refresh_bonds', 'refresh_cedears',
+  'refresh_predictions', 'snapshot_archive',
+];
+
+const JOB_ENDPOINTS = {
+  refresh_fci: '/api/oracle/fci',
+  refresh_stocks: '/api/oracle/stocks',
+  refresh_bonds: '/api/oracle/bonds',
+  refresh_cedears: '/api/oracle/cedears',
+  refresh_predictions: '/api/oracle/predictions',
+  snapshot_archive: '/api/oracle/cron',
+};
+
+async function runCronJob(env, ctx, job) {
+  const start = Date.now();
+  try {
+    const path = JOB_ENDPOINTS[job];
+    if (!path) return { job, ok: false, error: 'unknown_job', duration_ms: Date.now() - start };
+    if (!workerFetch) return { job, ok: false, error: 'no_fetch_handler', duration_ms: Date.now() - start };
+    const request = new Request('https://cron.internal' + path, {
+      method: 'POST',
+      headers: { 'User-Agent': 'santaninverter-oracle-cron/4.0', 'X-Internal-Cron': '1' },
+    });
+    const res = await workerFetch(request, env, ctx);
+    const ok = res ? res.ok : false;
+    const status = res ? res.status : 0;
+    const duration_ms = Date.now() - start;
+    console.log('[cron]', job, '→', status, 'in', duration_ms + 'ms');
+    return { job, ok, duration_ms, http_status: status };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[cron]', job, 'FAILED:', msg);
+    return { job, ok: false, error: msg, duration_ms: Date.now() - start };
+  }
+}
+
+function verifyEnvBindings(env) {
+  const bindings = {
+    ORACLE_FCI_HISTORY: !!env?.ORACLE_FCI_HISTORY && typeof env.ORACLE_FCI_HISTORY.put === 'function',
+    ORACLE_ASSETS_HISTORY: !!env?.ORACLE_ASSETS_HISTORY && typeof env.ORACLE_ASSETS_HISTORY.put === 'function',
+    ORACLE_PREDICTIONS: !!env?.ORACLE_PREDICTIONS && typeof env.ORACLE_PREDICTIONS.put === 'function',
+  };
+  const missing = Object.entries(bindings).filter(([_, v]) => !v).map(([k]) => k);
+  return { bindings, missing, allPresent: missing.length === 0 };
+}
+
+async function countKeys(kv, prefix) {
+  if (!kv || typeof kv.list !== 'function') return -1;
+  try {
+    const result = await kv.list({ prefix, limit: 1000 });
+    return result.keys.length;
+  } catch (err) {
+    console.error('[cron-persist] countKeys failed for prefix', prefix, err?.message || err);
+    return -1;
+  }
+}
+
+async function logCronEvent(env, payload) {
+  if (!env?.ORACLE_PREDICTIONS || typeof env.ORACLE_PREDICTIONS.put !== 'function') {
+    console.error('[cron-persist] CANNOT LOG EVENT — ORACLE_PREDICTIONS binding missing');
+    return;
+  }
+  const id = 'EVT-CRON-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const entry = {
+    id, timestamp: new Date().toISOString(), eventType: 'PIPELINE_EXECUTION',
+    source: 'scheduled()', data: payload, success: payload.persistence_verified === true,
+  };
+  try {
+    await env.ORACLE_PREDICTIONS.put(
+      'telemetry:event:' + id, JSON.stringify(entry),
+      { expirationTtl: 60 * 60 * 24 * 30 },
+    );
+  } catch (err) {
+    console.error('[cron-persist] logCronEvent KV write failed:', err?.message || err);
+  }
+}
+
+export default {
+  fetch: workerFetch,
+
+  async scheduled(event, env, ctx) {
+    const startedAt = new Date().toISOString();
+    const jobBatchId = 'cron-' + startedAt.replace(/[:.]/g, '-');
+    console.log('[cron] scheduled trigger fired:', event.cron, 'at', startedAt, 'batch:', jobBatchId);
+
+    const envCheck = verifyEnvBindings(env);
+    console.log('[cron-persist] env bindings:', JSON.stringify(envCheck.bindings));
+    if (!envCheck.allPresent) {
+      console.error('[cron-persist] CRITICAL — missing KV bindings:', envCheck.missing.join(', '),
+        '→ cron jobs will execute but persistence will be SILENTLY LOST (MemoryStorageAdapter fallback)');
+    }
+
+    const baseline = {
+      fci: await countKeys(env?.ORACLE_FCI_HISTORY, 'snap:'),
+      assets: await countKeys(env?.ORACLE_ASSETS_HISTORY, 'snap:'),
+      predictions: await countKeys(env?.ORACLE_PREDICTIONS, 'snap:'),
+    };
+    console.log('[cron-persist] baseline KV counts:', JSON.stringify(baseline));
+
+    const results = [];
+    for (const job of CRON_JOBS) {
+      const result = await runCronJob(env, ctx, job);
+      results.push(result);
+    }
+
+    const after = {
+      fci: await countKeys(env?.ORACLE_FCI_HISTORY, 'snap:'),
+      assets: await countKeys(env?.ORACLE_ASSETS_HISTORY, 'snap:'),
+      predictions: await countKeys(env?.ORACLE_PREDICTIONS, 'snap:'),
+    };
+    const delta = {
+      fci: after.fci - baseline.fci,
+      assets: after.assets - baseline.assets,
+      predictions: after.predictions - baseline.predictions,
+    };
+    console.log('[cron-persist] post-job KV counts:', JSON.stringify(after));
+    console.log('[cron-persist] delta:', JSON.stringify(delta));
+
+    const totalDelta = delta.fci + delta.assets + delta.predictions;
+    const persistenceVerified = totalDelta > 0;
+    const jobsOk = results.filter(r => r.ok).length;
+    const silentFailure = jobsOk > 0 && totalDelta === 0;
+
+    await logCronEvent(env, {
+      cron_execution: true, job_batch_id: jobBatchId, fired_at: startedAt, cron_expr: event.cron,
+      env_bindings_present: envCheck.allPresent, env_bindings_missing: envCheck.missing,
+      jobs_total: CRON_JOBS.length, jobs_ok: jobsOk, jobs_failed: CRON_JOBS.length - jobsOk,
+      asset_write_count: totalDelta, kv_counts_before: baseline, kv_counts_after: after,
+      kv_delta: delta, persistence_verified: persistenceVerified,
+      silent_failure_detected: silentFailure, results,
+    });
+
+    if (silentFailure) {
+      console.error('[cron-persist] SILENT FAILURE DETECTED —', jobsOk,
+        'jobs reported OK but 0 KV writes happened.',
+        'Env wiring broken (process.env.* not propagated to OpenNext handler).');
+    } else if (persistenceVerified) {
+      console.log('[cron-persist] OK —', totalDelta, 'KV writes verified');
+    }
+
+    console.log('[cron] all jobs done:', JSON.stringify(results));
+  },
+};
+`;
+
+writeFileSync(WRAPPED_WORKER, WRAPPER_CODE, 'utf-8');
+console.log(`[wrap-worker] OK — wrapped worker written to ${WRAPPED_WORKER}`);
+console.log(`[wrap-worker] Cron handler attached: scheduled() runs ${6} jobs per trigger`);
+SANTANINVERTER_EOF_WRAP_MJS
+
+# ─── 4.2 src/lib/oracle-multi/cron.ts (definición de los 6 jobs) ───────────
+cat > /home/z/my-project/src/lib/oracle-multi/cron.ts << 'SANTANINVERTER_EOF_MULTI_CRON'
+// src/lib/oracle-multi/cron.ts
+// Scheduled-job logic for V4 multi-asset Oracle.
+// Cron expression: "0 20 * * 1-5" (America/Argentina/Buenos_Aires) — 20:00 ART Mon-Fri.
+// Jobs: refresh_fci, refresh_stocks, refresh_bonds, refresh_cedears, refresh_predictions, snapshot_archive.
+
+import { runMultiOracle, type MultiStorage, resolveMultiStorage } from './index';
+import type { AssetClass } from './types';
+import { ASSET_CLASS_ORDER } from './types';
+import { loadRecentSnapshots } from './storage';
+
+export type CronJobName =
+  | 'refresh_fci' | 'refresh_stocks' | 'refresh_bonds'
+  | 'refresh_cedears' | 'refresh_predictions' | 'snapshot_archive';
+
+export const CRON_JOBS: CronJobName[] = [
+  'refresh_fci', 'refresh_stocks', 'refresh_bonds',
+  'refresh_cedears', 'refresh_predictions', 'snapshot_archive',
+];
+
+export interface CronJobResult {
+  job: CronJobName; ok: boolean; duration_ms: number;
+  error?: string; meta?: Record<string, unknown>;
+}
+
+async function runJob(job: CronJobName, storage: MultiStorage): Promise<CronJobResult> {
+  const start = Date.now();
+  try {
+    switch (job) {
+      case 'refresh_fci': {
+        const result = await runMultiOracle({ storage, classes: ['FCI'], topN: 5 });
+        return { job, ok: result.source_status !== 'ERROR', duration_ms: Date.now() - start,
+          meta: { total_assets: result.total_assets, snapshot_date: result.snapshot_date } };
+      }
+      case 'refresh_stocks': {
+        const result = await runMultiOracle({ storage, classes: ['ACCIONES'], topN: 5 });
+        return { job, ok: result.source_status !== 'ERROR', duration_ms: Date.now() - start,
+          meta: { total_assets: result.total_assets } };
+      }
+      case 'refresh_bonds': {
+        const result = await runMultiOracle({ storage, classes: ['BONOS'], topN: 5 });
+        return { job, ok: result.source_status !== 'ERROR', duration_ms: Date.now() - start,
+          meta: { total_assets: result.total_assets } };
+      }
+      case 'refresh_cedears': {
+        const result = await runMultiOracle({ storage, classes: ['CEDEARS', 'ETF_CEDEARS'], topN: 5 });
+        return { job, ok: result.source_status !== 'ERROR', duration_ms: Date.now() - start,
+          meta: { total_assets: result.total_assets } };
+      }
+      case 'refresh_predictions': {
+        // Re-run all classes so the predictor has the latest snapshots
+        const result = await runMultiOracle({ storage, topN: 5 });
+        return { job, ok: result.source_status !== 'ERROR', duration_ms: Date.now() - start,
+          meta: {
+            predictions_active: result.predictions_summary.active,
+            assets_with_predictions: result.predictions_summary.assets_with_predictions,
+            high_conviction: result.predictions_summary.high_conviction_count,
+          } };
+      }
+      case 'snapshot_archive': {
+        const archiveMeta: Record<string, unknown> = {};
+        for (const cls of ASSET_CLASS_ORDER) {
+          const targetKV = cls === 'FCI' ? storage.fci : storage.assets;
+          const snapshots = await loadRecentSnapshots(targetKV, cls, 1);
+          archiveMeta[cls] = {
+            last_snapshot: snapshots[0]?.date ?? null,
+            total_assets: snapshots[0]?.total_assets ?? 0,
+          };
+        }
+        return { job, ok: true, duration_ms: Date.now() - start, meta: archiveMeta };
+      }
+      default:
+        return { job, ok: false, duration_ms: Date.now() - start, error: 'unknown_job' };
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { job, ok: false, duration_ms: Date.now() - start, error: msg };
+  }
+}
+
+export async function runAllCronJobs(env?: {
+  ORACLE_FCI_HISTORY?: KVNamespace;
+  ORACLE_ASSETS_HISTORY?: KVNamespace;
+  ORACLE_PREDICTIONS?: KVNamespace;
+}): Promise<{ results: CronJobResult[]; started_at: string; finished_at: string; total_duration_ms: number }> {
+  const started_at = new Date().toISOString();
+  const start = Date.now();
+  const storage = resolveMultiStorage(env);
+  const results: CronJobResult[] = [];
+  for (const job of CRON_JOBS) {
+    const r = await runJob(job, storage);
+    results.push(r);
+  }
+  return { results, started_at, finished_at: new Date().toISOString(), total_duration_ms: Date.now() - start };
+}
+
+export function jobsForCronTrigger(_cronExpr: string): CronJobName[] {
+  return CRON_JOBS;
+}
+SANTANINVERTER_EOF_MULTI_CRON
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECCIÓN 5: TELEMETRÍA
+# ════════════════════════════════════════════════════════════════════════════
+
+# ─── 5.1 src/lib/telemetry.ts (Decision + Event logging, KV-persisted) ─────
+cat > /home/z/my-project/src/lib/telemetry.ts << 'SANTANINVERTER_EOF_TELEMETRY'
+// ============================================================================
+// Ω-X10 TELEMETRY & DECISION LOGGING — Audit Trail
+// Every decision the X10 engine makes must be logged for auditability.
+// ============================================================================
+
+import { type CapitalRegime, type BucketId } from './capital-buckets';
+import { type MacroRegimeX10, type VolatilityRegime, type LiquidityCondition } from './x10-signal-layer';
+import { type StrategicMode, type StrategyModuleName } from './x10-strategy-layer';
+import { type DataLabel } from './live-data';
+
+const TELEMETRY_KV_BINDING = 'ORACLE_PREDICTIONS';
+const KV_TTL_DECISION_SECONDS = 60 * 60 * 24 * 90;  // 90 days
+const KV_TTL_EVENT_SECONDS = 60 * 60 * 24 * 30;     // 30 days
+const KV_TTL_METRICS_SECONDS = 60 * 60 * 24 * 90;   // 90 days
+const KV_KEY_PREFIX_DECISION = 'telemetry:decision:';
+const KV_KEY_PREFIX_EVENT = 'telemetry:event:';
+const KV_KEY_PREFIX_METRIC = 'telemetry:metric:';
+
+type TelemetryEnv = { ORACLE_PREDICTIONS?: KVNamespace };
+
+function getTelemetryEnv(): TelemetryEnv | null {
+  try {
+    const mod = require('@opennextjs/cloudflare');
+    const ctx = mod.getCloudflareContext?.();
+    return (ctx?.env ?? null) as TelemetryEnv | null;
+  } catch { return null; }
+}
+
+function kvWrite(key: string, value: string, ttlSeconds: number): void {
+  const env = getTelemetryEnv();
+  if (!env?.ORACLE_PREDICTIONS) return;
+  try {
+    void env.ORACLE_PREDICTIONS.put(key, value, { expirationTtl: ttlSeconds })
+      .catch(err => console.error('[TELEMETRY] KV write failed:', key, err));
+  } catch (err) { console.error('[TELEMETRY] KV write threw:', key, err); }
+}
+
+async function kvList(prefix: string, limit: number): Promise<string[]> {
+  const env = getTelemetryEnv();
+  if (!env?.ORACLE_PREDICTIONS) return [];
+  try {
+    const result = await env.ORACLE_PREDICTIONS.list({ prefix, limit });
+    return result.keys.map(k => k.name);
+  } catch (err) { console.error('[TELEMETRY] KV list failed:', prefix, err); return []; }
+}
+
+async function kvRead<T>(key: string): Promise<T | null> {
+  const env = getTelemetryEnv();
+  if (!env?.ORACLE_PREDICTIONS) return null;
+  try {
+    const raw = await env.ORACLE_PREDICTIONS.get(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch (err) { console.error('[TELEMETRY] KV read failed:', key, err); return null; }
+}
+
+export type DecisionType =
+  | 'ALLOCATION_COMPUTED' | 'REGIME_TRANSITION' | 'REBALANCE_EXECUTED'
+  | 'KILL_SWITCH_ACTIVATED' | 'EMERGENCY_FREEZE' | 'CAPITAL_PRESERVATION_MODE'
+  | 'CONFIDENCE_THROTTLE' | 'DE_RISK_MODE' | 'DATA_INTEGRITY_FAILURE'
+  | 'STALE_DEGRADATION' | 'STRATEGY_OVERRIDE' | 'MANUAL_INTERVENTION';
+
+export interface DecisionLogEntry {
+  id: string; timestamp: string; decisionType: DecisionType;
+  severity: 'info' | 'warning' | 'critical'; summary: string;
+  context: DecisionContext; action: string; reasoning: string[];
+  alternatives: string[]; dataQuality: DataLabel; confidence: number;
+  regime: CapitalRegime; activeDirectives: string[];
+  outcome: DecisionOutcome | null; relatedDecisions: string[];
+}
+
+export interface DecisionContext {
+  capitalUSD: number; portfolioValueUSD: number;
+  allocations: { productId: string; weight: number }[];
+  signals: { regime: MacroRegimeX10; aggregateConfidence: number;
+    volatilityRegime: VolatilityRegime; liquidityCondition: LiquidityCondition; };
+  macroSource: DataLabel; dataAgeMinutes: number; realDataPct: number;
+  strategicMode: StrategicMode; scalingPhase: string;
+}
+
+export interface DecisionOutcome {
+  resolvedAt: string; wasCorrect: boolean | null;
+  actualReturn: number | null; description: string; lesson: string | null;
+}
+
+export type EventType =
+  | 'PIPELINE_EXECUTION' | 'DATA_FETCH' | 'DATA_DEGRADATION'
+  | 'REGIME_CHANGE' | 'REBALANCE_TRIGGERED' | 'RISK_LIMIT_BREACH'
+  | 'USER_ACTION' | 'SYSTEM_ERROR' | 'BACKTEST_RUN'
+  | 'INTEGRITY_CHECK' | 'PAPER_TRADE_EXECUTED';
+
+export interface EventLogEntry {
+  id: string; timestamp: string; eventType: EventType; source: string;
+  data: Record<string, unknown>; durationMs?: number; success: boolean; error?: string;
+}
+
+const MAX_DECISION_LOG = 1000;
+const MAX_EVENT_LOG = 5000;
+const MAX_METRICS_HISTORY = 1000;
+
+let decisionLog: DecisionLogEntry[] = [];
+let eventLog: EventLogEntry[] = [];
+let metricsHistory: MetricsSnapshot[] = [];
+
+let pipelineExecutions = 0, regimeTransitions = 0, rebalancesExecuted = 0;
+let killSwitchActivations = 0, emergencyFreezes = 0;
+let dataIntegrityFailures = 0, staleDegradations = 0;
+
+interface MetricsSnapshot {
+  timestamp: string; pipelineExecutions: number; regimeTransitions: number;
+  rebalancesExecuted: number; killSwitchActivations: number; emergencyFreezes: number;
+  dataIntegrityFailures: number; staleDegradations: number;
+  avgConfidence: number; avgReturnPrediction: number;
+  regimeDistribution: Record<CapitalRegime, number>;
+}
+
+let decisionCounter = 0;
+
+export function logDecision(params: {
+  decisionType: DecisionType; severity?: 'info' | 'warning' | 'critical';
+  summary: string; context: DecisionContext; action: string; reasoning: string[];
+  alternatives?: string[]; outcome?: DecisionOutcome | null; relatedDecisions?: string[];
+}): DecisionLogEntry {
+  const id = `DEC-${++decisionCounter}-${Date.now()}`;
+  const timestamp = new Date().toISOString();
+  const entry: DecisionLogEntry = {
+    id, timestamp, decisionType: params.decisionType, severity: params.severity ?? 'info',
+    summary: params.summary, context: params.context, action: params.action,
+    reasoning: params.reasoning, alternatives: params.alternatives ?? [],
+    dataQuality: params.context.macroSource,
+    confidence: params.context.signals.aggregateConfidence,
+    regime: mapRegimeToCapital(params.context.signals.regime),
+    activeDirectives: computeActiveDirectives(params.context),
+    outcome: params.outcome ?? null, relatedDecisions: params.relatedDecisions ?? [],
+  };
+  decisionLog.push(entry);
+  if (decisionLog.length > MAX_DECISION_LOG) decisionLog = decisionLog.slice(-MAX_DECISION_LOG);
+  kvWrite(KV_KEY_PREFIX_DECISION + entry.id, JSON.stringify(entry), KV_TTL_DECISION_SECONDS);
+  switch (params.decisionType) {
+    case 'REGIME_TRANSITION': regimeTransitions++; break;
+    case 'REBALANCE_EXECUTED': rebalancesExecuted++; break;
+    case 'KILL_SWITCH_ACTIVATED': killSwitchActivations++; break;
+    case 'EMERGENCY_FREEZE': emergencyFreezes++; break;
+    case 'DATA_INTEGRITY_FAILURE': dataIntegrityFailures++; break;
+    case 'STALE_DEGRADATION': staleDegradations++; break;
+  }
+  return entry;
+}
+
+export function resolveDecision(decisionId: string, outcome: DecisionOutcome): void {
+  const entry = decisionLog.find(d => d.id === decisionId);
+  if (entry) entry.outcome = outcome;
+}
+
+let eventCounter = 0;
+
+export function logEvent(params: {
+  eventType: EventType; source: string; data?: Record<string, unknown>;
+  durationMs?: number; success?: boolean; error?: string;
+}): EventLogEntry {
+  const id = `EVT-${++eventCounter}-${Date.now()}`;
+  const entry: EventLogEntry = {
+    id, timestamp: new Date().toISOString(), eventType: params.eventType,
+    source: params.source, data: params.data ?? {}, durationMs: params.durationMs,
+    success: params.success ?? true, error: params.error,
+  };
+  eventLog.push(entry);
+  if (eventLog.length > MAX_EVENT_LOG) eventLog = eventLog.slice(-MAX_EVENT_LOG);
+  kvWrite(KV_KEY_PREFIX_EVENT + entry.id, JSON.stringify(entry), KV_TTL_EVENT_SECONDS);
+  if (params.eventType === 'PIPELINE_EXECUTION') pipelineExecutions++;
+  return entry;
+}
+
+export function recordMetricsSnapshot(
+  avgConfidence: number, avgReturnPrediction: number,
+  regimeDistribution: Record<CapitalRegime, number>,
+): void {
+  const snapshot: MetricsSnapshot = {
+    timestamp: new Date().toISOString(), pipelineExecutions, regimeTransitions,
+    rebalancesExecuted, killSwitchActivations, emergencyFreezes,
+    dataIntegrityFailures, staleDegradations, avgConfidence, avgReturnPrediction,
+    regimeDistribution,
+  };
+  metricsHistory.push(snapshot);
+  if (metricsHistory.length > MAX_METRICS_HISTORY) metricsHistory = metricsHistory.slice(-MAX_METRICS_HISTORY);
+  kvWrite(KV_KEY_PREFIX_METRIC + snapshot.timestamp, JSON.stringify(snapshot), KV_TTL_METRICS_SECONDS);
+}
+
+export async function getDecisionLog(filters?: {
+  decisionType?: DecisionType; severity?: 'info' | 'warning' | 'critical';
+  regime?: CapitalRegime; since?: string; limit?: number;
+}): Promise<DecisionLogEntry[]> {
+  const limit = filters?.limit ?? 50;
+  const env = getTelemetryEnv();
+  let kvEntries: DecisionLogEntry[] = [];
+  if (env?.ORACLE_PREDICTIONS) {
+    try {
+      const listLimit = Math.max(limit, 500);
+      const keys = await kvList(KV_KEY_PREFIX_DECISION, listLimit);
+      const reads = await Promise.all(keys.map(k => kvRead<DecisionLogEntry>(k)));
+      kvEntries = reads.filter((e): e is DecisionLogEntry => e !== null);
+    } catch (err) { console.error('[TELEMETRY] getDecisionLog KV read failed:', err); }
+  }
+  const merged = new Map<string, DecisionLogEntry>();
+  for (const e of kvEntries) merged.set(e.id, e);
+  for (const e of decisionLog) merged.set(e.id, e);
+  let entries = Array.from(merged.values());
+  if (filters?.decisionType) entries = entries.filter(e => e.decisionType === filters.decisionType);
+  if (filters?.severity) entries = entries.filter(e => e.severity === filters.severity);
+  if (filters?.regime) entries = entries.filter(e => e.regime === filters.regime);
+  if (filters?.since) entries = entries.filter(e => e.timestamp >= filters.since!);
+  entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  return entries.slice(0, limit);
+}
+
+export async function getEventLog(filters?: {
+  eventType?: EventType; source?: string; since?: string; limit?: number;
+}): Promise<EventLogEntry[]> {
+  const limit = filters?.limit ?? 100;
+  const env = getTelemetryEnv();
+  let kvEntries: EventLogEntry[] = [];
+  if (env?.ORACLE_PREDICTIONS) {
+    try {
+      const listLimit = Math.max(limit, 500);
+      const keys = await kvList(KV_KEY_PREFIX_EVENT, listLimit);
+      const reads = await Promise.all(keys.map(k => kvRead<EventLogEntry>(k)));
+      kvEntries = reads.filter((e): e is EventLogEntry => e !== null);
+    } catch (err) { console.error('[TELEMETRY] getEventLog KV read failed:', err); }
+  }
+  const merged = new Map<string, EventLogEntry>();
+  for (const e of kvEntries) merged.set(e.id, e);
+  for (const e of eventLog) merged.set(e.id, e);
+  let entries = Array.from(merged.values());
+  if (filters?.eventType) entries = entries.filter(e => e.eventType === filters.eventType);
+  if (filters?.source) entries = entries.filter(e => e.source === filters.source);
+  if (filters?.since) entries = entries.filter(e => e.timestamp >= filters.since!);
+  entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  return entries.slice(0, limit);
+}
+
+export async function getTelemetrySummary(): Promise<{
+  pipelineExecutions: number; regimeTransitions: number; rebalancesExecuted: number;
+  killSwitchActivations: number; emergencyFreezes: number; dataIntegrityFailures: number;
+  staleDegradations: number; recentConfidence: number; recentRegime: CapitalRegime | null;
+  decisionsWithOutcome: number; correctDecisions: number; decisionAccuracy: number;
+  dataQualityDistribution: Record<DataLabel, number>;
+  lastPipelineExecution: string | null; lastRegimeChange: string | null;
+  totalDecisions: number; daysOfHistory: number | null;
+  oldestDecision: string | null; newestDecision: string | null;
+}> {
+  const allDecisions = await getDecisionLog({ limit: 1000 });
+  const recentDecisions = allDecisions.slice(0, 10);
+  const recentConfidence = recentDecisions.length > 0
+    ? recentDecisions.reduce((s, d) => s + d.confidence, 0) / recentDecisions.length : 0;
+  const regimeDecisions = allDecisions.filter(d => d.decisionType === 'REGIME_TRANSITION');
+  const recentRegime = regimeDecisions.length > 0 ? regimeDecisions[0].regime : null;
+  const withOutcome = allDecisions.filter(d => d.outcome !== null);
+  const correct = withOutcome.filter(d => d.outcome?.wasCorrect === true);
+  const decisionAccuracy = withOutcome.length > 0 ? correct.length / withOutcome.length : 0;
+  const dataQualityDistribution: Record<string, number> = {};
+  for (const d of allDecisions.slice(0, 100)) {
+    dataQualityDistribution[d.dataQuality] = (dataQualityDistribution[d.dataQuality] ?? 0) + 1;
+  }
+  const totalDecisions = allDecisions.length;
+  const sortedByTime = [...allDecisions].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const oldest = sortedByTime[0];
+  const newest = sortedByTime[sortedByTime.length - 1];
+  const oldestDecision = oldest?.timestamp ?? null;
+  const newestDecision = newest?.timestamp ?? null;
+  let daysOfHistory: number | null = null;
+  if (oldest) {
+    const ms = Date.now() - new Date(oldest.timestamp).getTime();
+    daysOfHistory = Math.floor(ms / (1000 * 60 * 60 * 24));
+  }
+  const allEvents = await getEventLog({ limit: 1000 });
+  return {
+    pipelineExecutions, regimeTransitions, rebalancesExecuted,
+    killSwitchActivations, emergencyFreezes, dataIntegrityFailures, staleDegradations,
+    recentConfidence: Math.round(recentConfidence * 100) / 100, recentRegime,
+    decisionsWithOutcome: withOutcome.length, correctDecisions: correct.length,
+    decisionAccuracy: Math.round(decisionAccuracy * 100) / 100,
+    dataQualityDistribution: dataQualityDistribution as Record<DataLabel, number>,
+    lastPipelineExecution: allEvents.find(e => e.eventType === 'PIPELINE_EXECUTION')?.timestamp ?? null,
+    lastRegimeChange: regimeDecisions[0]?.timestamp ?? null,
+    totalDecisions, daysOfHistory, oldestDecision, newestDecision,
+  };
+}
+
+export async function getMetricsHistory(count: number = 50): Promise<MetricsSnapshot[]> {
+  const env = getTelemetryEnv();
+  let kvEntries: MetricsSnapshot[] = [];
+  if (env?.ORACLE_PREDICTIONS) {
+    try {
+      const keys = await kvList(KV_KEY_PREFIX_METRIC, count);
+      const reads = await Promise.all(keys.map(k => kvRead<MetricsSnapshot>(k)));
+      kvEntries = reads.filter((e): e is MetricsSnapshot => e !== null);
+    } catch (err) { console.error('[TELEMETRY] getMetricsHistory KV read failed:', err); }
+  }
+  const merged = new Map<string, MetricsSnapshot>();
+  for (const e of kvEntries) merged.set(e.timestamp, e);
+  for (const e of metricsHistory) merged.set(e.timestamp, e);
+  const all = Array.from(merged.values());
+  all.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  return all.slice(0, count);
+}
+
+function mapRegimeToCapital(regime: MacroRegimeX10): CapitalRegime {
+  switch (regime) {
+    case 'CARRY_FAVORABLE': return 'CARRY_FAVORABLE';
+    case 'CARRY_NEUTRAL': return 'NORMAL';
+    case 'WARNING': return 'HIGH_VOL';
+    case 'CRISIS': return 'CRISIS';
+    case 'GLOBAL_RISK_OFF': return 'CRISIS';
+    default: return 'NORMAL';
+  }
+}
+
+function computeActiveDirectives(context: DecisionContext): string[] {
+  const directives: string[] = [];
+  if (context.signals.aggregateConfidence < 0.7) directives.push('CONFIDENCE_THROTTLE');
+  if (context.macroSource === 'STALE' || context.macroSource === 'ERROR') directives.push('CAPITAL_PRESERVATION_FALLBACK');
+  if (context.macroSource === 'ERROR') directives.push('EMERGENCY_FREEZE');
+  if (context.realDataPct < 30) directives.push('LOW_DATA_QUALITY');
+  if (context.signals.volatilityRegime === 'crisis' || context.signals.volatilityRegime === 'stressed') directives.push('HIGH_VOLATILITY_REGIME');
+  if (context.signals.liquidityCondition === 'stressed' || context.signals.liquidityCondition === 'frozen') directives.push('LIQUIDITY_STRESS');
+  return directives;
+}
+
+export function resetTelemetry(): void {
+  decisionLog = []; eventLog = []; metricsHistory = [];
+  pipelineExecutions = 0; regimeTransitions = 0; rebalancesExecuted = 0;
+  killSwitchActivations = 0; emergencyFreezes = 0;
+  dataIntegrityFailures = 0; staleDegradations = 0;
+  decisionCounter = 0; eventCounter = 0;
+}
+
+export interface PersistentTelemetryConfig { kvNamespace?: KVNamespace; d1Database?: D1Database; }
+let persistentConfig: PersistentTelemetryConfig = {};
+export function configurePersistentTelemetry(config: PersistentTelemetryConfig): void { persistentConfig = config; }
+
+export async function persistDecision(entry: DecisionLogEntry): Promise<void> {
+  if (!persistentConfig.kvNamespace) return;
+  try {
+    await persistentConfig.kvNamespace.put(`decision:${entry.id}`, JSON.stringify(entry), { expirationTtl: 86400 * 90 });
+  } catch (err) {
+    console.error('CRITICAL: Telemetry persist failed for decision', entry.id, err);
+    throw new Error(`TELEMETRY_PERSIST_FAILED: Decision ${entry.id} could not be persisted — ${err}`);
+  }
+}
+
+export async function persistEvent(entry: EventLogEntry): Promise<void> {
+  if (!persistentConfig.kvNamespace) return;
+  try {
+    await persistentConfig.kvNamespace.put(`event:${entry.id}`, JSON.stringify(entry), { expirationTtl: 86400 * 30 });
+  } catch (err) {
+    console.error('CRITICAL: Telemetry persist failed for event', entry.id, err);
+    throw new Error(`TELEMETRY_PERSIST_FAILED: Event ${entry.id} could not be persisted — ${err}`);
+  }
+}
+
+export async function persistMetrics(snapshot: MetricsSnapshot): Promise<void> {
+  if (!persistentConfig.d1Database) return;
+  try {
+    await persistentConfig.d1Database.prepare(
+      'INSERT INTO metrics_history (id, timestamp, pipeline_executions, regime_transitions, rebalances, avg_confidence) VALUES (?,?,?,?,?,?)'
+    ).bind(
+      `MH-${Date.now()}`, snapshot.timestamp, snapshot.pipelineExecutions,
+      snapshot.regimeTransitions, snapshot.rebalancesExecuted, snapshot.avgConfidence
+    ).run();
+  } catch (err) {
+    console.error('CRITICAL: Metrics persist failed', err);
+    throw new Error(`TELEMETRY_PERSIST_FAILED: Metrics could not be persisted — ${err}`);
+  }
+}
+SANTANINVERTER_EOF_TELEMETRY
+
+# ════════════════════════════════════════════════════════════════════════════
+# SECCIÓN 6: DATOS EN VIVO — Posible fuente del bug localeCompare
+# ════════════════════════════════════════════════════════════════════════════
+# NOTA: El bug localeCompare aparece en storage.ts:142 (buildPriceSeries),
+# rank.ts:45/56/73 (sort por date), predict.ts:162 (sort por date), y
+# telemetry.ts:464/505/564/619 (sort por timestamp). Si algún snapshot tiene
+# date:null, el .localeCompare(null) lanza TypeError.
+
+# ─── 6.1 src/lib/live-data.ts (BCRA + INDEC + Bluelytics) ──────────────────
+cat > /home/z/my-project/src/lib/live-data.ts << 'SANTANINVERTER_EOF_LIVE_DATA'
+// ============================================================================
+// LIVE DATA LAYER — ARGENTINA FINANCIAL SYSTEM  V5 (REAL DATA)
+// BCRA API + INDEC API + Bluelytics API + Model-driven fallbacks
+// ============================================================================
+
+import { fetchBCRAData, fetchCERData, type BCRARates, type CERData } from './bcra-api';
+import { fetchINDECInflation, type INDECInflationData } from './indec-api';
+import { computeRatesFromBCRA, getSantanderDerivedRates, type PlazoFijoRates } from './rates-api';
+import { auditAPIResponse, BluelyticsSchema, BCRARatesSchema, CERDataSchema, INDECInflationSchema } from './data-integrity';
+
+export interface BluelyticsResponse {
+  oficial: { value_avg: number; value_sell: number; value_buy: number };
+  blue: { value_avg: number; value_sell: number; value_buy: number };
+  oficial_euro: { value_avg: number; value_sell: number; value_buy: number };
+  blue_euro: { value_avg: number; value_sell: number; value_buy: number };
+  last_update: string;
+}
+
+export type DataLabel = 'OBSERVADO' | 'REAL' | 'PARTIAL_FALLBACK' | 'ERROR' | 'STALE' | 'SIMULADO' | 'RECONSTRUIDO';
+
+export interface DataProvenance {
+  label: DataLabel; source: string; url: string;
+  lastUpdate: string; dataDate: string; stalenessHours: number;
+  fetchedAt: string; ageMinutes: number; fetchError: boolean;
+}
+
+export interface MacroState {
+  lastUpdate: string; fetchedAt: string; ageMinutes: number;
+  lastSuccessfulFetch: string | null;
+  source: 'OBSERVADO' | 'REAL' | 'PARTIAL_FALLBACK' | 'ERROR' | 'STALE' | 'SIMULADO' | 'RECONSTRUIDO';
+  mep: { rate: number; officialRate: number; gap: number; sell: number; buy: number; };
+  inflation: { monthly: number; expected30d: number; expected90d: number; yearly: number; };
+  rates: {
+    bcraPolicy: number; moneyMarket: number; plazoFijo: number;
+    plazoFijoUVA: number; lecaps: number; badlar: number; leliq: number; tml: number;
+  };
+  cer: { index: number; monthlyChange: number; dailyChange: number; };
+  crawlingPeg: number; realDataPct: number;
+  provenance: {
+    mepRate: DataProvenance; inflation: DataProvenance; rates: DataProvenance;
+    cer: DataProvenance; crawlingPeg: DataProvenance; reserves: DataProvenance;
+  };
+}
+
+export const STALE_THRESHOLD_MINUTES = 1080; // 18 hours
+
+export const DATA_STALE_THRESHOLDS: Record<string, number> = {
+  mepRate: 48, rates: 72, inflation: 2160, cer: 72, crawlingPeg: 99999, reserves: 72,
+};
+
+export function computeAge(macro: MacroState): number {
+  if (!macro.fetchedAt) return 9999;
+  return Math.round((Date.now() - new Date(macro.fetchedAt).getTime()) / 60000);
+}
+
+export function applyStaleDegradation(macro: MacroState): MacroState {
+  const currentAge = computeAge(macro);
+  const isFetchStale = currentAge > STALE_THRESHOLD_MINUTES;
+  let anyDataStale = false;
+  const newProvenance = { ...macro.provenance };
+  for (const key of Object.keys(newProvenance) as (keyof typeof newProvenance)[]) {
+    const p = newProvenance[key];
+    const threshold = DATA_STALE_THRESHOLDS[key] ?? 72;
+    const isDataStale = p.stalenessHours > threshold;
+    if ((isFetchStale || isDataStale) && p.label === 'REAL') {
+      newProvenance[key] = { ...p, label: 'STALE' as DataLabel, ageMinutes: currentAge };
+      anyDataStale = true;
+    } else {
+      newProvenance[key] = { ...p, ageMinutes: currentAge };
+    }
+  }
+  if (!isFetchStale && !anyDataStale) {
+    return { ...macro, ageMinutes: currentAge, provenance: newProvenance };
+  }
+  const degraded = { ...macro, ageMinutes: currentAge, provenance: newProvenance };
+  if (isFetchStale && degraded.source === 'REAL') degraded.source = 'STALE';
+  return degraded;
+}
+
+export async function fetchBluelytics(): Promise<BluelyticsResponse | null> {
+  const proxyUrl =
+    (typeof process !== 'undefined' && process.env && (process.env.NEXT_PUBLIC_PROXY_URL || process.env.PROXY_URL)) || '';
+  if (proxyUrl) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(`${proxyUrl.replace(/\/$/, '')}/api/proxy?source=dolar_all`, {
+        signal: controller.signal, headers: { Accept: 'application/json' }, cache: 'no-store',
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const d = await res.json();
+        if (d?.ok && d.oficial?.ok && d.mep?.ok) {
+          const oficialAvg = d.oficial.venta;
+          const mepAvg = d.mep.venta;
+          const cclAvg = d.ccl?.ok ? d.ccl.venta : mepAvg;
+          const adapted: BluelyticsResponse = {
+            oficial: { value_avg: oficialAvg, value_sell: d.oficial.venta, value_buy: d.oficial.compra ?? d.oficial.venta },
+            blue: { value_avg: mepAvg, value_sell: d.mep.venta, value_buy: d.mep.compra ?? d.mep.venta },
+            oficial_euro: { value_avg: 0, value_sell: 0, value_buy: 0 },
+            blue_euro: { value_avg: 0, value_sell: 0, value_buy: 0 },
+            last_update: d.oficial.fecha || new Date().toISOString(),
+          };
+          (adapted as BluelyticsResponse & { _ccl?: number })._ccl = cclAvg;
+          return adapted;
+        }
+      }
+    } catch (err) { console.warn('[fetchBluelytics] proxy failed, falling back to direct:', err); }
+  }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch('https://api.bluelytics.com.ar/v2/latest', { signal: controller.signal, cache: 'no-store' });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data as BluelyticsResponse;
+  } catch { return null; }
+}
+
+function computeRealPct(provenance: MacroState['provenance']): number {
+  const entries = Object.values(provenance);
+  const realCount = entries.filter(p => p.label === 'REAL').length;
+  return Math.round((realCount / entries.length) * 100);
+}
+
+export async function getMacroState(): Promise<MacroState> {
+  const now = new Date().toISOString();
+  const nowDate = now.split('T')[0];
+  const fetchStartTime = Date.now();
+  const [bluelytics, bcraData, cerData, indecData] = await Promise.all([
+    fetchBluelytics(), fetchBCRAData(), fetchCERData(), fetchINDECInflation(),
+  ]);
+
+  if (bluelytics) {
+    auditAPIResponse('Bluelytics API v2', 'https://api.bluelytics.com.ar/v2/latest',
+      bluelytics, BluelyticsSchema, 'BluelyticsResponse', Date.now() - fetchStartTime,
+      'REAL', bluelytics.last_update?.split('T')[0]);
+  }
+  if (bcraData.isReal) {
+    auditAPIResponse('BCRA API', 'https://api.bcra.gob.ar/estadisticas/v2.0/',
+      bcraData, BCRARatesSchema, 'BCRARates', null, 'REAL', bcraData.dataDate);
+  }
+  if (cerData.isReal) {
+    auditAPIResponse('BCRA CER API', 'https://api.bcra.gob.ar/estadisticas/v2.0/',
+      cerData, CERDataSchema, 'CERData', null, 'REAL', cerData.dataDate);
+  }
+  if (indecData.isReal) {
+    auditAPIResponse('INDEC via datos.gob.ar', 'https://datos.gob.ar/api/',
+      indecData, INDECInflationSchema, 'INDECInflation', null, 'REAL', indecData.dataDate);
+  }
+
+  const pfRates = computeRatesFromBCRA({
+    badlarTNA: bcraData.badlarTNA, tmlTNA: bcraData.badlarTNA - 2,
+    leliqTNA: bcraData.bcraPolicyTNA, lecapsTNA: bcraData.lecapsTNA,
+    bcraPolicyTNA: bcraData.bcraPolicyTNA, isReal: bcraData.isReal,
+  });
+
+  const mepRate = bluelytics?.blue.value_avg ?? 1445;
+  const officialRate = bluelytics?.oficial.value_avg ?? bcraData.officialRate;
+  const gap = ((mepRate - officialRate) / officialRate) * 100;
+  const mepSell = bluelytics?.blue.value_sell ?? 1450;
+  const mepBuy = bluelytics?.blue.value_buy ?? 1440;
+  const crawlingPeg = gap > 50 ? 1.0 : gap > 30 ? 0.5 : 0.0;
+
+  const monthlyInflation = indecData.isReal ? indecData.lastMonthInflation : (indecData.projected30d || 2.5);
+  const expected30d = indecData.isReal ? indecData.projected30d : monthlyInflation - 0.2;
+  const expected90d = indecData.isReal ? indecData.projected90d : monthlyInflation - 0.4;
+  const yearlyInflation = indecData.isReal ? indecData.twelveMonthAccum : Math.pow(1 + monthlyInflation / 100, 12) - 1;
+
+  const cerIndex = cerData.isReal ? cerData.index : 786.37;
+  const cerMonthly = cerData.isReal ? cerData.monthlyChange : (monthlyInflation - 0.3);
+  const cerDaily = cerData.isReal ? cerData.dailyChange : 0.07;
+
+  const rates = {
+    bcraPolicy: bcraData.isReal ? bcraData.bcraPolicyTNA : 20.0,
+    moneyMarket: bcraData.isReal ? pfRates.fciMMTNA : 20.0,
+    plazoFijo: bcraData.isReal ? pfRates.pf30dTNA : 19.0,
+    plazoFijoUVA: bcraData.isReal ? pfRates.pfUVAPremium : 4.5,
+    lecaps: bcraData.isReal ? bcraData.lecapsTNA : 25.0,
+    badlar: bcraData.isReal ? bcraData.badlarTNA : 22.0,
+    leliq: bcraData.isReal ? bcraData.bcraPolicyTNA : 20.0,
+    tml: bcraData.isReal ? bcraData.badlarTNA - 2 : 20.0,
+  };
+
+  const computeStalenessHours = (dataDate: string): number => {
+    try {
+      const dataTime = new Date(dataDate).getTime();
+      return Math.max(0, Math.round((Date.now() - dataTime) / (1000 * 60 * 60)));
+    } catch { return 999; }
+  };
+
+  const provenance: MacroState['provenance'] = {
+    mepRate: {
+      label: bluelytics ? 'REAL' : 'ERROR',
+      source: bluelytics ? 'Bluelytics API v2' : 'FETCH FAILED — usando fallback',
+      url: bluelytics ? 'https://api.bluelytics.com.ar/v2/latest' : 'N/A',
+      lastUpdate: now, dataDate: bluelytics?.last_update?.split('T')[0] ?? nowDate,
+      stalenessHours: bluelytics ? computeStalenessHours(bluelytics?.last_update?.split('T')[0] ?? nowDate) : 999,
+      fetchedAt: now, ageMinutes: 0, fetchError: !bluelytics,
+    },
+    inflation: {
+      label: indecData.isReal ? 'REAL' : 'ERROR',
+      source: indecData.isReal ? 'INDEC via datos.gob.ar API' : 'FETCH FAILED — INDEC sin respuesta, usando modelo',
+      url: indecData.isReal ? indecData.sourceUrl : 'N/A',
+      lastUpdate: now, dataDate: indecData.dataDate ?? nowDate,
+      stalenessHours: indecData.isReal ? computeStalenessHours(indecData.dataDate ?? nowDate) : 999,
+      fetchedAt: now, ageMinutes: 0, fetchError: !indecData.isReal,
+    },
+    rates: {
+      label: bcraData.isReal ? 'REAL' : 'ERROR',
+      source: bcraData.isReal ? 'BCRA API estadisticas v2.0' : 'FETCH FAILED — BCRA API sin respuesta',
+      url: bcraData.isReal ? bcraData.sourceUrl : 'N/A',
+      lastUpdate: now, dataDate: bcraData.dataDate ?? nowDate,
+      stalenessHours: bcraData.isReal ? computeStalenessHours(bcraData.dataDate ?? nowDate) : 999,
+      fetchedAt: now, ageMinutes: 0, fetchError: !bcraData.isReal,
+    },
+    cer: {
+      label: cerData.isReal ? 'REAL' : 'ERROR',
+      source: cerData.isReal ? 'BCRA CER index (Variable 143)' : 'FETCH FAILED — CER no disponible',
+      url: cerData.isReal ? cerData.sourceUrl : 'N/A',
+      lastUpdate: now, dataDate: cerData.dataDate ?? nowDate,
+      stalenessHours: cerData.isReal ? computeStalenessHours(cerData.dataDate ?? nowDate) : 999,
+      fetchedAt: now, ageMinutes: 0, fetchError: !cerData.isReal,
+    },
+    crawlingPeg: {
+      label: 'PARTIAL_FALLBACK', source: 'Modelo derivado (bandas cambiarias)',
+      url: 'N/A', lastUpdate: now, dataDate: nowDate, stalenessHours: 0,
+      fetchedAt: now, ageMinutes: 0, fetchError: false,
+    },
+    reserves: {
+      label: bcraData.isReal ? 'REAL' : 'ERROR',
+      source: bcraData.isReal ? 'BCRA Reservas internacionales (Variable 1)' : 'FETCH FAILED',
+      url: bcraData.isReal ? bcraData.sourceUrl : 'N/A',
+      lastUpdate: now, dataDate: bcraData.dataDate ?? nowDate,
+      stalenessHours: bcraData.isReal ? computeStalenessHours(bcraData.dataDate ?? nowDate) : 999,
+      fetchedAt: now, ageMinutes: 0, fetchError: !bcraData.isReal,
+    },
+  };
+
+  const realDataPct = computeRealPct(provenance);
+  const realSourcesCount = [bluelytics, bcraData.isReal, cerData.isReal, indecData.isReal].filter(Boolean).length;
+  const anyReal = realSourcesCount > 0;
+  const allFetchFailed = realSourcesCount === 0;
+  const sourceLabel: MacroState['source'] = allFetchFailed ? 'ERROR'
+    : realSourcesCount >= 3 ? 'REAL' : 'PARTIAL_FALLBACK';
+  const lastSuccessfulFetch = anyReal ? now : null;
+
+  return {
+    lastUpdate: now, fetchedAt: now, ageMinutes: 0, lastSuccessfulFetch,
+    source: sourceLabel,
+    mep: { rate: mepRate, officialRate, gap: Math.round(gap * 100) / 100, sell: mepSell, buy: mepBuy },
+    inflation: {
+      monthly: Math.round(monthlyInflation * 100) / 100,
+      expected30d: Math.round(expected30d * 100) / 100,
+      expected90d: Math.round(expected90d * 100) / 100,
+      yearly: Math.round(yearlyInflation * 100) / 100,
+    },
+    rates,
+    cer: { index: cerIndex, monthlyChange: Math.round(cerMonthly * 100) / 100, dailyChange: Math.round(cerDaily * 10000) / 10000 },
+    crawlingPeg, realDataPct, provenance,
+  };
+}
+
+function getModelFallback(): MacroState {
+  const now = new Date().toISOString();
+  const nowDate = now.split('T')[0];
+  const errProv = (source: string): DataProvenance => ({
+    label: 'ERROR' as DataLabel, source, url: 'N/A', lastUpdate: now, dataDate: nowDate,
+    stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: true,
+  });
+  return {
+    lastUpdate: now, fetchedAt: now, ageMinutes: 0, lastSuccessfulFetch: null, source: 'ERROR',
+    mep: { rate: 1445, officialRate: 1440, gap: 0.35, sell: 1450, buy: 1440 },
+    inflation: { monthly: 2.5, expected30d: 2.3, expected90d: 2.1, yearly: 30.5 },
+    rates: { bcraPolicy: 20.0, moneyMarket: 20.0, plazoFijo: 19.0, plazoFijoUVA: 4.5, lecaps: 25.0, badlar: 22.0, leliq: 20.0, tml: 20.0 },
+    cer: { index: 786.37, monthlyChange: 2.2, dailyChange: 0.07 },
+    crawlingPeg: 0.0, realDataPct: 0,
+    provenance: {
+      mepRate: errProv('FETCH FAILED'), inflation: errProv('FETCH FAILED'),
+      rates: errProv('FETCH FAILED'), cer: errProv('FETCH FAILED'),
+      crawlingPeg: { ...errProv('Modelo fallback'), fetchError: false },
+      reserves: errProv('FETCH FAILED'),
+    },
+  };
+}
+
+export interface SantanderProduct {
+  id: string; name: string; shortName: string;
+  type: 'money_market' | 'cer_bond' | 'mixed' | 'usd_fund' | 'mep' | 'plazo_fijo' | 'plazo_fijo_uva' | 'lecaps' | 'fondo_corto';
+  tna: number; realRate30d: number; realRate90d: number;
+  liquidity: 'T+0' | 'T+1' | 'T+2' | 'locked';
+  riskScore: number; volatility30d: number; maxDrawdown30d: number;
+  minInvestmentARS: number; currency: 'ARS' | 'USD'; cerDuration?: number;
+  description: string; category: 'liquidity' | 'inflation_hedge' | 'fx_hedge' | 'yield';
+  dataSource: string; dataLabel: DataLabel; dataDate: string;
+  simulacionError90d: number; simulacionError180d: number;
+}
+
+export function getProductsFromMacro(macro: MacroState): SantanderProduct[] {
+  const { inflation, rates, cer, mep, crawlingPeg } = macro;
+  const calcUSD30d = (tna: number) => {
+    const nominal30d = tna / 12;
+    return ((1 + nominal30d / 100) / (1 + crawlingPeg / 100) - 1) * 100;
+  };
+  const calcUSD90d = (tna: number) => {
+    const nominal90d = (1 + tna / 100) ** 0.25 - 1;
+    const deval90d = (1 + crawlingPeg / 100) ** 3 - 1;
+    return ((1 + nominal90d) / (1 + deval90d) - 1) * 100;
+  };
+  const cerPremiumMonthly = rates.plazoFijoUVA / 12;
+  const cerUSD30d = ((1 + cer.monthlyChange / 100) * (1 + cerPremiumMonthly / 100) / (1 + crawlingPeg / 100) - 1) * 100;
+  const cer3m = Math.pow(1 + cer.monthlyChange / 100, 3) - 1;
+  const cerPrem3m = Math.pow(1 + cerPremiumMonthly / 100, 3) - 1;
+  const deval3m = Math.pow(1 + crawlingPeg / 100, 3) - 1;
+  const cerUSD90d = ((1 + cer3m) * (1 + cerPrem3m) / (1 + deval3m) - 1) * 100;
+  const mepUSD30d = mep.gap > 10 ? -mep.gap * 0.01 : -mep.gap * 0.002;
+  const mepUSD90d = mep.gap > 10 ? -mep.gap * 0.02 : -mep.gap * 0.004;
+  const usdFund30d = 4.5 / 12;
+  const usdFund90d = 4.5 / 4;
+  const now = new Date().toISOString();
+  const ratesReal = macro.provenance.rates.label === 'REAL';
+  const cerReal = macro.provenance.cer.label === 'REAL';
+  const mepReal = macro.provenance.mepRate.label === 'REAL';
+
+  return [
+    { id: 'super-ahorro', name: 'Super Ahorro $', shortName: 'Super Ahorro', type: 'money_market',
+      tna: rates.moneyMarket, realRate30d: calcUSD30d(rates.moneyMarket), realRate90d: calcUSD90d(rates.moneyMarket),
+      liquidity: 'T+0', riskScore: 2, volatility30d: 0.3, maxDrawdown30d: 0.0, minInvestmentARS: 1000,
+      currency: 'ARS', description: 'FCI Money Market — Liquidez inmediata', category: 'liquidity',
+      dataSource: ratesReal ? 'BCRA BADLAR/TML derived' : 'Estimación mercado',
+      dataLabel: ratesReal ? 'REAL' : 'ERROR', dataDate: now,
+      simulacionError90d: 0.12, simulacionError180d: 0.18 },
+    { id: 'renta-fija-cer', name: 'Superfondo Renta Fija CER', shortName: 'Renta Fija CER', type: 'cer_bond',
+      tna: rates.plazoFijoUVA + cer.monthlyChange * 12, realRate30d: cerUSD30d, realRate90d: cerUSD90d,
+      liquidity: 'T+1', riskScore: 15, volatility30d: 1.2, maxDrawdown30d: 0.5, minInvestmentARS: 1000,
+      currency: 'ARS', cerDuration: 60, description: 'FCI CER corto plazo', category: 'inflation_hedge',
+      dataSource: cerReal ? 'BCRA CER real + BNA premium' : 'CER: modelo, Premium: modelo',
+      dataLabel: cerReal ? 'REAL' : 'ERROR', dataDate: now,
+      simulacionError90d: 0.68, simulacionError180d: 0.72 },
+    { id: 'supergestion-mix-vi', name: 'Supergestión Mix VI', shortName: 'Mix VI', type: 'mixed',
+      tna: Math.round((rates.moneyMarket * 0.6 + rates.lecaps * 0.4) * 100) / 100,
+      realRate30d: calcUSD30d(Math.round((rates.moneyMarket * 0.6 + rates.lecaps * 0.4) * 100) / 100),
+      realRate90d: calcUSD90d(Math.round((rates.moneyMarket * 0.6 + rates.lecaps * 0.4) * 100) / 100),
+      liquidity: 'T+1', riskScore: 35, volatility30d: 3.5, maxDrawdown30d: 2.0, minInvestmentARS: 1000,
+      currency: 'ARS', description: 'FCI Mixto', category: 'yield',
+      dataSource: ratesReal ? 'BCRA rates derived' : 'Estimación mercado',
+      dataLabel: ratesReal ? 'REAL' : 'ERROR', dataDate: now,
+      simulacionError90d: 0.45, simulacionError180d: 0.55 },
+    { id: 'super-ahorro-usd', name: 'Superfondo Ahorro USD', shortName: 'Ahorro USD', type: 'usd_fund',
+      tna: 4.5, realRate30d: usdFund30d, realRate90d: usdFund90d, liquidity: 'T+1', riskScore: 8,
+      volatility30d: 1.0, maxDrawdown30d: 0.3, minInvestmentARS: 1000, currency: 'USD',
+      description: 'FCI USD', category: 'fx_hedge', dataSource: 'SOFR + spread',
+      dataLabel: 'ERROR' as DataLabel, dataDate: now,
+      simulacionError90d: 0.05, simulacionError180d: 0.08 },
+    { id: 'dolar-mep', name: 'Dólar MEP', shortName: 'MEP', type: 'mep',
+      tna: crawlingPeg * 12, realRate30d: mepUSD30d, realRate90d: mepUSD90d, liquidity: 'T+1',
+      riskScore: 25, volatility30d: 4.0, maxDrawdown30d: 3.0, minInvestmentARS: 10000, currency: 'USD',
+      description: 'Compra venta USD MEP', category: 'fx_hedge',
+      dataSource: mepReal ? 'Bluelytics API' : 'Bluelytics + gap risk model',
+      dataLabel: mepReal ? 'REAL' : 'ERROR', dataDate: now,
+      simulacionError90d: 0.15, simulacionError180d: 0.22 },
+    { id: 'plazo-fijo', name: 'Plazo Fijo Tradicional', shortName: 'PF Trad.', type: 'plazo_fijo',
+      tna: rates.plazoFijo, realRate30d: calcUSD30d(rates.plazoFijo), realRate90d: calcUSD90d(rates.plazoFijo),
+      liquidity: 'locked', riskScore: 5, volatility30d: 0.0, maxDrawdown30d: 0.0, minInvestmentARS: 1000,
+      currency: 'ARS', description: 'Plazo fijo 30d', category: 'yield',
+      dataSource: ratesReal ? 'BCRA BADLAR + Policy rate derived' : 'BNA published rate (est.)',
+      dataLabel: ratesReal ? 'REAL' : 'ERROR', dataDate: now,
+      simulacionError90d: 0.29, simulacionError180d: 0.35 },
+    { id: 'plazo-fijo-uva', name: 'Plazo Fijo UVA', shortName: 'PF UVA', type: 'plazo_fijo_uva',
+      tna: rates.plazoFijoUVA + cer.monthlyChange * 12, realRate30d: cerUSD30d + 0.15, realRate90d: cerUSD90d + 0.45,
+      liquidity: 'locked', riskScore: 10, volatility30d: 0.5, maxDrawdown30d: 0.0, minInvestmentARS: 1000,
+      currency: 'ARS', description: 'Plazo fijo UVA', category: 'inflation_hedge',
+      dataSource: cerReal ? 'BCRA CER real + BNA UVA premium' : 'CER: modelo',
+      dataLabel: cerReal ? 'REAL' : 'ERROR', dataDate: now,
+      simulacionError90d: 0.65, simulacionError180d: 0.70 },
+    { id: 'lecaps', name: 'Lecaps BCBA', shortName: 'Lecaps', type: 'lecaps',
+      tna: rates.lecaps, realRate30d: calcUSD30d(rates.lecaps), realRate90d: calcUSD90d(rates.lecaps),
+      liquidity: 'T+1', riskScore: 8, volatility30d: 0.4, maxDrawdown30d: 0.1, minInvestmentARS: 5000,
+      currency: 'ARS', description: 'Letras BCBA', category: 'yield',
+      dataSource: ratesReal ? 'BCRA Lecaps rate (Variable 178)' : 'Boston AM / Rava (estimación)',
+      dataLabel: ratesReal ? 'REAL' : 'ERROR', dataDate: now,
+      simulacionError90d: 0.67, simulacionError180d: 0.75 },
+    { id: 'fondo-corto-plazo', name: 'Superfondo Corto Plazo', shortName: 'Corto Plazo', type: 'fondo_corto',
+      tna: rates.moneyMarket + 0.8, realRate30d: calcUSD30d(rates.moneyMarket + 0.8),
+      realRate90d: calcUSD90d(rates.moneyMarket + 0.8), liquidity: 'T+1', riskScore: 5,
+      volatility30d: 0.5, maxDrawdown30d: 0.1, minInvestmentARS: 1000, currency: 'ARS',
+      description: 'FCI Corto Plazo', category: 'liquidity',
+      dataSource: ratesReal ? 'BCRA MM rate + 0.8pp spread' : 'Estimación mercado',
+      dataLabel: ratesReal ? 'REAL' : 'ERROR', dataDate: now,
+      simulacionError90d: 0.20, simulacionError180d: 0.28 },
+  ];
+}
+
+export interface MarketScenario {
+  id: string; name: string; emoji: string; probability: number;
+  inflation30d: number; devaluation30d: number; rateChangeBps: number;
+  mepMove: number; description: string;
+}
+
+export function getScenariosFromMacro(macro: MacroState): MarketScenario[] {
+  const gap = macro.mep.gap;
+  const baseInflation = macro.inflation.monthly;
+  const crisisProb = Math.min(0.35, 0.10 + gap / 200);
+  const mildProb = Math.min(0.45, 0.25 + gap / 150);
+  const stableProb = 1 - crisisProb - mildProb;
+  return [
+    { id: 'stable', name: 'Estabilidad', emoji: '🟢', probability: Math.max(0.25, stableProb),
+      inflation30d: baseInflation - 0.5, devaluation30d: macro.crawlingPeg, rateChangeBps: -50,
+      mepMove: -2, description: 'Continúa el plan estabilizador.' },
+    { id: 'mild-devaluation', name: 'Devaluación Moderada', emoji: '🟡', probability: Math.min(0.45, mildProb),
+      inflation30d: baseInflation + 1.5, devaluation30d: macro.crawlingPeg + 2, rateChangeBps: 200,
+      mepMove: 8, description: 'Shock cambiario moderado.' },
+    { id: 'crisis', name: 'Shock Cambiario', emoji: '🔴', probability: Math.min(0.35, crisisProb),
+      inflation30d: baseInflation + 5, devaluation30d: macro.crawlingPeg + 14, rateChangeBps: 800,
+      mepMove: 25, description: 'Crisis cambiaria severa.' },
+  ];
+}
+
+export interface SimulacionResult {
+  assetId: string; assetName: string; modelReturn30d: number;
+  actualReturnAvg90d: number; actualReturnAvg180d: number;
+  errorAbs90d: number; errorAbs180d: number; errorPct90d: number; errorPct180d: number;
+  label: DataLabel;
+}
+
+export function computeSimulacion(products: SantanderProduct[]): SimulacionResult[] {
+  const historicalActualReturns: Record<string, { avg90d: number; avg180d: number }> = {
+    'super-ahorro':     { avg90d: 1.73, avg180d: 1.78 },
+    'lecaps':           { avg90d: 2.44, avg180d: 2.52 },
+    'plazo-fijo':       { avg90d: 1.73, avg180d: 1.76 },
+    'renta-fija-cer':   { avg90d: 3.05, avg180d: 3.12 },
+    'plazo-fijo-uva':   { avg90d: 3.20, avg180d: 3.27 },
+    'super-ahorro-usd': { avg90d: 0.38, avg180d: 0.39 },
+    'dolar-mep':        { avg90d: -0.02, avg180d: -0.01 },
+    'supergestion-mix-vi': { avg90d: 1.55, avg180d: 1.60 },
+    'fondo-corto-plazo': { avg90d: 1.82, avg180d: 1.88 },
+  };
+  return products.map(p => {
+    const historical = historicalActualReturns[p.id] || { avg90d: p.realRate30d, avg180d: p.realRate30d };
+    const err90d = Math.abs(p.realRate30d - historical.avg90d);
+    const err180d = Math.abs(p.realRate30d - historical.avg180d);
+    return {
+      assetId: p.id, assetName: p.shortName, modelReturn30d: p.realRate30d,
+      actualReturnAvg90d: historical.avg90d, actualReturnAvg180d: historical.avg180d,
+      errorAbs90d: Math.round(err90d * 100) / 100, errorAbs180d: Math.round(err180d * 100) / 100,
+      errorPct90d: historical.avg90d !== 0 ? Math.round(err90d / Math.abs(historical.avg90d) * 10000) / 100 : 999,
+      errorPct180d: historical.avg180d !== 0 ? Math.round(err180d / Math.abs(historical.avg180d) * 10000) / 100 : 999,
+      label: 'ERROR' as DataLabel,
+    };
+  });
+}
+
+export type BacktestResult = SimulacionResult;
+export const computeBacktest = computeSimulacion;
+
+export function getOverallDataLabel(macro: MacroState | null): DataLabel {
+  if (!macro) return 'ERROR';
+  if (macro.source === 'ERROR') return 'ERROR';
+  const prov = macro.provenance;
+  const anyError = Object.values(prov).some(p => p.label === 'ERROR');
+  if (anyError) return 'ERROR';
+  const anyRealStale = Object.entries(prov).some(([key, p]) => {
+    if (p.label !== 'REAL') return false;
+    const threshold = DATA_STALE_THRESHOLDS[key] ?? 72;
+    return p.stalenessHours > threshold;
+  });
+  if (anyRealStale) return 'STALE';
+  const anyProvenanceStale = Object.values(prov).some(p => p.label === 'STALE');
+  if (anyProvenanceStale) return 'STALE';
+  const allReal = Object.values(prov).every(p => p.label === 'REAL' || p.label === 'OBSERVADO');
+  if (allReal) return 'REAL';
+  const realCount = Object.values(prov).filter(p => p.label === 'REAL' || p.label === 'OBSERVADO').length;
+  const totalCount = Object.values(prov).length;
+  if (realCount / totalCount > 0.5) return 'REAL';
+  const errorCount = Object.values(prov).filter(p => p.fetchError).length;
+  if (errorCount > 0 && realCount > 0) return 'PARTIAL_FALLBACK';
+  if (errorCount > 0) return 'ERROR';
+  if (realCount > 0) return 'PARTIAL_FALLBACK';
+  return 'ERROR';
+}
+SANTANINVERTER_EOF_LIVE_DATA
+
+# ─── 6.2 src/lib/oracle-fci/fetch.ts (fetcher con retry + backoff) ─────────
+cat > /home/z/my-project/src/lib/oracle-fci/fetch.ts << 'SANTANINVERTER_EOF_FCI_FETCH'
+// src/lib/oracle-fci/fetch.ts
+// Fetcher with retry + fallback chain. No hallucination.
+
+import { ArgentinadatosFund, CATEGORY_ENDPOINTS, FundCategory } from './types';
+
+const RETRY_ATTEMPTS = 5;
+const INITIAL_BACKOFF_MS = 1000;
+const MAX_BACKOFF_MS = 15000;
+const REQUEST_TIMEOUT_MS = 12000;
+
+function backoff(attempt: number): number {
+  const base = Math.min(INITIAL_BACKOFF_MS * Math.pow(2, attempt), MAX_BACKOFF_MS);
+  return base + Math.random() * 500;
+}
+
+async function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
+
+async function fetchWithRetry(url: string, attempt = 0): Promise<ArgentinadatosFund[]> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'santaninverter-oracle/3.0 (+https://santaninverter-oracle.simondalmasso44.workers.dev)',
+        Accept: 'application/json',
+      },
+      signal: controller.signal, cache: 'no-store',
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    const data = (await res.json()) as ArgentinadatosFund[];
+    if (!Array.isArray(data)) throw new Error('Response is not an array');
+    return data;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (attempt >= RETRY_ATTEMPTS - 1) throw new Error(`Fetch failed after ${RETRY_ATTEMPTS} attempts: ${msg}`);
+    await sleep(backoff(attempt));
+    return fetchWithRetry(url, attempt + 1);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export interface FetchAllResult {
+  data: Partial<Record<FundCategory, ArgentinadatosFund[]>>;
+  errors: Partial<Record<FundCategory, string>>;
+  fallbackChainUsed: string[];
+  totalRecords: number;
+}
+
+export async function fetchAllCategories(): Promise<FetchAllResult> {
+  const categories = Object.keys(CATEGORY_ENDPOINTS) as FundCategory[];
+  const fallbackChain: string[] = ['primary_fetch'];
+  const results = await Promise.allSettled(
+    categories.map(async (cat) => {
+      try {
+        const data = await fetchWithRetry(CATEGORY_ENDPOINTS[cat]);
+        return { cat, data, error: null as string | null };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { cat, data: null, error: msg };
+      }
+    }),
+  );
+  const data: Partial<Record<FundCategory, ArgentinadatosFund[]>> = {};
+  const errors: Partial<Record<FundCategory, string>> = {};
+  let totalRecords = 0;
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      const { cat, data: d, error } = r.value;
+      if (d) { data[cat] = d; totalRecords += d.length; }
+      else if (error) { errors[cat] = error; fallbackChain.push(`retry_fetch_${cat}_failed`); }
+    } else { fallbackChain.push('parallel_fetch_all_categories_unexpected'); }
+  }
+  if (Object.keys(errors).length === categories.length) fallbackChain.push('all_categories_failed');
+  else if (Object.keys(errors).length > 0) fallbackChain.push('partial_categories_failed');
+  else fallbackChain.push('all_categories_ok');
+  return { data, errors, fallbackChainUsed: fallbackChain, totalRecords };
+}
+
+export function isArgentinadatosFund(x: unknown): x is ArgentinadatosFund {
+  if (!x || typeof x !== 'object') return false;
+  const o = x as Record<string, unknown>;
+  return (
+    typeof o.fondo === 'string' && typeof o.fecha === 'string' &&
+    typeof o.vcp === 'number' && typeof o.ccp === 'number' && typeof o.patrimonio === 'number'
+  );
+}
+SANTANINVERTER_EOF_FCI_FETCH
+
+# ─── 6.3 src/lib/oracle-multi/rank.ts (Oracle Score + normalize) ───────────
+cat > /home/z/my-project/src/lib/oracle-multi/rank.ts << 'SANTANINVERTER_EOF_MULTI_RANK'
+// src/lib/oracle-multi/rank.ts
+// V4 Oracle Score — weighted composite across all asset classes.
+// Weights: momentum 0.25, volume 0.15, liquidity 0.15, volatility 0.10,
+//          trend_strength 0.15, relative_performance 0.10, analyst_factor 0.10
+// ⚠️ POSIBLE FUENTE DEL BUG localeCompare: línea 45, 56, 73 usan a.date.localeCompare(b.date)
+//    Si algún PricePoint tiene date:null → TypeError.
+
+import { type AssetMetrics, type NormalizedAsset, type PricePoint, ORACLE_SCORE_WEIGHTS } from './types';
+import { predictAsset } from './predict';
+
+function clamp01(x: number): number { return Math.max(0, Math.min(1, x)); }
+
+function logNormalizeColumn(values: number[]): (number | null)[] {
+  const valid = values.filter((v) => v != null && v > 0 && isFinite(v));
+  if (valid.length === 0) return values.map(() => null);
+  const logVals = valid.map((v) => Math.log10(v + 1));
+  const minLog = Math.min(...logVals);
+  const maxLog = Math.max(...logVals);
+  const range = maxLog - minLog || 1;
+  return values.map((v) => (v == null || v <= 0 || !isFinite(v) ? null : clamp01((Math.log10(v + 1) - minLog) / range)));
+}
+
+function minMaxNormalizeColumn(values: (number | null)[]): (number | null)[] {
+  const valid = values.filter((v): v is number => v != null && isFinite(v));
+  if (valid.length === 0) return values.map(() => null);
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const range = max - min || 1;
+  return values.map((v) => (v == null || !isFinite(v) ? null : clamp01((v - min) / range)));
+}
+
+function momentumFromSeries(series: PricePoint[] | undefined, lookback: number): number | null {
+  if (!series || series.length < 2) return null;
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));  // ⚠️ localeCompare aquí
+  const last = sorted[sorted.length - 1];
+  const lookbackIdx = Math.max(0, sorted.length - 1 - lookback);
+  const past = sorted[lookbackIdx];
+  if (past.price <= 0) return null;
+  return (last.price - past.price) / past.price;
+}
+
+function volatilityFromSeries(series: PricePoint[] | undefined): number | null {
+  if (!series || series.length < 3) return null;
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));  // ⚠️ localeCompare aquí
+  const returns: number[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i - 1].price > 0) {
+      returns.push((sorted[i].price - sorted[i - 1].price) / sorted[i - 1].price);
+    }
+  }
+  if (returns.length < 2) return null;
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length;
+  const std = Math.sqrt(variance);
+  return clamp01(std / 0.04);
+}
+
+function trendStrengthFromSeries(series: PricePoint[] | undefined): number | null {
+  if (!series || series.length < 5) return null;
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));  // ⚠️ localeCompare aquí
+  const points = sorted.map((s, i) => ({ x: i, y: s.price }));
+  const n = points.length;
+  const sumX = points.reduce((s, p) => s + p.x, 0);
+  const sumY = points.reduce((s, p) => s + p.y, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+  const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return 0;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  const meanY = sumY / n;
+  const ssTot = points.reduce((s, p) => s + (p.y - meanY) ** 2, 0);
+  const ssRes = points.reduce((s, p) => s + (p.y - (intercept + slope * p.x)) ** 2, 0);
+  const r2 = ssTot === 0 ? 0 : 1 - ssRes / ssTot;
+  return clamp01(Math.abs(r2));
+}
+
+export interface RankInput {
+  assets: NormalizedAsset[];
+  priceSeries?: Map<string, PricePoint[]>;
+  sourceConfidence?: number;
+}
+export interface RankResult { metrics: AssetMetrics[]; }
+
+export function rankAssets(input: RankInput): RankResult {
+  const { assets, priceSeries, sourceConfidence = 0.85 } = input;
+  if (assets.length === 0) return { metrics: [] };
+
+  const raw = assets.map((a) => {
+    const series = priceSeries?.get(a.id);
+    return {
+      asset: a,
+      momentum7: momentumFromSeries(series, 7),
+      momentum30: momentumFromSeries(series, 30),
+      volatility: volatilityFromSeries(series),
+      trendStrength: trendStrengthFromSeries(series),
+      volume: a.volume ?? null,
+      marketCap: a.market_cap_ars ?? null,
+    };
+  });
+
+  const m7Norm = minMaxNormalizeColumn(raw.map((r) => r.momentum7));
+  const m30Norm = minMaxNormalizeColumn(raw.map((r) => r.momentum30));
+  const volRaw = raw.map((r) => r.volatility);
+  const volNorm = volRaw.map((v) => (v == null ? null : 1 - v));
+  const volLogNorm = logNormalizeColumn(raw.map((r) => r.volume ?? 0));
+  const liqLogNorm = logNormalizeColumn(raw.map((r) => r.marketCap ?? 0));
+  const trendNorm = raw.map((r) => r.trendStrength);
+  const relPerfNorm = m30Norm;
+  const m30Valid = raw.map((r) => r.momentum30).filter((v): v is number => v != null);
+  const classMeanM30 = m30Valid.length > 0 ? m30Valid.reduce((a, b) => a + b, 0) / m30Valid.length : 0;
+
+  const metrics: AssetMetrics[] = raw.map((r, i) => {
+    const prediction = predictAsset(priceSeries?.get(r.asset.id));
+    const analystFactor = 0.5;
+    return {
+      id: r.asset.id, asset_class: r.asset.asset_class, name: r.asset.name,
+      ticker: r.asset.ticker, sub_category: r.asset.sub_category, currency: r.asset.currency,
+      issuer: r.asset.issuer, date: r.asset.date, source: r.asset.source,
+      price: r.asset.price, volume: r.asset.volume, market_cap_ars: r.asset.market_cap_ars,
+      momentum_7d: r.momentum7, momentum_30d: r.momentum30, volatility: r.volatility,
+      volume_norm: volLogNorm[i], liquidity: liqLogNorm[i], trend_strength: trendNorm[i],
+      relative_performance: relPerfNorm[i], analyst_factor: analystFactor,
+      oracle_score: 0, rank_in_class: 0, rank_global: 0,
+      prediction: prediction ?? undefined, confidence: sourceConfidence,
+    };
+  });
+
+  for (let i = 0; i < metrics.length; i++) {
+    const m = metrics[i];
+    const m7 = m7Norm[i] ?? 0.5;
+    const m30 = m30Norm[i] ?? 0.5;
+    const volScore = volNorm[i] ?? 0.5;
+    const volLog = volLogNorm[i] ?? 0.5;
+    const liqLog = liqLogNorm[i] ?? 0.5;
+    const trend = trendNorm[i] ?? 0;
+    const relPerf = relPerfNorm[i] ?? 0.5;
+    const analyst = m.analyst_factor;
+    const momentumCombined = 0.4 * m7 + 0.6 * m30;
+    const W = ORACLE_SCORE_WEIGHTS;
+    const score = (momentumCombined * W.momentum + volLog * W.volume + liqLog * W.liquidity +
+      volScore * W.volatility + trend * W.trend_strength + relPerf * W.relative_performance +
+      analyst * W.analyst_factor) * 100;
+    m.oracle_score = Math.max(0, Math.min(100, score));
+  }
+
+  const sorted = [...metrics].sort((a, b) => b.oracle_score - a.oracle_score);
+  sorted.forEach((m, idx) => { m.rank_in_class = idx + 1; });
+  return { metrics: sorted };
+}
+
+export function assignGlobalRanks(all: AssetMetrics[]): AssetMetrics[] {
+  const sorted = [...all].sort((a, b) => b.oracle_score - a.oracle_score);
+  sorted.forEach((m, idx) => { m.rank_global = idx + 1; });
+  return sorted;
+}
+SANTANINVERTER_EOF_MULTI_RANK
+
+# ─── 6.4 src/lib/oracle-multi/predict.ts (ensemble prediction engine) ──────
+cat > /home/z/my-project/src/lib/oracle-multi/predict.ts << 'SANTANINVERTER_EOF_MULTI_PREDICT'
+// src/lib/oracle-multi/predict.ts
+// Ensemble prediction engine for V4 multi-asset Oracle.
+// Models: linear_regression + ewma + momentum + bayesian_trend, combined as ensemble.
+// Guard: confidence_required = 0.65; never invent returns; null when history insufficient.
+// ⚠️ POSIBLE FUENTE DEL BUG localeCompare: línea 162 usa a.date.localeCompare(b.date)
+//    Si algún PricePoint tiene date:null → TypeError.
+
+import type { AssetPrediction, PricePoint } from './types';
+import { CONFIDENCE_THRESHOLD, MIN_HISTORY_DAYS } from './types';
+
+const MIN_HISTORY_DAYS_30D = 31;
+const MIN_HISTORY_DAYS_90D = 60;
+
+function linearRegression(points: Array<{ x: number; y: number }>): { slope: number; intercept: number; r2: number } {
+  const n = points.length;
+  if (n < 2) return { slope: 0, intercept: 0, r2: 0 };
+  const sumX = points.reduce((s, p) => s + p.x, 0);
+  const sumY = points.reduce((s, p) => s + p.y, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+  const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return { slope: 0, intercept: sumY / n, r2: 0 };
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  const meanY = sumY / n;
+  const ssTot = points.reduce((s, p) => s + (p.y - meanY) ** 2, 0);
+  const ssRes = points.reduce((s, p) => s + (p.y - (intercept + slope * p.x)) ** 2, 0);
+  const r2 = ssTot === 0 ? 0 : 1 - ssRes / ssTot;
+  return { slope, intercept, r2 };
+}
+
+function ewmaForecast(values: number[], horizon: number): { expected: number; confidence: number } {
+  if (values.length < 3) return { expected: 0, confidence: 0 };
+  const alpha = 0.3;
+  let prev = values[0];
+  const ewmas: number[] = [prev];
+  for (let i = 1; i < values.length; i++) { prev = alpha * values[i] + (1 - alpha) * prev; ewmas.push(prev); }
+  const last3 = ewmas.slice(-4);
+  const deltas: number[] = [];
+  for (let i = 1; i < last3.length; i++) deltas.push(last3[i] - last3[i - 1]);
+  const slope = deltas.length ? deltas.reduce((a, b) => a + b, 0) / deltas.length : 0;
+  const last = ewmas[ewmas.length - 1];
+  const expectedAbs = last + slope * horizon;
+  const expected = last > 0 ? (expectedAbs - last) / last : 0;
+  const meanDelta = deltas.reduce((a, b) => a + b, 0) / (deltas.length || 1);
+  const variance = deltas.reduce((s, d) => s + (d - meanDelta) ** 2, 0) / (deltas.length || 1);
+  const stdDev = Math.sqrt(variance);
+  const consistency = meanDelta !== 0 ? Math.max(0, 1 - stdDev / Math.abs(meanDelta)) : 0;
+  const sampleConfidence = Math.min(1, values.length / 30);
+  const confidence = consistency * sampleConfidence;
+  return { expected, confidence };
+}
+
+function momentumForecast(values: number[], horizonDays: number): { expected: number; confidence: number } {
+  if (values.length < 3) return { expected: 0, confidence: 0 };
+  const last = values[values.length - 1];
+  const lookback = Math.min(horizonDays, values.length - 1);
+  const past = values[values.length - 1 - lookback];
+  if (past <= 0) return { expected: 0, confidence: 0 };
+  const roc = (last - past) / past;
+  const projected = roc * (horizonDays / lookback);
+  const horizonPenalty = Math.max(0, 1 - (horizonDays - 7) / 90);
+  const sampleConfidence = Math.min(1, values.length / 30);
+  const confidence = 0.6 * horizonPenalty * sampleConfidence;
+  return { expected: projected, confidence };
+}
+
+function bayesianTrend(
+  linear: { slope: number; r2: number },
+  momentum: { expected: number; confidence: number },
+  values: number[], horizon: number,
+): { expected: number; bullProb: number; bearProb: number; confidence: number } {
+  if (values.length < 5) return { expected: 0, bullProb: 0.5, bearProb: 0.5, confidence: 0 };
+  const last = values[values.length - 1];
+  if (last <= 0) return { expected: 0, bullProb: 0.5, bearProb: 0.5, confidence: 0 };
+  const linearAbs = linear.slope * horizon;
+  const linearPct = linearAbs / last;
+  const linearWeight = 0.5 * Math.max(0, linear.r2);
+  const momentumWeight = 0.5 * momentum.confidence;
+  const totalWeight = linearWeight + momentumWeight;
+  const combined = totalWeight > 0 ? (linear.slope * linearWeight + momentum.expected * momentumWeight) / totalWeight : 0;
+  const bullProb = momentum.expected > 0 ? momentum.confidence : 0.5;
+  const bearProb = momentum.expected < 0 ? momentum.confidence : 0.5;
+  return { expected: combined, bullProb, bearProb, confidence: (linearWeight + momentumWeight) / 2 };
+}
+
+export function predictAsset(priceSeries: PricePoint[] | undefined): AssetPrediction | null {
+  if (!priceSeries || priceSeries.length < MIN_HISTORY_DAYS) return null;
+  const values = priceSeries.map((p) => p.price);
+  const sortedPoints = [...priceSeries].sort((a, b) => a.date.localeCompare(b.date)); // ⚠️ localeCompare aquí
+  const horizon30d = 30;
+  const lr = linearRegression(sortedPoints.map((p, i) => ({ x: i, y: p.price })));
+  const ewma30 = ewmaForecast(values, horizon30d);
+  const mom30 = momentumForecast(values, horizon30d);
+  const bayes = bayesianTrend(lr, mom30, values, horizon30d);
+  const ensembleExpected = (lr.slope * 0.2 + ewma30.expected * 0.3 + mom30.expected * 0.3 + bayes.expected * 0.2) / 1.0;
+  const ensembleConfidence = (lr.r2 * 0.2 + ewma30.confidence * 0.3 + mom30.confidence * 0.3 + bayes.confidence * 0.2) / 1.0;
+  const bullProbability = (bayes.bullProb + (mom30.expected > 0 ? mom30.confidence : 0.5)) / 2;
+  const bearProbability = (bayes.bearProb + (mom30.expected < 0 ? mom30.confidence : 0.5)) / 2;
+  const volatilityScore = Math.min(1, (ewma30.confidence + mom30.confidence) / 2);
+  const modelsUsed = ['linear_regression', 'ewma', 'momentum', 'bayesian_trend'];
+  return {
+    expected_return_30d: ensembleExpected,
+    confidence: ensembleConfidence,
+    bull_probability: bullProbability,
+    bear_probability: bearProbability,
+    volatility_score: volatilityScore,
+    models_used: modelsUsed,
+    predicted_at: new Date().toISOString(),
+  };
+}
+SANTANINVERTER_EOF_MULTI_PREDICT
+
+# ─── 6.5 src/lib/oracle-multi/types.ts (definición de tipos centrales) ─────
+cat > /home/z/my-project/src/lib/oracle-multi/types.ts << 'SANTANINVERTER_EOF_MULTI_TYPES'
+// src/lib/oracle-multi/types.ts
+// Type definitions for V4 multi-asset Oracle.
+
+export type AssetClass = 'FCI' | 'PLAZO_FIJO' | 'ACCIONES' | 'BONOS' | 'CEDEARS' | 'ETF_CEDEARS';
+
+export const ASSET_CLASS_ORDER: AssetClass[] = ['FCI', 'PLAZO_FIJO', 'ACCIONES', 'BONOS', 'CEDEARS', 'ETF_CEDEARS'];
+export const ASSET_CLASS_LABELS: Record<AssetClass, string> = {
+  FCI: 'Fondos Comunes de Inversión',
+  PLAZO_FIJO: 'Plazo Fijo',
+  ACCIONES: 'Acciones',
+  BONOS: 'Bonos',
+  CEDEARS: 'CEDEARS',
+  ETF_CEDEARS: 'ETF CEDEARS',
+};
+
+export interface OracleScoreWeights {
+  momentum: number;
+  inflation_hedge: number;
+  fx_momentum: number;
+  liquidity: number;
+  risk_penalty: number;
+  volume: number;
+  trend_strength: number;
+  relative_performance: number;
+  analyst_factor: number;
+}
+
+export const ORACLE_SCORE_WEIGHTS: OracleScoreWeights = {
+  momentum: 0.25,
+  inflation_hedge: 0.25,
+  fx_momentum: 0.20,
+  liquidity: 0.15,
+  risk_penalty: -0.15,
+  volume: 0.15,
+  trend_strength: 0.15,
+  relative_performance: 0.10,
+  analyst_factor: 0.10,
+};
+
+export const CONFIDENCE_THRESHOLD = 0.65;
+export const MIN_HISTORY_DAYS = 9;
+
+export interface NormalizedAsset {
+  id: string; asset_class: AssetClass; name: string; ticker: string; sub_category: string;
+  currency: string; date: string; price: number; volume?: number; market_cap_ars?: number; issuer?: string;
+  source: string;
+}
+
+export interface AssetSnapshot {
+  date: string; fetched_at: string; source: string; asset_class: AssetClass;
+  total_assets: number; assets: NormalizedAsset[];
+}
+
+export interface PricePoint { date: string; price: number; }
+
+export interface AssetPrediction {
+  expected_return_30d: number;
+  confidence: number;
+  bull_probability: number;
+  bear_probability: number;
+  volatility_score: number;
+  models_used: string[];
+  predicted_at: string;
+}
+
+export interface AssetMetrics extends NormalizedAsset {
+  momentum_7d: number | null;
+  momentum_30d: number | null;
+  volatility: number | null;
+  volume_norm: number | null;
+  liquidity: number | null;
+  trend_strength: number | null;
+  relative_performance: number | null;
+  analyst_factor: number;
+  oracle_score: number;
+  rank_in_class: number;
+  rank_global: number;
+  prediction?: AssetPrediction;
+  confidence: number;
+}
+
+export interface ClassOracleResponse {
+  generated_at: string; snapshot_date: string; source: string; source_status: MultiOracleResponse['source_status'];
+  asset_class: AssetClass; total_assets: number; assets_in_output: number;
+  rankings: {
+    top10_by_oracle_score: AssetMetrics[];
+    top10_by_market_cap: AssetMetrics[];
+    top10_predicted_30d: AssetMetrics[];
+    top10_most_stable: AssetMetrics[];
+    top_gainers_7d: AssetMetrics[];
+    top_losers_7d: AssetMetrics[];
+  };
+  assets: AssetMetrics[];
+  metadata: {
+    history_days_available: number;
+    prediction_engine_active: boolean;
+    guards: Record<string, boolean>;
+    fallback_chain_used: string[];
+    score_weights: OracleScoreWeights;
+  };
+  errors: string[];
+  evidence: string[];
+}
+
+export interface MultiOracleResponse {
+  generated_at: string; snapshot_date: string; source: string; source_status: 'SUCCESS' | 'PARTIAL_SUCCESS' | 'DEGRADED' | 'ERROR';
+  total_assets: number; assets_in_output: number;
+  rankings: {
+    top10_by_oracle_score: AssetMetrics[];
+    top10_by_market_cap: AssetMetrics[];
+    top10_predicted_30d: AssetMetrics[];
+    top10_most_stable: AssetMetrics[];
+    top_gainers_7d: AssetMetrics[];
+    top_losers_7d: AssetMetrics[];
+  };
+  by_class: Record<AssetClass, AssetMetrics[]>;
+  predictions_summary: {
+    active: boolean;
+    assets_with_predictions: number;
+    avg_confidence: number | null;
+    high_conviction_count: number;
+  };
+  metadata: {
+    classes_fetched: AssetClass[];
+    classes_failed: AssetClass[];
+    history_days_available: number;
+    prediction_engine_active: boolean;
+    guards: Record<string, boolean>;
+    fallback_chain_used: string[];
+    score_weights: OracleScoreWeights;
+  };
+  errors: string[];
+  evidence: string[];
+}
+
+export interface SearchResponse {
+  query: string; hits: number; tookMs: number; results: { asset: AssetMetrics; score: number }[];
+}
+
+export interface PredictionsResponse {
+  generated_at: string; snapshot_date: string; total_predictions: number; high_conviction_count: number;
+  predictions: {
+    asset_id: string; name: string; asset_class: AssetClass; ticker: string;
+    expected_return_30d: number; confidence: number; bull_probability: number;
+    bear_probability: number; volatility_score: number; models_used: string[];
+  }[];
+  metadata: {
+    guards: Record<string, boolean>;
+    confidence_threshold: number;
+    min_history_days: number;
+  };
+}
+SANTANINVERTER_EOF_MULTI_TYPES
+
+# ════════════════════════════════════════════════════════════════════════════
+# EOF MARKER — Todos los archivos han sido escritos
+# ════════════════════════════════════════════════════════════════════════════
+echo "✅ Todos los archivos del Santaninver Oracle han sido escritos en /home/z/my-project/"
+SANTANINVERTER_EOF

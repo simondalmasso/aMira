@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-07-09T22:31:17.072Z",
+  "pipelineExecutions": 26,
+  "lastPipelineExecution": "2026-07-08T23:10:10.184Z",
+  "emergencyFreezes": 4,
+  "dataIntegrityFailures": 0,
+  "staleDegradations": 0,
+  "recentConfidence": 0.51,
+  "audit_recentErrors": 0,
+  "audit_recentWarnings": 0,
+  "audit_validationSuccessRate": 0
+}

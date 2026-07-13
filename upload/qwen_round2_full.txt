@@ -1,0 +1,1741 @@
+=== PAGE 1 ===
+Asignación de Capital de Supervivencia
+en Argentina: Un Modelo Cuantitativo
+Basado en Tranching de Liquidez y
+Detección de Régimen
+El presente informe de investigación desarrolla un marco metodológico riguroso para la
+asignación de capital bajo el supuesto de un perfil de inversor conservador a moderado,
+con un horizonte temporal ultracorto de 1 a 3 meses y una condición crítica de capital de
+supervivencia, donde la pérdida del capital disponible representa una situación financiera
+insostenible ("si los pierdo me quedo sin dinero"). El objetivo primordial no es maximizar
+el retorno absoluto, sino garantizar la preservación nominal del capital, asegurar una
+liquidez inmediata y gestionar estrictamente los riesgos inherentes a un entorno
+macroeconómico argentino caracterizado por alta volatilidad estructural y colas pesadas.
+El marco se basa en un enfoque cuantitativo institucional, incorporando herramientas
+avanzadas como la medición de Riesgo Condicionado (CVaR), la segmentación de
+liquidez (tranching) y la detección de cambios de régimen macroeconómico. Se
+diferencian explícitamente los distintos tipos de riesgo (nominal, real, de mercado, de
+liquidez, regulatorio) y se prioriza un lenguaje probabilístico y matizado sobre
+afirmaciones absolutas.
+Fundamentos Cuantitativos: De la Preservación
+Absoluta a la Optimización de Restricciones
+La premisa central de un capital de supervivencia redefine radicalmente los principios de
+la teoría de portafolios clásica. Cuando la pérdida de capital tiene consecuencias
+financieras irreversibles, la función de utilidad del inversor penaliza asimétricamente
+cualquier descenso del patrimonio, independientemente de su magnitud . Esto implica
+que la tolerancia al riesgo cae a cero absoluto, y la optimización deja de centrarse en
+maximizar el rendimiento esperado (μ) para enfocarse en minimizar el riesgo de cola o
+la pérdida máxima probable bajo condiciones extremas . En este contexto, el
+318
+3 283
+
+=== PAGE 2 ===
+análisis cuantitativo se convierte en un ejercicio de optimización bajo restricciones
+severas, donde la principal restricción es la no pérdida de capital nominal.
+Una de las métricas cuantitativas más adecuadas para este fin es el Valor en Riesgo
+Condicionado (CVaR), también conocido como Pérdida Esperada en la Cola o Valor en
+Riesgo Medio . A diferencia del VaR, que solo proporciona un umbral de pérdida
+máximo con un determinado nivel de confianza (ej., el VaR al 95% indica la pérdida
+máxima en el 5% de los peores casos), el CVaR va un paso más allá y mide la pérdida
+promedio dentro de esa cola de eventos extremos . Esta propiedad lo hace superior
+para evaluar riesgos sistémicos y distribuciones con colas pesadas, como las observadas
+en los mercados emergentes argentinos, donde la probabilidad de eventos brutales es
+mayor que en modelos normales . Minimizar el CVaR es, por tanto, un objetivo
+estratégico coherente con la preservación del capital. Otras métricas importantes incluyen
+el Ratio de Sortino, que ajusta el rendimiento por debajo de la media por su desviación
+estándar (foco en el riesgo a la baja), y la duración efectiva, que mide la sensibilidad de
+un activo al riesgo de tasa de interés y es crucial para limitar la volatilidad de precios en
+instrumentos de renta fija .
+El concepto de tranching de liquidez emerge como una estrategia estructural para
+navegar las tensiones entre la preservación del capital, la búsqueda de rendimiento y la
+necesidad de acceso rápido a fondos. Este enfoque, utilizado en la gestión patrimonial
+seria, consiste en dividir el capital en diferentes segmentos o "tramos" según su perfil de
+liquidez y riesgo, en lugar de mantenerlo todo en un único tipo de activo . Para el
+caso de los USD 2.000, se propone una estructura tridimensional: 1. Tramo de Máxima
+Liquidez y Cobertura Dura (T+0/T+1): Constituye el núcleo de la cartera, diseñado
+para ofrecer acceso instantáneo a divisas y proteger contra shocks sistémicos. Su
+propósito no es generar rendimiento significativo, sino actuar como un amortiguador. Los
+FCI de Mercado de Dinero denominados en dólares son el vehículo ideal, ya que ofrecen
+liquidez diaria (T+0 o T+1), mínima exposición a riesgo de mercado debido a su
+duración ultracorta (< 15 días) y están sujetos a regulaciones que limitan la inversión en
+activos volátiles . 2. Tramo de Carry Táctico en Pesos (T+1): Este tramo busca
+capturar de manera controlada el carry positivo existente en el mercado local. Consiste en
+una pequeña asignación (por ejemplo, 25%) en un FCI Money Market denominado en
+pesos, que ofrece liquidez casi inmediata (T+1) . Esta posición está justificada por la
+expectativa de que las tasas de interés nominales en ARS superen la tasa implícita de
+devaluación (el crawling peg). Sin embargo, su naturaleza táctica exige una
+monitorización constante y la posibilidad de liquidarlo rápidamente ante señales de
+estrés macroeconómico, lo que demuestra una gestión dinámica del riesgo. 3. Tramo de
+Cobertura de Riesgo Sistémico (Sin Carry): El tercer componente, representando
+284285
+3 369
+181
+167301
+9496
+94213291
+53
+
+=== PAGE 3 ===
+aproximadamente el 15% del capital, se destina a la máxima seguridad posible, sin
+buscar rendimiento. Consiste en mantener una parte del capital en efectivo en dólares
+dentro de una cuenta comitente . Este tramo actúa como un seguro contra riesgos
+extremos que podrían afectar incluso a los vehículos más seguros, como un feriado
+bancario, una restricción de rescates por parte de la CNV (gating), o un cambio drástico
+en la regulación de contraparte . Es importante calibrar el lenguaje aquí: no se trata
+de "riesgo nulo", sino de "riesgo de mercado nulo y riesgo de contraparte materialmente
+reducido" .
+Esta estructura permite una optimización sofisticada: mientras el tramo de carry táctico
+busca mejorar el rendimiento neto de la cartera, los otros dos tramos aseguran que la
+variabilidad total del portafolio esté dominada por el riesgo de oportunidad (la diferencia
+de rendimiento frente al cash) y no por el riesgo de mercado. La asignación final se
+ajustará en función de factores adicionales como la estabilidad laboral, los ingresos
+futuros y la dependencia directa del capital para cubrir gastos esenciales, variables que
+definen la verdadera capacidad de recomposición del inversor .
+Análisis Macroeconómico y Regulatorio: El Entorno
+Operativo Argentino
+La toma de decisiones para un capital de supervivencia en Argentina debe estar
+constantemente anclada en el análisis de un entorno macroeconómico y regulatorio
+fluido y complejo. Las políticas del Banco Central de la República Argentina (BCRA) y la
+Comisión Nacional de Valores (CNV) tienen un impacto directo y potencialmente
+disruptivo sobre la liquidez, el valor de los activos y la capacidad de acceso a ellos. Por lo
+tanto, la vigilancia de ciertas variables es un componente no negociable del marco de
+gestión.
+La política monetaria del BCRA ha transitado hacia un ciclo de desinflación gradual, con
+una tasa de política monetaria que se ha ajustado a la baja para reflejar la consolidación
+inflacionaria . Actualmente, la TAMAR en pesos de los bancos privados se sitúa en
+niveles altos, aunque en proceso de corrección . Este entorno genera tasas reales
+neutras o ligeramente positivas, lo que reduce la urgencia de buscar rendimientos
+extremos pero también presenta una oportunidad de carry local. La política fiscal, por su
+parte, muestra signos de solidez con un superávit primario acumulado, lo que contribuye
+a la credibilidad del programa económico . Sin embargo, sigue siendo sensible a la
+88
+1236
+94
+318363
+136138
+108
+32322
+
+=== PAGE 4 ===
+ejecución legislativa y a la percepción de gobernabilidad, lo que constituye una fuente de
+riesgo país persistente .
+El pilar del régimen cambiario actual es el crawling peg, una devaluación programada y
+predecible del tipo de cambio oficial . Recientemente, el BCRA ha ajustado este
+parámetro, estableciendo una devaluación mensual del 1% . Este mecanismo busca
+anclar las expectativas de inflación y reducir la incertidumbre cambiaria, permitiendo que
+la brecha entre el dólar oficial y los mercados financieros (MEP/CCL) se acote . No
+obstante, la brecha sigue existiendo y funciona como un termómetro de la confianza en el
+sistema . Una expansión abrupta de esta brecha es una señal de estrés que debe ser
+monitoreada de cerca .
+La regulación emana principalmente de dos entidades. El BCRA, a través de su área de
+Exterior y Cambios, gestiona el flujo de divisas y la estabilidad del tipo de cambio .
+Ha implementado flexibilizaciones graduales, como la Comunicación “A” 8226, que
+amplía el acceso al mercado de cambios para personas humanas, pero también endurece
+ciertas restricciones para cerrar arbritrajes y preservar las reservas . Por otro
+lado, la CNV regula el funcionamiento de los fondos comunes de inversión (FCI) y otras
+entidades de inversión, imponiendo límites a la duración de los activos, la concentración
+de participaciones y la inversión en ciertos instrumentos para proteger a los pequeños
+ahorradores . Por ejemplo, se han establecido límites al porcentaje de participación
+en cauciones bursátiles para los FCIs de Mercado de Dinero y se ha modificado el
+régimen para permitir mayores inversiones en plazos fijos . Estas regulaciones son
+cruciales porque definen el universo de activos viables y sus características de riesgo.
+Finalmente, la evaluación del carry entre pesos y dólares es fundamental. El carry se
+define como la diferencia entre la tasa de interés local libre de riesgo y la tasa de
+devaluación implícita. Si bien el BCRA establece el crawling peg formal (1% mensual), el
+mercado anticipa una devaluación potencialmente mayor. No obstante, si se considera el 
+carry basado únicamente en el peg, existe una asimetría positiva: las tasas nominales en
+ARS (~2.8% mensual) superan la devaluación oficial, generando un rendimiento teórico
+positivo en la moneda local . Esta aparente ganancia, sin embargo, está cargada de
+riesgo. La devaluación podría desanclarse, y el rendimiento del FCI en pesos se vería
+licuado por la pérdida de poder adquisitivo en términos de dólares. Por ello, la exposición
+a esta asimetría debe ser táctica, limitada y siempre respaldada por un mecanismo de
+rebalanceo rápido ante cambios en las expectativas de mercado, como lo demuestra la
+matriz de decisión dinámica.
+120121
+2378
+21153
+32126
+241
+199330
+152178
+177257258
+94161
+95162
+53153
+
+=== PAGE 5 ===
+Variable Clave Estado Actual (Junio 2026) Implicación para Cartera
+Política Monetaria
+(BCRA)
+TNA de política monetaria en proceso de baja; TAMAR en pesos
+en 24,81% e.a. 
+Tasas reales neutras; menor urgencia por
+rendimientos extremos.
+Ancla Fiscal Superávit primario acumulado; solidez fiscal observada Contribuye a la estabilidad general, pero la
+ejecución política sigue siendo un riesgo.
+Crawling Peg 1% mensual Base para calcular el carry teórico local y anclar
+expectativas de devaluación.
+Brecha Cambiaria
+MEP
+Variable, históricamente fluctuante (ej., 5.4% tras medida
+regulatoria ) 
+Termómetro de confianza. Su ensanchamiento es
+una señal de estrés.
+Regulación CNVLímites a duración en FCIs MM (<30 días); permiso para
+invertir hasta 30% en activos a devengamiento 
+Limita el riesgo de mercado y de tasa en los
+vehículos elegidos.
+Carry Teórico ARS
+vs USD
+Positivo (~80 bps mensuales) si se usa el crawling peg como
+referencia 
+Justifica una pequeña asignación táctica en pesos,
+pero con alto riesgo de reversión.
+Diseño de Cartera Estratégica: Segmentación de
+Liquidez y Gestión de Riesgo de Cola
+El diseño de una cartera para capital de supervivencia requiere un enfoque deliberado
+que priorice la robustez sobre la rentabilidad. La estrategia propuesta se aleja de
+soluciones binarias como "invertir todo en dólares" o "mantener todo en pesos", para
+adoptar un modelo de segmentación de liquidez. Este enfoque permite una asignación de
+capital más matizada, optimizando el equilibrio entre la necesidad de preservación, la
+captura de rendimiento marginal y la disponibilidad de fondos. La cartera se estructura
+en tres tramos con perfiles de riesgo y liquidez definidos, cada uno con un propósito
+estratégico claro.
+El primer tramo, que constituye el grueso de la cartera (60%), se destina a la máxima
+liquidez y cobertura dura. Esta porción se invertirá íntegramente en un Fondo Común de
+Inversión (FCI) de Mercado de Dinero denominado en dólares estadounidenses. La
+elección de un vehículo en USD se justifica por su inmunidad al riesgo de convertibilidad
+local y al riesgo de contraparte del sistema bancario argentino. Estos fondos invierten en
+activos ultracortos como cauciones bursátiles y plazos fijos con vencimientos inferiores a
+los 30 días, lo que resulta en una duración efectiva mínima (inferior a 15 días) y, por
+ende, una volatilidad de precio prácticamente nula . Su liquidez es de carácter
+diario (T+0 o T+1), lo que significa que el inversor puede disponer de su capital en
+menos de 24 horas, una característica indispensable para un fondo de emergencia .
+Desde una perspectiva de gestión de riesgo de cola, este tramo actúa como el principal
+108136
+322
+21153
+75 118
+94171
+53
+94213
+291
+
+=== PAGE 6 ===
+amortiguador de la cartera. En un escenario de estrés sistémico, como un
+ensanchamiento brusco de la brecha cambiaria o una crisis bancaria, este componente
+absorbe el shock manteniendo su valor nominal, protegiendo así la integridad del capital
+de supervivencia .
+El segundo tramo, representando un 25% del capital, es un componente táctico diseñado
+para capturar el carry positivo en pesos. Se asignará a un FCI de Mercado de Dinero
+denominado en pesos argentinos. Como se analizó previamente, existe una expectativa
+de que las tasas de interés locales superen la tasa oficial de devaluación, creando una
+oportunidad de rendimiento . Sin embargo, esta exposición no es pasiva. La selección
+de un FCI de Mercado de Dinero es crucial, ya que estos vehículos están regulados por la
+CNV para tener una vida promedio de sus activos muy corta, lo que minimiza el riesgo de
+mercado y de tasa . Además, su liquidez es casi inmediata (T+1), lo que permite un
+rebalanceo rápido en caso de que las expectativas de devaluación cambien o se desancle,
+liquidando la posición y dolarizando los fondos antes de que ocurra una pérdida de poder
+adquisitivo significativa . Este tramo introduce un pequeño elemento de riesgo
+calculado, pero su tamaño limitado y su rápida movilidad aseguran que no comprometa
+el objetivo principal de preservación del capital.
+El tercer y último tramo, que representa el 15% restante, se destina exclusivamente a la
+cobertura de riesgos sistémicos extremos. Este capital no se destina a generar
+rendimiento, sino a actuar como un seguro contra eventos de muy baja probabilidad pero
+de impacto catastrófico. La forma más directa de lograrlo es mantener este capital en
+efectivo (pesos o dólares) dentro de una cuenta comitente, no vinculada a ningún FCI ni
+a ninguna entidad gerente . Este tramo protege contra riesgos que los FCIs no cubren,
+como un corralito, un feriado bancario generalizado o una intervención regulatoria
+masiva que restrinja la liquidez de los fondos de inversión (medida de bloqueo) . Si
+bien este tramo no genera retorno, su costo de oportunidad es un precio aceptable para
+blindar el capital contra la ruina financiera. La combinación de estos tres tramos crea una
+cartera con una distribución de probabilidades asimétrica favorable: una gran mayoría de
+la cartera (60% + 15% = 75%) está completamente inmune a los riesgos de mercado y
+de crédito, mientras que un 25% pequeño y manejable se expone a un riesgo controlado
+en busca de un rendimiento marginal. El resultado es una cartera robusta, resiliente y
+alineada con la filosofía de la gestión de patrimonios prudentes.
+12
+53
+94
+53
+88
+12
+
+=== PAGE 7 ===
+Matriz de Decisión Dinámica: Detección de Régimen y
+Rebalanceo Táctico
+Para que la estrategia de cartera sea verdaderamente resiliente, especialmente en un
+entorno tan volátil como el argentino, no puede ser estática. Debe incorporar un
+mecanismo de monitorización continua y respuesta táctica a cambios en el entorno
+macroeconómico y regulatorio. Este mecanismo se formaliza en una Matriz de Decisión
+Dinámica, que define un conjunto de indicadores clave (indicadores clave) y umbrales de
+alerta (umbrales de alerta). El cumplimiento de ciertos criterios activará la revisión y,
+potencialmente, el rebalanceo de la cartera, permitiendo adaptarse proactivamente a
+nuevas condiciones de riesgo. Esta aproximación transforma la gestión de un simple acto
+de asignación inicial a un proceso de gestión de riesgos continuo.
+Los indicadores seleccionados son aquellos que han demostrado ser particularmente
+informativos sobre la salud del régimen económico y financiero argentino. La matriz se
+centra en cuatro pilares:
+Brecha Cambiaria: La diferencia entre el tipo de cambio oficial y los mercados
+financieros (MEP/CCL) es un barómetro de la confianza pública en el gobierno y en
+la política económica del BCRA . Una expansión súbita de la brecha es una
+señal inequívoca de estrés. Se establecería un umbral de alerta cuando la brecha
+MEP supere el 25% o se expanda más de un 5% en una semana. Esta señal sugiere
+que el mercado está anticipando una desvalorización mayor a la programada, lo
+que invalidaría la hipótesis subyacente del carry en pesos y requeriría la liquidación
+del tramo ARS.
+Volatilidad Implícita (Futuros ROFEX): Los futuros de dólar cotizados en el
+mercado electrónico de Buenos Aires (ROFEX) contienen información sobre las
+expectativas del mercado respecto a la trayectoria futura del tipo de cambio . Un
+aumento abrupto en la volatilidad implícita o en las tasas de interés implícitas (por
+ejemplo, un incremento superior a 200 puntos básicos en cinco días) indica que los
+operadores están preciando un mayor riesgo de evento futuro . Este sería un
+indicador de aversión al riesgo generalizada y un catalizador potencial para una
+reevaluación de las posiciones en pesos.
+Reservas Netas del BCRA: La evolución de las reservas internacionales del banco
+central es un indicador fundamental de la capacidad del país para defender su tipo
+de cambio y pagar su deuda externa . Una tendencia a la baja persistente,
+definida como una caída superior a USD 300 millones diarios durante tres días
+1. 
+198241
+2. 
+91
+89
+3. 
+88
+
+=== PAGE 8 ===
+consecutivos, señalaría una presión creciente sobre las reservas y un mayor riesgo
+fiscal . Ante esta señal, el consejo sería aumentar la proporción de la cartera en
+Cash USD para fortalecer la posición de liquidez dura.
+Devaluación Explícita (Crawling Peg): El propio BCRA puede cambiar el ritmo del
+crawling peg. Una modificación en el parámetro de devaluación mensual altera
+fundamentalmente el panorama de riesgo-rendimiento. Si el BCRA aumentara el 
+peg, por ejemplo, del 1% al 2%, el carry teórico en pesos disminuiría drásticamente.
+Si lo bajara, aumentaría. Cualquier cambio sustancial en esta política debe ser
+interpretado como un cambio de régimen que requiere una reevaluación de toda la
+estrategia de asignación.
+La matriz opera de la siguiente manera: el inversor monitorea diariamente estos cuatro
+indicadores. Si dos o más de ellos cruzan su respectivo umbral de alerta, se declara un
+estado de "estrés macro". En este estado, el plan de acción es inmediato: liquidar el tramo
+del FCI en pesos (25%) y transferir esos fondos a la cuenta comitente en dólares (Cash
+USD). Esta acción elimina el riesgo de mercado asociado a la moneda local y aumenta la
+cobertura de riesgo sistémico al 40% del capital. Si solo uno cruza el umbral, se activa
+una fase de "vigilancia intensificada", con un seguimiento más frecuente de todos los
+indicadores. Si ningún umbral se cruza, la cartera permanece inalterada. Esta matriz de
+decisión dinámica introduce un nivel de disciplina y automatización en la gestión táctica
+que es característico de las estrategias profesionales, transformando la cartera de un
+simple portafolio estático a un sistema de gestión de riesgos adaptativo.
+Indicador de Vigilancia Umbral de Alerta Acción Táctica
+Brecha Cambiaria MEP > 25% o expansión > 5% semanal Liquidar tramo en ARS (25%) y mover a Cash USD
+Volatilidad Implícita (ROFEX)Suba de tasa implícita > 200 bps en 5 díasLiquidar tramo en ARS (25%) y mover a Cash USD
+Reservas Netas BCRA Caída > USD 300 M diarios (3 días consecutivos)Aumentar exposición a Cash USD
+Crawling Peg Cambio sustancial del parámetro de devaluaciónReevaluar toda la estrategia de asignación
+Comparativa de Instrumentos y Justificación de la
+Cartera Propuesta
+La elección de instrumentos para un capital de supervivencia debe someterse a un
+análisis crítico comparativo, evaluando cada opción no solo por su potencial rendimiento,
+sino fundamentalmente por su perfil de riesgo y su alineación con los requisitos de
+36
+4. 
+
+=== PAGE 9 ===
+liquidez y preservación. La cartera propuesta de 60% FCI Money Market USD / 25% FCI
+Money Market ARS / 15% Cash USD no es una recomendación genérica, sino el resultado
+de una selección rigurosa basada en un marco de evaluación multi-facético que pondera
+los siguientes aspectos: liquidez, riesgo de mercado (volatilidad de precio), riesgo de
+tasa, riesgo de contraparte y costo de transacción.
+En primer lugar, se compara la solución propuesta con la alternativa más común y
+aparentemente segura: dejar el dinero en efectivo (cash) o en una cuenta de cheques. La
+principal ventaja de la cartera es la captura de un rendimiento nominal, aunque modesto.
+El FCI Money Market en USD, por ejemplo, rinde una tasa cercana a la libre de riesgo en
+dólares, generando un pequeño excedente que, si bien es insignificante en términos de
+poder adquisitivo real (debido a la inflación en EE.UU.), cumple el objetivo de no dejar el
+capital "inactivo" . La ventaja principal sobre el cash es, por tanto, el rendimiento
+nominal. Sin embargo, si el capital ya se encuentra en dólares, la ventaja es menor y el
+riesgo de transacción (comisiones y spreads al entrar y salir) se vuelve relevante .
+En segundo lugar, la cartera propuesta se contrasta con la inversión en Plazos Fijos (PF)
+tradicionales, ya sean en pesos o en dólares. La principal desventaja del PF tradicional es
+su iliquidez. Un PF de 30 días atrapa el capital, impidiendo su acceso en caso de una
+emergencia imprevista dentro de ese período . Para un capital de supervivencia, este
+riesgo de iliquidez es inaceptable. La cartera propuesta, al utilizar FCI de Mercado de
+Dinero, elimina este problema al ofrecer liquidez diaria (T+0/T+1) . Además, los FCIs
+están sujetos a regulaciones que limitan la duración de sus activos, lo que los hace
+inherentemente menos volátiles que un bono de largo plazo, aunque su principal ventaja
+en este contexto es la liquidez.
+En tercer lugar, es crucial explicar por qué se excluyen activos con mayor potencial de
+rendimiento, como los Bonos Soberanos (AL30/GD30) o los Bonos CER. Aunque ofrecen
+rendimientos mucho más altos, también presentan un riesgo de mercado significativo
+debido a su duración. En un horizonte de 1 a 3 meses, la volatilidad de precio de estos
+bonos es extremadamente alta y su comportamiento es impulsado por el ruido del
+mercado y las noticias macroeconómicas, no por fundamentales . Arriesgar el capital
+de supervivencia en estos activos es estadísticamente irracional, ya que el riesgo de sufrir
+una caída de precio (drawdown) de, por ejemplo, un 5% o 10% justo cuando se necesita
+el dinero supera con creces la pequeña probabilidad de obtener un rendimiento
+significativamente mayor . La cartera propuesta prioriza la preservación del capital
+nominal sobre la especulación por un rendimiento extra.
+291
+160
+160
+213
+160
+160
+
+=== PAGE 10 ===
+Finalmente, la cartera justifica su composición específica. El 60% en FCI Money Market
+USD es la columna vertebral, proporcionando liquidez inmediata en una divisa dura y
+protegiéndose del riesgo cambiario argentino y del riesgo de contraparte del sistema
+financiero local. El 25% en FCI Money Market ARS es una asignación táctica y
+controlada para capturar el carry local, beneficiándose de las tasas de interés más altas en
+pesos. Su elección se basa en la liquidez T+1 y en la regulación que limita su duración,
+mitigando el riesgo de tasa. El 15% en Cash USD sirve como un seguro contra eventos
+de riesgo sistémico extremo (feriados bancarios, gating), que son precisamente los
+eventos que un FCI, por muy seguro que parezca, no puede cubrir . Esta estructura
+tridimensional no es la única posible, pero representa un punto de equilibrio
+cuidadosamente calculado entre los objetivos de preservación, rendimiento marginal y
+gestión de riesgos multifacética, cumpliendo con los estándares de una asignación de
+capital profesional.
+Síntesis y Conclusiones: La Estrategia Óptima para
+Capital Sensible
+Este marco de investigación culmina en la formulación de una estrategia de asignación de
+capital robusta y matizada, diseñada específicamente para el perfil de capital de
+supervivencia en el contexto argentino. La conclusión fundamental es que, para un
+capital sensible con un horizonte de 1 a 3 meses, la inteligencia financiera no reside en la
+búsqueda de rendimientos extraordinarios, sino en la eficiencia para evitar pérdidas. La
+estrategia óptima no es una sola recomendación, sino un protocolo de gestión de riesgos
+que combina la preservación nominal absoluta con la captura de oportunidades
+marginales y controladas.
+La cartera sugerida para los USD 2.000 se estructura en tres tramos de liquidez y riesgo:
+60% en FCI de Mercado de Dinero en USD: Esta es la base de la cartera,
+destinada a la máxima seguridad y liquidez inmediata. Protege el capital de los
+riesgos de convertibilidad y de contraparte del sistema financiero argentino,
+actuando como un amortiguador contra cualquier tipo de crisis.
+25% en FCI de Mercado de Dinero en ARS: Este componente táctico busca
+aprovechar el carry positivo existente en el mercado local, donde las tasas de
+interés nominales superan la devaluación oficial . Su elección se justifica por la
+liquidez casi inmediata (T+1) y la regulación que minimiza el riesgo de mercado,
+permitiendo un rebalanceo rápido si las expectativas de devaluación cambian.
+12
+• 
+• 
+53
+
+=== PAGE 11 ===
+15% en Efectivo USD (Cuenta Comitente): Este tramo funciona como un seguro
+contra riesgos sistémicos extremos e impredecibles, como un corralito o una
+restricción de liquidez regulatoria. No busca rendimiento, sino garantizar la
+supervivencia operativa de la cartera ante eventos de "colas pesadas".
+El éxito de esta estrategia depende de su aplicación disciplinada. No es suficiente con
+asignar los porcentajes; es imperativo implementar la Matriz de Decisión Dinámica para
+monitorear activamente la economía argentina a través de indicadores clave como la
+brecha cambiaria, la volatilidad implícita y las reservas del BCRA . Este enfoque
+transforma la gestión de un acto puntual en un proceso continuo de adaptación y
+mitigación de riesgos.
+En última instancia, este marco responde a la solicitud inicial de un análisis cuantitativo y
+profundo, alejándose de las simplificaciones y absolutos del análisis popular. Reconoce la
+realidad del mercado argentino: un entorno con colas pesadas, donde los eventos
+extremos son una posibilidad tangible . Al priorizar la minimización del Riesgo
+Condicionado (CVaR) y utilizar herramientas como la segmentación de liquidez, el
+modelo eleva la discusión desde la especulación hacia la gestión de patrimonios seria y
+responsable. La preservación del capital no es un resultado, sino el resultado deseado. Y
+para lograrlo, la estrategia más inteligente, aunque pueda parecer menos glamorosa, es la
+que acepta la aburrición del rendimiento a cambio de la seguridad de no perder lo que se
+tiene.
+Referencia
+Carry and Conditional Value at Risk Trend: Capturing the Short ... https://
+papers.ssrn.com/sol3/papers.cfm?abstract_id=4577393
+[PDF] Value at Risk and Conditional Value at Risk. An Econometric Analysis https://
+tesi.luiss.it/19740/1/188621_VALLARINO_PIERLUIGI.pdf
+Conditional Value-at-Risk CVaR – pensionfund.cern.ch https://pensionfund.cern.ch/
+en/conditional-value-at-risk-cvar/
+[PDF] Value at Risk and Conditional Value at Risk: - Deborah Kidd, CFA https://
+deborahkidd.com/wp-content/uploads/Value-at-Risk-and-Conditional-Value-at-Risk-A-
+Comparison-1.pdf
+• 
+8891121
+181
+1. 
+2. 
+3. 
+4. 
+
+=== PAGE 12 ===
+Using Conditional Value at Risk (CVaR) in Quantitative ... - Medium https://
+medium.com/@mandyphg/using-conditional-value-at-risk-cvar-in-quantitative-risk-
+management-qrm-for-market-risk-844431d152cf
+Conditional Value at Risk Portfolio With Monte Carlo Control Variates https://
+ejurnal.ung.ac.id/index.php/jjom/article/view/30952
+[PDF] Statistical tests for VaR and CVaR https://dspace.cuni.cz/bitstream/handle/
+20.500.11956/83089/DPTX_2014_2_11320_0_451088_0_168175.pdf?
+sequence=1&isAllowed=y
+[PDF] Asset allocation with conditional value-at-risk budgets - Lirias https://
+lirias.kuleuven.be/retrieve/235309
+(PDF) Value- at-Risk vs Conditional Value-at-Risk in Risk ... https://
+www.researchgate.net/publication/200798611_Value-_at-Risk_vs_Conditional_Value-
+at-Risk_in_Risk_Management_and_Optimization
+[PDF] Conditional Value-at-Risk for General Loss Distributions https://
+sites.math.washington.edu/~rtr/papers/rtr187-CVaR2.pdf
+[PDF] Argentina Response https://www.fsb.org/uploads/Argentina-Combined.pdf
+Testing macroprudential stress tests: The risk of regulatory risk weights https://
+ideas.repec.org/a/eee/moneco/v65y2014icp36-53.html
+CNV General Resolution 1142/2026: new regime for CEDEARs ... https://
+jfcattorneys.com/en/news/resolucion-general-cnv-1142-2026-cedear-ceva-etp
+[PDF] A Risk Characterization of Regulatory Arbitrage in Financial Markets https://
+scispace.com/pdf/a-risk-characterization-of-regulatory-arbitrage-in-
+financial-3x57k1cmpp.pdf
+Electronic Payment Method (MEP) - BCRA https://www.bcra.gob.ar/en/electronic-
+payment-method-mep/
+[PDF] Testing Macroprudential Stress Tests: The Risk of Regulatory ... - IRIS https://
+iris.unil.ch/bitstreams/efebb226-9ce2-40ba-8e92-43c9befa7f19/download
+Testing Macroprudential Stress Tests: The Risk of Regulatory Risk ... https://
+papers.ssrn.com/sol3/papers.cfm?abstract_id=2251711
+[PDF] Argentina - Bank for International Settlements https://www.bis.org/cpmi/
+l1_online_tracker/Argentina.pdf
+CNV removes loophole with new MEP, CCL restrictions https://www.batimes.com.ar/
+news/economy/cnv-removes-loophole-with-new-restrictions-for-mep-ccl-exchange-
+rates.phtml
+New CNV Regulation on Virtual Asset Service Providers - Dentons https://
+www.dentons.com/en/insights/articles/2025/april/30/new-cnv-regulation-on-virtual-
+asset-service-providers
+5. 
+6. 
+7. 
+8. 
+9. 
+10. 
+11. 
+12. 
+13. 
+14. 
+15. 
+16. 
+17. 
+18. 
+19. 
+20. 
+
+=== PAGE 13 ===
+The BCRA sets the crawling peg at 1% per month https://www.bcra.gob.ar/en/news/
+el-bcra-establece-un-nuevo-sendero-de-desplazamiento-de-1-mensual-para-el-tipo-de-
+cambio/
+CHAPTER II DEVELOPMENTS AND ISSUES IN EXCHANGE RATE ... https://
+www.elibrary.imf.org/display/book/9781589061774/ch02.xml
+Crawling peg - Wikipedia https://en.wikipedia.org/wiki/Crawling_peg
+[PDF] Classifying Exchange Rate Regimes - Harvard University https://
+appext.hks.harvard.edu/publications/getFile.aspx?Id=1396
+[PDF] How Reliable are De Facto Exchange Rate Regime Classifications? https://
+www.nber.org/system/files/working_papers/w17318/w17318.pdf
+[PDF] Exchange rate anchoring - Is there still a de facto US dollar standard? https://
+www.ecb.europa.eu/pub/pdf/scpwps/ecbwp1353.pdf
+[PDF] The Evolution of Exchange Rate Regimes Since 1990 https://papers.ssrn.com/
+sol3/Delivery.cfm/WPIEA1552002.pdf?abstractid=879978&mirid=1
+Publication: Verifying Exchange Rate Regimes https://openknowledge.worldbank.org/
+entities/publication/fa449824-ea27-5d79-bb42-1897412244ef
+Foreign exchange policy - Banco Central do Brasil https://www.bcb.gov.br/en/
+financialstability/fxpolicy
+[PDF] A de facto Classification of Exchange Rate Regimes https://
+www.fsturzenegger.com.ar/pdf/A-de-facto-Classification-of-Exchange-Rate-
+Regimes1.pdf
+CAPUTO NO BAJA EL RIESGO PAÍS Y NO SALE AL MERCADO ... https://
+www.instagram.com/reel/DV_n2YlEab5/
+¿Qué pasó en los mercados esta semana? Los ... - Instagram https://
+www.instagram.com/p/DZipHLuiZh-/
+[PDF] INFORME DE POLÍTICA MONETARIA - Banco Central de Chile https://
+www.bcentral.cl/documents/33528/3718177/IPoM_Septiembre_2022.pdf
+El BCU exige a los bancos informar a los clientes sobre riesgos de ... https://
+www.facebook.com/elpaisuy/posts/el-bcu-exige-a-los-bancos-informar-a-los-clientes-
+sobre-riesgos-de-cuentas-en-d%C3%B3/1351303090464445/
+Mercado de valores en pausa ⏸️ La falta de nuevos catalizadores ... 
+https://
+www.instagram.com/reel/DTv--BLCcb5/
+Caputo salió a aclarar el plan respecto a la compra de reservas ... https://
+www.instagram.com/reel/DRBEVnviRzf/
+[PDF] Prospecto - BYMA https://data-widgets.byma.com.ar/wp-content/uploads/
+2023/07/LA-RIOJA-TITULO-DEUDA-CLASE-1-2-PROSPECTO.pdf
+21. 
+22. 
+23. 
+24. 
+25. 
+26. 
+27. 
+28. 
+29. 
+30. 
+31. 
+32. 
+33. 
+34. 
+35. 
+36. 
+37. 
+
+=== PAGE 14 ===
+Con el fin de analizar las perspectivas financieras de corto plazo, el ... https://
+www.instagram.com/reel/DYNp7XfOkk2/
+El economista Sergio Chouza dialogó con PERFIL y brindó su punto ... https://
+www.instagram.com/p/DQaE9JsCSvE/
+El periodista especializado en economía, Mariano Gorodisch, habló ... https://
+www.instagram.com/reel/DQIUwbwkf_X/
+[PDF] Report on Vulnerabilities in Private Credit - Financial Stability Board https://
+www.fsb.org/uploads/P060526.pdf
+[PDF] World Bank Document https://documents1.worldbank.org/curated/en/
+244231467997617515/pdf/Argentina-Basel-core-principles-for-effective-banking-
+supervision-detailed-assessment-of-compliance.pdf
+Chapter 1 – Overview of Risk-based Capital Requirements - OSFI https://www.osfi-
+bsif.gc.ca/en/guidance/guidance-library/capital-adequacy-requirements-car-2026-
+chapter-1-overview-risk-based-capital-requirements
+Banking Report, January 2026 - BCRA https://www.bcra.gob.ar/en/publicaciones/
+banking-report-january-2026/
+[PDF] Financial risk report : Argentina - Economist Intelligence Unit https://
+www.eiu.com/n/wp-content/uploads/2024/05/EIU-financial-risk-report-argentina.pdf
+[PDF] Argentina - SBFN https://www.sbfnetwork.org/sites/default/files/2025/Apr/
+2021_Country_Progress_Report_Argentina.pdf
+[PDF] Financial Stability Report, May 2026 - Federal Reserve https://
+www.federalreserve.gov/publications/files/financial-stability-report-20260508.pdf
+[PDF] Delivering sustainable value creation - Banco Santander https://
+www.santander.com/content/dam/santander-com/en/documentos/informe-con-
+relevancia-prudencial/2026/irp-2026-Informe-1Q26-en.pdf
+[PDF] Argentina - International Monetary Fund https://www.imf.org/-/media/files/
+publications/cr/2026/english/1argea2026001.pdf
+[PDF] eba 2024-2026 single programming document https://www.eba.europa.eu/
+sites/default/files/2024-01/90951ad8-9be6-4062-bf11-5906e774b443/
+EBA%202024-2026%20SPD%20%281%29.pdf
+The Year Ahead '26 - Eliant's Exploits https://www.eliantcapital.com/p/the-year-
+ahead-26
+vender dólares, pasarse a pesos y aprovechar las tasas altas. Pero ... https://
+www.instagram.com/reel/DQU44NXktp1/
+unigrams.txt - Hugging Face https://huggingface.co/Cherishh/wav2vec2-slu-1/
+resolve/refs%2Fpr%2F1/unigrams.txt?download=true
+38. 
+39. 
+40. 
+41. 
+42. 
+43. 
+44. 
+45. 
+46. 
+47. 
+48. 
+49. 
+50. 
+51. 
+52. 
+53. 
+
+=== PAGE 15 ===
+[PDF] cfe-ercim 2013 - CMStatistics https://www.cmstatistics.org/ERCIM2013/docs/
+BoA.pdf
+• Cricket Investor • (@thedraftuk) • Instagram photos and videos https://
+www.instagram.com/thedraftuk/
+[PDF] Argentina - International Monetary Fund https://www.imf.org/-/media/files/
+publications/cr/2024/english/1argea2024002.pdf
+[PDF] Central banking in the Americas: Lessons from two decades https://
+www.bis.org/publ/bppdf/bispap143.pdf
+[PDF] Lehman Brothers monthly risk meeting https://fcic-static.law.stanford.edu/
+cdn_media/fcic-testimony/SEC/
+SEC%20Follow%20Up%20Exhibits%20Part%20E%20SEC_TM_FCIC_006001-7085.pd
+f
+[PDF] Stablecoins, the Digital Euro and the Future of Monetary Sovereignty ... https://
+www.intereconomics.eu/archive/year/2026/number/2.html?pdf=files/journal-issues/
+intereconomics/pdf/2026/IE%20Heft%202%202026%20final_3_korr.pdf
+[PDF] BUILDING RESILIENT SUPPLY CHAINS, REVITALIZING ... https://
+bidenwhitehouse.archives.gov/wp-content/uploads/2021/06/100-day-supply-chain-
+review-report.pdf?
+utm_source=sfmc%E2%80%8B&utm_medium=email%E2%80%8B&utm_campaign=
+20210610_Global_Manufacturing_Economic_Update_June_Members
+[PDF] Oil and Capital Flight: The Case of Angola | PERI UMASS https://
+peri.umass.edu/wp-content/uploads/2025/01/WP-534-OFS-6-Angola.pdf
+Investment Climate Statements: Custom Report Excerpts https://www.state.gov/
+report/custom/d645960667
+[PDF] Eye on the Market Outlook 2025: The Alchemists https://am.jpmorgan.com/
+content/dam/jpm-am-aem/global/en/insights/eye-on-the-market/the-alchemists-
+amv.pdf
+[PDF] Folder 1772519: Travel briefs, Venezuela (01/12 ... - The World Bank https://
+thedocs.worldbank.org/en/doc/452301391201387782-0560011969/original/
+WorldBankGroupArchivesFolder1772519.pdf
+[PDF] Cuba's Economic Change in Comparative Perspective https://
+www.brookings.edu/wp-content/uploads/2016/06/cubas-economic-change-english-
+web-1.pdf
+la práctica de comprar dólares oficiales baratos y luego usarlos en ... https://
+www.instagram.com/p/DPE_nFngAW7/
+La Comisión Nacional de Valores (CNV) dispuso una reforma a las ... https://
+www.facebook.com/comercioyjusticia.info/posts/la-comisi%C3%B3n-nacional-de-
+valores-cnv-dispuso-una-reforma-a-las-restricciones-que-/1832818864744928/
+54. 
+55. 
+56. 
+57. 
+58. 
+59. 
+60. 
+61. 
+62. 
+63. 
+64. 
+65. 
+66. 
+67. 
+
+=== PAGE 16 ===
+Lo que PODES y NO PODES HACER durante 90 días si operaste ... https://
+www.instagram.com/reel/DPMeY97EeG3/
+Compra de dólares y nuevas medidas: te lo explicamos fácil https://
+www.naranjax.com/blog/compra-de-dolares-y-nuevas-medidas-te-lo-explicamos-facil
+Nuevo cepo al dólar: restricciones del Banco Central | TikTok https://
+www.tiktok.com/@charlyfornas/video/7554483371770907915
+quienes compren dólar oficial deberán esperar 90 días para operar ... https://
+www.instagram.com/reel/DPFYJ-nARi1/
+#PodcastRadioAmérica Episodio #12 | T4 Conecta2 - Facebook https://
+www.facebook.com/radioamericahn/posts/podcastradioam%C3%A9rica-episodio-12-
+t4-conecta2-aunque-el-banco-central-no-lo-quiera/733065792196174/
+A través de la Comunicación “A” 8336, el BCRA dispuso una norma ... https://
+www.facebook.com/canal26/posts/a-trav%C3%A9s-de-la-comunicaci%C3%B3n-
+a-8336-el-bcra-dispuso-una-norma-que-afecta-directam/1228567929305436/
+[PDF] INFORMACION DE ENTIDADES FINANCIERAS - BCRA https://
+www.bcra.gob.ar/archivos/Pdfs/Publicaciones/Entidades/201011a.pdf
+Nueva restricción al dólar: qué se puede hacer y qué no tras los ... https://
+www.ambito.com/finanzas/nueva-restriccion-al-dolar-que-se-puede-hacer-y-que-no-
+los-anuncios-del-gobierno-n6195896
+El dólar blue vuelve a moverse fuerte en la City La operatoria en el ... https://
+www.instagram.com/reel/DPPMYZRAcoZ/
+El FMI pidió reformar el BCRA, un dólar más flexible y no confiar ... https://
+www.facebook.com/Infobae/posts/el-fmi-pidi%C3%B3-reformar-el-bcra-un-
+d%C3%B3lar-m%C3%A1s-flexible-y-no-confiar-tanto-en-la-pol/1490550016451124/
+[PDF] Informe Anual al Congreso. Año 2024 - BCRA https://www.bcra.gob.ar/
+archivos/Pdfs/PublicacionesEstadisticas/Informecongreso2024.pdf
+[PDF] RÉGIMEN CAMBIARIO EN COSTA RICA https://www.academiaca.or.cr/wp-
+content/uploads/2017/05/Libroanual_06.pdf
+Informe Anual 2025 | Banco Central de Nicaragua https://www.bcn.gob.ni/
+publicaciones/informe-anual-2025-0
+¿Quieres saber cómo evolucionó el Valor Referencial del dólar que ... https://
+www.facebook.com/BancoCentralBO/posts/quieres-saber-c%C3%B3mo-
+evolucion%C3%B3-el-valor-referencial-del-d%C3%B3lar-que-procesa-el-bcb-/
+1291435276415775/
+[PDF] TESIS DE GRADO - Repositorio UMSA https://repositorio.umsa.bo/bitstream/
+handle/123456789/41204/T-2985.pdf?sequence=1&isAllowed=y
+68. 
+69. 
+70. 
+71. 
+72. 
+73. 
+74. 
+75. 
+76. 
+77. 
+78. 
+79. 
+80. 
+81. 
+82. 
+
+=== PAGE 17 ===
+La incertidumbre cambiaria en las divisas generaba preocupación ... https://
+www.facebook.com/EconomiaBo/posts/la-incertidumbre-cambiaria-en-las-divisas-
+generaba-preocupaci%C3%B3n-en-las-familias-/1360136809487034/
+#Cambio La brecha cambiaria del informal se posiciona, de esta ... https://
+www.facebook.com/diariochaco/posts/cambio-la-brecha-cambiaria-del-informal-se-
+posiciona-de-esta-forma-en-140-respec/754326776720340/
+[PDF] Historia Económica Monetaria del Bicentenario de Bolivia https://
+www.bcb.gob.bo/webdocs/publicacionesbcb/2025/10/09/historia_economica.pdf
+Fondos Comunes de Inversión - Comisión Nacional de Valores https://
+www.cnv.gov.ar/SitioWeb/FondosComunesInversion
+Licitaciones - Buenos Aires - A3 Mercados - Market Data https://
+marketdata.mae.com.ar/licitaciones
+Informes y reportes - MCI - Momentum Capital Investment https://mci.com.ar/
+informes-y-reportes/
+Buscador - Matba-Rofex https://matbarofex.com.ar/documentos?
+query=&cat=All&tag=All&fecha%5Bmin%5D=&fecha%5Bmax%5D=&valid=1&page
+=9
+https://funds.dws.com/es-es/StaticChartView131298/ https://funds.dws.com/es-es/
+StaticChartView131298/
+Cotizaciones de Futuros - PPI https://www.portfoliopersonal.com/Cotizaciones/
+Futuros
+26 febrero, 2026 - Rava Bursátil https://web.rava.com/2026/02/26/
+Avisos para inversores - BBVA Argentina https://www.bbva.com.ar/personas/
+productos/inversiones/avisos-para-inversores.html
+CAMBIOS EN LOS FCI MONEY MARKET La CNV modificó el ... https://
+www.instagram.com/p/DW6PGKujsw5/
+La CNV limita el porcentaje de participación en cauciones bursátiles ... https://
+www.estudio-ofarrell.com/la-cnv-limita-el-porcentaje-de-participacion-en-cauciones-
+bursatiles-para-los-fci-money-market/
+Se modifica el régimen de Fondos Money Market - Lexology https://
+www.lexology.com/library/detail.aspx?g=b7575a53-2721-4ce2-9b33-c0c90d36c8e6
+Ministerio de Justicia y Derechos Humanos - Argentina - InfoLEG https://
+servicios.infoleg.gob.ar/infolegInternet/anexos/420000-424999/421796/norma.htm
+Global financial stability report discussion on April 8 - Facebook https://
+www.facebook.com/imf/posts/corporate-private-credit-is-a-rapidly-growing-asset-
+class-that-now-rivals-other-/828153869355404/
+83. 
+84. 
+85. 
+86. 
+87. 
+88. 
+89. 
+90. 
+91. 
+92. 
+93. 
+94. 
+95. 
+96. 
+97. 
+98. 
+
+=== PAGE 18 ===
+[PDF] how finance can continue to support growth in EMEs https://www.bis.org/
+publ/bppdf/bispap148.pdf
+[PDF] World Economic Forum - Global Risks Report 2026 https://
+reports.weforum.org/docs/WEF_Global_Risks_Report_2026.pdf
+[PDF] Financial Stability Report. Spring 2024 - Banco de España https://www.bde.es/
+f/webbe/Secciones/Publicaciones/InformesBoletinesRevistas/
+InformesEstabilidadFinancera/24/FSR_Spring2024.pdf
+[PDF] ref08315-pillar-3-disclosure-ibercaja-2024-en.pdf - PCAF https://
+carbonaccountingfinancials.com/files/institutions_downloads/ref08315-pillar-3-
+disclosure-ibercaja-2024-en.pdf
+[PDF] Closing the Global Biodiversity Financing Gap - Paulson Institute https://
+www.paulsoninstitute.org/wp-content/uploads/2020/09/FINANCING-NATURE_Full-
+Report_Final-Version_091520.pdf
+[PDF] Closing the Global Biodiversity Financing Gap https://www.nature.org/
+content/dam/tnc/nature/en/documents/FINANCINGNATURE_FullReport_091520.pdf
+[PDF] UNLOCKING THE INCLUSIVE GROWTH STORY OF THE 21ST ... https://
+newclimateeconomy.net/sites/default/files/2023-11/NCE_2018_FULL-REPORT_2.pdf
+[PDF] TABLE OF CONTENTS - The University of Fiji https://www.unifiji.ac.fj/wp-
+content/uploads/2022/04/Dossier-1.pdf
+Global PR for Business Leaders: TV, Production & Advertising https://
+www.100news.tv/2023/04/global-education-trends.html
+Estadísticas e Indicadores | BCRA https://www.bcra.gob.ar/estadisticas-indicadores/
+INDEC: Instituto Nacional de Estadística y Censos de la República ... https://
+www.indec.gob.ar/
+[PDF] Índice de precios al consumidor (IPC). Cobertura nacional. Mayo de ... https://
+www.indec.gob.ar/uploads/informesdeprensa/ipc_06_26C132AEE4E9.pdf
+Indice Precio al Consumidor IPC Porcentajes acumulados ... https://
+www.instagram.com/reel/DZIMSlYK27m/
+Informe del BCRA proyecta una inflación de 20,1% para 2026 https://fecoi.org.ar/
+informe-del-bcra-proyecta-una-inflacion-de-201-para-2026/
+Relevamiento de Expectativas de Mercado (REM) - BCRA https://www.bcra.gob.ar/
+relevamiento-expectativas-mercado-rem/
+Calculadora Ajuste por Inflación Argentina - IPC INDEC 2017-2026 https://
+servidos.ar/calculadora-ajuste-inflacion
+Tasas vs. precios: rendimiento de plazo fijo en inflación - MEGAQM https://
+megaqm.com.ar/tasas-vs-precios-rendimiento-de-plazo-fijo-en-inflacion/
+99. 
+100. 
+101. 
+102. 
+103. 
+104. 
+105. 
+106. 
+107. 
+108. 
+109. 
+110. 
+111. 
+112. 
+113. 
+114. 
+115. 
+
+=== PAGE 19 ===
+El spot avanzó 1,3% (18)ayerycerróen1.426, frente a los ... - PPI https://
+www.portfoliopersonal.com/research/informes/
+D_lar_CCL_Oficial_Bandas_Deuda_Globales_Pesos_Merval_Acciones_PMI_ISM_Inflaci
+_n
+Analistas mantienen en 30,5% estimación de inflación de Argentina ... https://
+gbm.com/media/noticia/analistas-mantienen-en-305-estimacion-de-inflacion-de-
+argentina-para-2026-banco-central/
+La brecha cambiaria que espera el mercado para 2025: qué pistas ... https://
+www.bloomberglinea.com/latinoamerica/argentina/la-brecha-cambiaria-que-espera-
+el-mercado-para-2025-que-pistas-surgen-del-precio-de-los-bonos/
+DÓLAR COLAPSADO ¿NO HAY COMPRADORES? (2026) [Clave ... https://
+www.youtube.com/watch?v=sJhfPu3tMEU
+Un movimiento de las empresas argentinas está ... - Instagram https://
+www.instagram.com/reel/DUrV126DeIP/
+Brecha cambiaria, riesgo país; ¿el momento de estirar la vida útil del ... https://
+novedadeseconomicas.ieral.org/brecha-cambiaria-riesgo-pais-el-momento-de-estirar-
+la-vida-util-del-cepo/
+1.302DólarCCL:1.309 Dólar mayorista: $1.073,38 Brecha ... https://
+www.instagram.com/p/DHyNCRLsKmi/
+[PDF] Nota Situación Argentina Junio 2025 - BBVA Research https://
+www.bbvaresearch.com/wp-content/uploads/2025/06/Editorial-Situacion-Argentina-
+Junio-2025-ESP.pdf
+Brecha Cambiaria Hoy: 2,3% (jun 2026) | Indicadores AR https://indicadores.ar/
+indicadores-economicos/brecha-cambiaria
+La brecha cambiaria roza el 10% y es la mayor desde abril tras la ... https://
+www.infobae.com/economia/2025/09/30/la-brecha-cambiaria-roza-el-10-y-es-la-
+mayor-desde-abril-tras-la-suba-de-los-dolares-financieros-y-el-blue/
+Dólar en 2025: ¿Abajo de 1000? - YouTube https://www.youtube.com/watch?
+v=zOvp-_YrP-c
+Movebank https://datarepository.movebank.org/entities/sensor/
+42265c8f-1b25-4ed9-9f0c-d647f7fdec87?spc.page=1&f.subject=Argentina,equals
+(PDF) Análisis de rendimientos ajustados por riesgo de fondos de ... https://
+www.researchgate.net/publication/
+366665878_Analisis_de_rendimientos_ajustados_por_riesgo_de_fondos_de_inversion_
+de_renta_variable_en_Argentina
+Análisis de rendimientos ajustados por riesgo de fondos de ... - Dialnet https://
+dialnet.unirioja.es/servlet/articulo?codigo=8913347
+116. 
+117. 
+118. 
+119. 
+120. 
+121. 
+122. 
+123. 
+124. 
+125. 
+126. 
+127. 
+128. 
+129. 
+
+=== PAGE 20 ===
+https://valuations.atlas.red/es-AR/report/a63cd5c8... https://valuations.atlas.red/es-
+AR/report/a63cd5c8-73e4-45aa-b8e7-8b5a3e90632e
+https://www.spglobal.com/spdji/es/indices/equity/s... https://www.spglobal.com/
+spdji/es/indices/equity/sp-byma-argentina-general-financials-sector-index/?
+kw=%2525252525252525257bkeyword%2525252525252525257d%252525253fkw
+%252525253d%2525252525252525257bkeyword%2525252525252525257d%25252
+5253fkw%252525253d%2525252525252525257bkeyword%2525252525252525257d
+%252525253fkw%252525253d%2525252525252525257bkeyword%2525252525252
+525257d
+Insights - BlackRock https://www.blackrock.com/institutions/en-apac/insights
+Análisis y Mercados | J.P. Morgan Private Bank América Latina ES https://
+privatebank.jpmorgan.com/latam/es/insights
+Fondo de Inversión Performance V ARS - Balanz https://balanz.com/inversiones/
+fondos/performance-v/
+[PDF] VALO-Memoria-y-balance-2024.pdf https://www.valo.ar/wp-content/uploads/
+2025/04/VALO-Memoria-y-balance-2024.pdf?v=2
+Baja de tasas del BCRA: qué va a pasar con los rendimientos de los ... https://
+www.infobae.com/economia/2024/04/12/baja-de-tasas-del-bcra-que-va-a-pasar-con-
+los-rendimientos-de-los-fondos-comunes-de-inversion/
+Una medida del Banco Central afectará a una de las inversiones en ... https://
+www.lanacion.com.ar/economia/una-medida-del-banco-central-afectara-al-
+rendimiento-de-una-de-las-inversiones-mas-usadas-por-los-nid04022025/
+Informe Monetario Mensual, abril de 2026 - BCRA https://www.bcra.gob.ar/
+publicaciones/informe-monetario-mensual-abril-de-2026/
+Análisis Gráfico del Informe Monetario Mensual del BCRA de Mayo https://
+criteria.com.ar/informes-monetarios-mensuales/mayo-2026-analisis-grafico-del-
+informe-monetario-mensual-del-bcra/
+Cotizacion del Dólar MEP al 16 de febrero de 2026 - Rava Bursátil https://
+www.rava.com/cotizaciones/historico/dolar-mep/2026/02/16
+Daily Mercados 04-06-2026 - PPI https://www.portfoliopersonal.com/research/
+informes/Daily_Mercados_04_06_2026
+[PDF] INSTRUMENTOS GARANTIZADOS - MAV S.A. https://mav-sa.com.ar/wp-
+content/uploads/2026/02/11_02_26-Informe-Instrumentos-Garantizados-MAV.pdf
+Informe Diario de Bonos y tasas: 03-06-2026 | IOL invertironline https://
+www.invertironline.com/posts/informe-diario-de-bonos-y-tasas-03-06-2026
+[PDF] Abril 2026 - UADE https://www.uade.edu.ar/media/rxebsqx5/club-de-
+finanzas-informe-finanzas-abril-2026.pdf
+130. 
+131. 
+132. 
+133. 
+134. 
+135. 
+136. 
+137. 
+138. 
+139. 
+140. 
+141. 
+142. 
+143. 
+144. 
+
+=== PAGE 21 ===
+USD 2.000 M Pagos desde julio 2026 — Amortización al ... https://x.com/
+robertojirusta/status/2026750770616340950
+INFLACIÓN OFICIAL vs. BOLSILLO REAL ARGENTINA 2026 ... https://
+www.facebook.com/traslasierranoticias/posts/-inflaci%C3%B3n-oficial-vs-bolsillo-
+real-argentina-2026mientras-el-indec-proyecta-una/1307911811363188/
+La inflación de mayo fue 2,1%, según el INDEC - Pagina 12 https://
+www.pagina12.com.ar/2026/06/11/la-inflacion-de-mayo-fue-21-segun-el-indec/
+Calculadora de inflación acumulada - Chequeado https://chequeado.com/
+inflacionacumulada/
+[PDF] Crisis of capitalism? Economic crisis? Crisis of economic sociology? https://
+econsoc.mpifg.de/49430/econ_soc_25-3.pdf
+Régimen de bandas cambiarias - BCRA https://www.bcra.gob.ar/regimen-de-bandas-
+cambiarias/
+El Banco Central flexibiliza el régimen cambiario para ... https://allende.com/
+bancario/el-banco-central-flexibiliza-el-regimen-cambiario-para-exportaciones-
+transferencias-en-moneda-extranjera-y-pagos-financieros-04-14-2026/
+BANCO CENTRAL DE LA REPÚBLICA ARGENTINA https://www.boletinoficial.gob.ar/
+detalleAviso/primera/339589/20260317
+FINALMENTE, EL BCRA BAJO 3 PUNTOS LA TASA - LinkedIn https://
+es.linkedin.com/pulse/finalmente-el-bcra-bajo-3-puntos-la-tasa-megaqm-fjvif
+Dólar oficial: hasta cuándo aguanta el crawling peg del 2% mensual ... https://
+www.ambito.com/finanzas/dolar-oficial-cuando-aguanta-el-crawling-peg-del-2-
+mensual-funcionara-el-ancla-cambiaria-n5913421
+El Sol de Calingasta - Facebook https://www.facebook.com/
+Www.ElSolDeCalingasta.com.ar/posts/el-banco-central-de-la-rep%C3%BAblica-
+argentina-bcra-acaba-de-informar-cambios-en-el-/1336623390706195/
+El BCRA flexibilizó el acceso al mercado de cambios para ... - Errepar https://
+documento.errepar.com/actualidad/el-bcra-flexibiliza-el-acceso-al-mercado-de-
+cambios-para-la-compra-de-moneda-extranjera-20250423094146056
+Cómo la nueva restricción del BCRA recalienta el dólar financiero y ... https://
+www.infobae.com/opinion/2025/09/27/como-la-nueva-restriccion-del-bcra-
+recalienta-el-dolar-financiero-y-agranda-la-brecha-cambiaria/
+ANÁLISIS DE LA COMUNICACIÓN “A” 8226 DEL BCRA - YouTube https://
+www.youtube.com/watch?v=dL7zQ4pZYf4
+El BCRA flexibiliza el ingreso y uso de dólares, pero endurece ... https://
+www.roadshow.com.ar/el-bcra-flexibiliza-el-ingreso-y-uso-de-dolares-pero-endurece-
+controles-para-evitar-arbitrajes-financieros/
+145. 
+146. 
+147. 
+148. 
+149. 
+150. 
+151. 
+152. 
+153. 
+154. 
+155. 
+156. 
+157. 
+158. 
+159. 
+
+=== PAGE 22 ===
+Mediante la RG N° 1096, la @cnv.argentina introdujo ... - Instagram https://
+www.instagram.com/p/DSnBXI6EcKE/
+Camara Argentina de Fondos de Inversión - Marco Legal - CAFCI https://
+www.cafci.org.ar/marco-legal.html
+Más plazos fijos en los fondos Money Market: la CNV elevó el tope ... https://
+www.ambito.com/finanzas/mas-plazos-fijos-los-fondos-money-market-la-cnv-elevo-el-
+tope-inversion-individual-n6264322
+CNV fija límite del 20% para inversión en FCI Money Market https://safras.com.br/es/
+cnv-limite-20-cauciones-fci-money-market/
+Análisis de rendimientos ajustados por riesgo de fondos de ... https://
+revistas.uns.edu.ar/eca/article/view/2773
+[PDF] Pellegrini Agro - Informe de Calificación https://www.fixscr.com/site/
+download?file=K4il3r-pYT7p14mygHbntHDn27ust8Z-.pdf
+[PDF] Objetivo y política de inversión - Schroders https://api.schroders.com/
+document-store/id/75358345-8e11-480a-be81-0f40e1c3c385
+[PDF] ANALISIS DE LA RELACION RENDIMIENTO-RIESGO DE ... https://
+repositorio.udesa.edu.ar/bitstreams/213879f0-2eeb-44f0-9fec-a114a4da9bfa/
+download
+[PDF] INVERSIONES ROSCHELL, SICAV, S.A. Informe Semestral del ... https://
+assets.santandermedia.com/adobe/assets/urn:aaid:aem:a928d844-50c9-4725-aac7-
+ab28f9382a8c/original/as/ES_sicavs-inversiones_roschell-semestral_banca-
+privadaWeb.pdf
+[PDF] Análisis empírico de la performance ajustada de los Fondos ... https://
+ri.unsam.edu.ar/bitstream/123456789/3505/1/TMAG%20EEYN%202025%20BB.pdf
+Análisis y Puntuación de Riesgo de Private Bank Funds I https://
+global.morningstar.com/es/inversiones/fondos/0P0001K15N/riesgo
+[PDF] MCAM - Reglamento de Gestión Max Money Market FCI.docx https://
+www.max.capital/documents/48/MCAM_-
+_Reglamento_de_Gesti%C3%B3n_Max_Money_Market_FCI.pdf
+Comunicación “A” 8226 Flexibilización del Régimen Cambiario https://
+beccarvarela.com/novedades/comunicacion-a-8226-flexibilizacion-del-regimen-
+cambiario/
+[PDF] EXTERIOR Y CAMBIOS Texto ordenado al 25/08/2025 - BCRA https://
+www.bcra.gob.ar/archivos/Pdfs/Texord/t-excbio.pdf
+BANCO CENTRAL DE LA REPÚBLICA ARGENTINA https://www.boletinoficial.gob.ar/
+detalleAviso/primera/324125/20250416
+BCRA comunica que volverá a operar el mercado de cambios https://
+www.lexology.com/library/detail.aspx?g=bdf43327-1e36-4c10-b3bd-84f98f1d43a5
+160. 
+161. 
+162. 
+163. 
+164. 
+165. 
+166. 
+167. 
+168. 
+169. 
+170. 
+171. 
+172. 
+173. 
+174. 
+175. 
+
+=== PAGE 23 ===
+#Legislación BCRA: se flexibiliza el acceso al mercado de cambios ... https://
+aldiaargentina.microjuris.com/2025/04/23/legislacion-bcra-se-flexibiliza-el-acceso-al-
+mercado-de-cambios-para-la-compra-de-moneda-extranjera/
+BCRA flexibiliza exigencias para ingreso y salida de dólares pero ... https://
+www.bloomberglinea.com/latinoamerica/argentina/bcra-flexibiliza-exigencias-para-
+ingreso-y-salida-de-dolares-pero-amplia-alcance-de-norma-clave/
+Normativa de Exterior y Cambios - BCRA https://www.bcra.gob.ar/normativa-de-
+exterior-y-cambios/
+(PDF) Estimating Conditional Value at Risk in the Tehran Stock ... https://
+www.researchgate.net/publication/
+333363815_Estimating_Conditional_Value_at_Risk_in_the_Tehran_Stock_Exchange_B
+ased_on_the_Extreme_Value_Theory_Using_GARCH_Models
+[PDF] Tail Risk Alert Based on Conditional Autoregressive VaR by ... - arXiv https://
+arxiv.org/pdf/2412.06193
+[PDF] No Country for Normal Distributions: A Tail of Argentine Risk https://
+papers.ssrn.com/sol3/Delivery.cfm/5908363.pdf?abstractid=5908363&mirid=1
+the Hard Peg and Real Misalignment in Argentina https://
+openknowledge.worldbank.org/entities/publication/4cbac2e4-0745-58ab-809e-
+fc3702dc3293
+[PDF] Master's Degree in Economics and Finance - e-Repositori UPF https://
+repositori.upf.edu/bitstreams/4c1bf46f-7301-4354-b527-7a7c28c98cef/download
+Value-at-Risk: una comparación del modelo GARCH con ... https://
+www.revistas.espol.edu.ec/index.php/compendium/article/view/1250
+Argentina - Publications Filter https://www.iif.com/publications/publications-filter/t/
+Argentina
+How Financial Stress Can Impact Fiscal and Monetary Policies - MDPI https://
+www.mdpi.com/2225-1146/12/4/37
+[PDF] Mispricing and Risk Premia in Currency Markets - WRAP: Warwick https://
+wrap.warwick.ac.uk/id/eprint/180610/1/WRAP-Mispricing-risk-premia-currency-
+markets-23.pdf
+[PDF] Argentina - International Monetary Fund https://www.imf.org/-/media/files/
+publications/cr/2022/english/1argea2022004.pdf
+Te presentamos nuestros 3 fondos compuestos por Renta Fija ... https://
+www.instagram.com/p/ChpZUL9uay9/
+Fondo Performance I - Fondos Balanz https://www.fondosbalanz.com/fondos/
+renta_fija/fondos/fci_performance_i
+Balanz Performance III - Fondo Detalle - Cohen Aliados Financieros https://
+fondos.cohen.com.ar/Bursatil/Fondo/3707/Balanz+Performance+III+-+Clase+A
+176. 
+177. 
+178. 
+179. 
+180. 
+181. 
+182. 
+183. 
+184. 
+185. 
+186. 
+187. 
+188. 
+189. 
+190. 
+191. 
+
+=== PAGE 24 ===
+[PDF] Balanz Performance III - FIX SCR https://www.fixscr.com/site/download?
+file=BaTIXub1ufESQJQJiLdA7IwVdU-ZiQng.pdf
+Dólar MEP y CCL en diferentes situaciones ¿Cómo se ... - Instagram https://
+www.instagram.com/reel/C9A1zL6vBkD/
+Microsoft Power BI https://app.powerbi.com/view?
+r=eyJrIjoiYWFkYjMxMDktOTc1MC00ZWM0LWFlMTItMTdiZTMxMjFhMzExIiwidCI6Ij
+AwNDY0ZmQyLTdiNzgtNGI3YS05M2NhLWY3OTQwZjk3NjRkZiJ9
+[PDF] Competitividad cambiaria en el centro del debate - Contenidos CREA https://
+media.contenidoscrea.org.ar/adjuntos/334/documentos/000/007/0000007728.pdf
+[PDF] La jurisprudencia en una economía con tipo de cambio múltiple. El ... https://
+www.scielo.org.ar/pdf/priu/n97/2524-9525-priu-97-215.pdf
+[PDF] Presentando el índice S&P MERVAL (MEP): una mirada local en ... https://
+www.spglobal.com/spdji/es/documents/blog/blog-introducing-the-sp-merval-index-
+mep-a-local-usd-view-of-argentinas-equity-market-es.pdf
+[PDF] El mercado de cambios bajo la lupa | Fundar https://fund.ar/wp-content/
+uploads/2023/08/Fundar_mercado_de_cambios_bajo_la_lupa-2.pdf
+Dólar en Argentina: las dos variables clave que determinarán la ... https://
+www.bloomberglinea.com/2022/05/03/dolar-en-argentina-las-dos-variables-clave-
+que-determinaran-la-brecha-cambiaria/
+Dólar: ¿qué es la brecha cambiaria y por qué aumentó esta semana? https://
+chequeado.com/el-explicador/dolar-que-es-la-brecha-cambiaria-y-por-que-aumento-
+esta-semana/
+Nuestros Informes - Club Finanzas UNLP https://www.clubdefinanzasunlp.com/
+informes/
+[PDF] Informe sobre Bancos / Febrero de 2026 | BCRA | 1 https://www.bcra.gob.ar/
+archivos/Pdfs/PublicacionesEstadisticas/informes/InfBanc0226.pdf
+Banco Central de Chile publica el Informe de Estabilidad Financiera ... https://
+www.bcentral.cl/contenido/-/detalle/prensa/nota-de-prensa/bcch-publica-ief-primer-
+semestre-2026
+Liquidez del sistema financiero - BCRP - Series mensuales https://
+estadisticas.bcrp.gob.pe/estadisticas/series/mensuales/liquidez-del-sistema-financiero-
+variacion-12-meses
+[PDF] Informe de Estabilidad Financiera. Primavera 2026 - Banco de España https://
+www.bde.es/wbe/p/b248c7ed1b52e910VgnVCM100000dec89783RCRD/webbe/
+GAP/informacion-embargada/20260514_IEF_Primavera2026.pdf
+[PDF] Informe de ESTABILIDAD FINANCIERA (IEF) https://www.bcp.gov.py/
+documents/20117/2456908/IEF+mayo+2026+.pdf/dde8ac4d-6029-b49b-
+d186-4954ac950929?t=1779993368250
+192. 
+193. 
+194. 
+195. 
+196. 
+197. 
+198. 
+199. 
+200. 
+201. 
+202. 
+203. 
+204. 
+205. 
+206. 
+
+=== PAGE 25 ===
+Cotizacion del Dólar MEP al 24 de febrero de 2026 - Rava Bursátil https://
+www.rava.com/cotizaciones/historico/dolar-mep/2026/02/24
+[PDF] Marzo 2026 - Boletín Analítico de Gestión de Liquidez https://
+contenido.bce.fin.ec/documentos/Estadisticas/SectorMonFin/Liquidez/gli202603.pdf
+[PDF] Resumen Política de Ejecución de Órdenes – Enero 2026 - BBVA CIB https://
+www.bbvacib.com/wp-content/uploads/2026/01/Resumen-de-la-Politica-de-
+Ejecucion-de-Ordenes-%E2%80%93-Enero-2026.pdf
+Subastas de contracción de liquidez en moneda nacional - BCCR https://gee.bccr.fi.cr/
+indicadoreseconomicos/cuadros/frmvercatcuadro.aspx?codcuadro=1573&idioma=1
+[PDF] PERU: REPORTE DIARIO / DAILY REPORT https://www.mef.gob.pe/
+contenidos/english/report/2026/Daily_06_02_26.pdf
+Conocé los números definitivos de mayo El INDEC informó que la ... https://
+www.instagram.com/p/DZdVP3LGNNl/
+Fondo Común de Inversión Money Market en Dólares - Balanz https://balanz.com/
+inversiones/fondos/money-market-dolares/
+Results - etfinfo https://www.etfinfo.com/landingpage
+[PDF] Value at Risk (VaR) - Redalyc https://www.redalyc.org/journal/
+5718/571869209010/571869209010.pdf
+J.P. Morgan's Risk Measure in Spotlight - WSJ https://www.wsj.com/articles/
+SB10001424052702303644004577523112247057258
+https://www.thriventfunds.com/content/dam/thrivent... https://
+www.thriventfunds.com/content/dam/thrivent/mcs/site-media/etfs/daily-holdings-
+tcpb.csv
+Funds and indexes · Backtest by Curvo https://curvo.eu/backtest/en/funds
+[PDF] El Condicional Value at Risk en la gestión de carteras ... - SBS https://
+www.sbs.gob.pe/Portals/0/jer/EDIPUB_VOLUMEN2NB/6MartinMato.pdf
+[PDF] Portfolio Holdings Listing Strategic Advisers Alternatives Fund as of ... https://
+www.actionsxchangerepository.fidelity.com/ShowDocument/documentPDF.htm?
+_fax=-18%2342%23-61%23-110%23114%2378%23117%2320%23-1%2396%2339%
+23-62%23-21%2386%23-100%2337%2316%2335%23-68%2391%23-66%2354%231
+03%23-16%2369%23-30%2358%23-20%2376%23-84%23-11%23-87%2348%23-52
+%23-21%23-96%23-58%23-33%23-107%23-46%2393%23113%23-112%23127%23-
+42%23-97%2330%23-58%23114%2311%2320%23110%23119%23-12%23-24%23-5
+4%2347%2346%23-19%23108%2331%23-55%2311%2369%23-59%23-124%2316%
+23-91%23-96%23-87%23-102%23-42%2357%23-112%23-48%2350%236%23-51%2
+3-31%23-73%23-96%2327%23-128%2371%23-76%2325%23-57%23-28%2393%235
+4%23-66%23110%2346%2365%23-25%2341%23-105%23-113%23-71%2333%2321
+%23-31%239%2384%23-50%2312%23101%2374%23125%2383%23102%23-31%23
+207. 
+208. 
+209. 
+210. 
+211. 
+212. 
+213. 
+214. 
+215. 
+216. 
+217. 
+218. 
+219. 
+220. 
+
+=== PAGE 26 ===
+-69%2352%2348%23102%2375%2344%23-78%2384%2354%2320%23-87%23-9%2
+3-17%2319%23-70%23-102%23-108%2345%23-124%23-2%238%23-28%23-116%2
+3-65%2343%2343%23108%23-48%23-31%235%2365%2374%23123%2315%2381%
+23-104%23-45%23-38%23122%23-101%23-49%2365%2386%23123%23121%23-67
+%23-98%239%23-73%23125%23-49%23-71%2336%23-83%2382%23-33%23-57%2
+3125%2386%23-39%23-86%23-67%23-11%23-125%23
+[PDF] KEY DATA Country risk premium. On March 18 Argentina's ... - USAL https://
+www.usal.edu.ar/fceye/wp-content/uploads/sites/6/2025/03/Newsletter-
+March-2025.pdf
+[PDF] 2024 Long-term Annualized Capital Market Expected Returns - CIBC https://
+www.cibc.com/content/dam/cam-public-assets/pdf/cam-2024-lter-report-final-en.pdf
+[PDF] Guarantee funds up to 08/30/2024 - Argentina Clearing https://
+argentinaclearing.com.ar/wp-content/uploads/2022/05/Guarantee-Fund-Agosto.pdf
+[PDF] Foreign Exchange Intervention Rule for Central Banks https://www.imf.org/-/
+media/files/publications/wp/2021/english/wpiea2021032-print-pdf.pdf
+Financial De-Dollarization in Argentina. When the Wind Alway https://
+ideas.repec.org/p/bcr/wpaper/2023106.html
+[PDF] Monetary policy challenges over two decades: a view from Argentina https://
+www.bis.org/publ/bppdf/bispap143_c.pdf
+[PDF] The Bank Regulation in Argentina - a Comparative Study of 1990 ... https://
+www.diva-portal.org/smash/get/diva2:21042/FULLTEXT01.pdf
+A Risk Characterization of Regulatory Arbitrage in Financial Markets https://
+www.researchgate.net/publication/
+353651242_A_Risk_Characterization_of_Regulatory_Arbitrage_in_Financial_Markets
+[PDF] Working Paper No. 1088 - Levy Economics Institute of Bard College https://
+www.levyinstitute.org/wp-content/uploads/2025/08/wp_1088rev.pdf
+[PDF] Structural Volatility in Argentina: A Policy Report - MIT Economics https://
+economics.mit.edu/sites/default/files/publications/
+Structural%20Volatility%20in%20Argentina.pdf
+Actualidad Normativa Cambiaria: Comunicación 'A' 8226 https://aduananews.com/
+actualidad-normativa-cambiaria-comunicacion-a-8226/
+BCRA – Comunicación "A" 8226 (11/4/25) – Régimen de Cambio ... https://
+mercojuris.com/bcra-comunicacion-a-8226-11-4-25-regimen-de-cambio-
+modificaciones/
+[PDF] Comunicación “A” 8226 - Banco Hipotecario https://www.hipotecario.com.ar/
+media/com_a8226_comunicacion_web_bh.pdf
+qué modificaciones introduce la Comunicación A 8226 en el pago ... https://
+contenidos.flyingcargo.com.ar/blog/comunicacion-a8226-bcra-importaciones
+221. 
+222. 
+223. 
+224. 
+225. 
+226. 
+227. 
+228. 
+229. 
+230. 
+231. 
+232. 
+233. 
+234. 
+
+=== PAGE 27 ===
+Alerta de Novedades Legales - 16 de abril - PAGBAM Abogados https://pagbam.com/
+newsletter/alerta-de-novedades-legales-16-de-abril/
+El Gobierno limitó las operaciones de los Fondos Comunes de ... https://
+www.infobae.com/economia/2025/11/27/el-gobierno-limito-las-operaciones-de-los-
+fondos-comunes-de-inversion-que-implica-la-medida-y-como-afecta-a-los-usuarios/
+La CNV aumentó el tope de inversión en plazos fijos a Fondos ... https://
+www.perfil.com/noticias/economia/la-cnv-aumento-el-tope-de-inversion-en-plazos-
+fijos-a-fondos-comunes-de-inversion-a40.phtml
+@diemiza - Alphacast https://www.alphacast.io/p/diemiza
+La brecha entre el dólar MEP y dólar CCL se mantiene en niveles ... https://
+www.facebook.com/BloombergLinea/posts/la-brecha-entre-el-d%C3%B3lar-mep-y-
+d%C3%B3lar-ccl-se-mantiene-en-niveles-atractivos-seg%C3%BAn/
+1233637965541270/
+La brecha entre el dólar MEP y dólar CCL se mantiene en niveles ... https://x.com/
+BloombergLinea_/status/2026661356963836359
+El dato clave que hay que mirar para analizar el mercado cambiario https://es-
+us.finanzas.yahoo.com/noticias/dato-clave-mirar-analizar-mercado-084400241.html
+¿exportadores liquidan en el MEP o vuelco de importadores al CCL? https://
+www.ambito.com/finanzas/dolares-financieros-brecha-el-mep-y-el-ccl-llego-un-
+record-8-que-hay-detras-n5977016
+Fondos Alpha de Inversión - Comparador Fondos - ICBC https://
+www.fondosalpha.icbc.com.ar/alpha/comparador-fondos
+Camara Argentina de Fondos de Inversión - Ficha de Fondo - CAFCI https://
+www.cafci.org.ar/ficha-fondo.html?q=1234;3639
+Fondo | Alpha Dólar - FIX SCR https://www.fixscr.com/emisor/view?
+type=fondo&id=5595
+fondo - Parakeet Capital https://parakeetweb.prod.ingecloud.com/Bursatil/Fondo/
+3997/Balanz+Performance+V+-+Clase+E
+Balanz Performance V - fondo https://www.parakeetcapital.com.ar/Bursatil/Fondo/
+3993/Balanz+Performance+V+-+Clase+A
+Cotización Balanz Performance III - Clase B - Fondos - Max Capital https://
+www.max.capital/mercados/cotizaciones/fondos/2576/
+Estimating Conditional Value at Risk in the Tehran Stock Exchange ... https://
+www.mdpi.com/2076-3387/9/2/40
+Conditional Value at Risk and Stress Testing in Financial ... - YouTube https://
+www.youtube.com/watch?v=jNJ6B6yzLq4
+235. 
+236. 
+237. 
+238. 
+239. 
+240. 
+241. 
+242. 
+243. 
+244. 
+245. 
+246. 
+247. 
+248. 
+249. 
+250. 
+
+=== PAGE 28 ===
+J.P. Morgan Markets: Institutional Trading, Research & Execution https://
+www.jpmorgan.com/markets
+4Q25 Report Group Risk Management - BBVA https://
+shareholdersandinvestors.bbva.com/informes/4q25-report-group-risk-management/
+BBVA Argentina Bank SA - SEC.gov https://www.sec.gov/Archives/edgar/data/
+913059/000129281425000729/bbarpr4q24_6k.htm
+USD Archives - Page 153 of 153 - BBVA CIB https://www.bbvacib.com/currency/usd/
+page/153/
+BBVA Global Markets, 7.65% 10jul2030, USD (Structured ... - Cbonds https://
+cbonds.com/bonds/1911413/
+Sale Crawling Peg, entra al terreno de juego Bandas Cambiarias https://
+novedadeseconomicas.ieral.org/sale-crawling-peg-entra-al-terreno-de-juego-bandas-
+cambiarias/
+El BCRA inicia la Fase 3 del Programa Económico. Flexibilización ... https://
+trivia.consejo.org.ar/ficha/524829-
+el_bcra_inicia_la_fase_3_del_programa_economico._flexibilizacion_cambiaria_y_flotac
+ion_entre_bandas
+Flexibilización cambiaria y flotación bandas. Comunicación “A ... https://
+contadoresenred.com/comunicacion-a-8226-bcra/
+Novedades en materia cambiaria – Comunicación “A” 8226 del BCRA https://
+www.confis.com.ar/novedades-en-materia-cambiaria-comunicacion-a-8226-del-bcra-
+rg-5672-arca/
+[PDF] COM A 8226 B.C.R.A. - faevyt.org.ar https://www.faevyt.org.ar/easyarticles/
+images/users/1624/COM-A-8226-25-BCRA.pdf
+[PDF] Boletín Analítico de Gestión de Liquidez - https: //contenido.bce.fin.ec https://
+contenido.bce.fin.ec/documentos/Estadisticas/SectorMonFin/Liquidez/gli202601.pdf
+El Directorio Ejecutivo del FMI concluye la Consulta del Artículo IV ... https://
+www.imf.org/es/news/articles/2026/05/29/pr26177-costa-rica-exec-board-
+concludes-2026-aiv-consult-mid-term-review-fcl-arrangement
+BANCO CENTRAL DE LA REPÚBLICA ARGENTINA https://www.boletinoficial.gob.ar/
+detalleAviso/primera/337315/20260109
+plotly - BBVA Research https://www.bbvaresearch.com/wp-content/uploads/special-
+section/46311/Investment_RN_web.html
+Index options | Allianz Life https://www.allianzlife.com/what-we-offer/Index-options
+Un modelo del rendimiento y la volatilidad de productos ... - Redalyc https://
+www.redalyc.org/journal/631/63178161003/html/
+251. 
+252. 
+253. 
+254. 
+255. 
+256. 
+257. 
+258. 
+259. 
+260. 
+261. 
+262. 
+263. 
+264. 
+265. 
+266. 
+
+=== PAGE 29 ===
+Income ETF Holdings - Janus Henderson Investors https://www.janushenderson.com/
+en-us/advisor/product/income-etf-jiii/full-holdings/
+https://citywire.com/americas/fund/totalreturnscha... https://citywire.com/
+americas/fund/totalreturnscharts/899540?periodmonths=3
+https://www.etoro.com/es/funds/trendingr7 https://www.etoro.com/es/funds/
+trendingr7
+Implications for corporate bonds in dollars, domestic inflation, and ... https://
+www.youtube.com/watch?v=lBDHuTCGf30
+USD/ARS | Series - MacroMicro https://en.macromicro.me/series/749/fx-usd-ars
+aplicación para países latinoamericanos, 2010 – 2022 | Lecturas de ... https://
+revistas.udea.edu.co/index.php/lecturasdeeconomia/article/view/356728
+Política Monetaria y Volatilidad del Tipo de Cambio en Economías ... https://
+saberestrategico.com/index.php/files/article/view/22
+Distribución condicional de los retornos de la tasa de cambi https://ideas.repec.org/a/
+col/000151/004425.html
+Modelo cuantitativo ARIMAX- EGARCH para la predicción de la tasa ... https://
+www.revistaespacios.com/a18v39n07/18390716.html
+un ejercicio empírico a partir de modelos GARCH univariados. https://
+revistas.urosario.edu.co/index.php/economia/article/view/1119/1013
+[PDF] Contagio en la volatilidad entre los mercados de capital y de divisas ... https://
+remef.org.mx/index.php/remef/article/download/701/796/2150
+Integración e Incertidumbre Cambiaria en América Latina https://www.secmca.org/
+recard/index.php/recard/article/view/237
+[PDF] Efecto de la pandemia COVID-19 sobre el tipo de cambio bajo el ... https://
+www.redalyc.org/journal/413/41377471005/41377471005.pdf
+[PDF] Reglas simples de análisis técnico y modelos autorregresivos en el ... https://
+estudiosdeadministracion.uchile.cl/index.php/EDA/article/view/56771/60250
+El dólar se dispara ante el tono restrictivo de la Reserva Federal https://ebury.com/es-
+es/resources/market-insights/el-dolar-se-dispara-ante-el-tono-restrictivo-de-la-reserva-
+federal-starmer-dimite-como-primer-ministro
+Conditional Value at Risk(CVaR) - Enhancing Risk Assessment with ... https://
+www.preprints.org/manuscript/202412.1657/v3
+CVaR and Tail Risk: Measuring What VaR Misses - Anton Ladnyi, CFA https://
+alcapitaladvisory.com/research/frameworks/cvar.html
+Conditional Value at Risk (CVaR): Expert Guide, Uses, and Formula https://
+www.investopedia.com/terms/c/conditional_value_at_risk.asp
+267. 
+268. 
+269. 
+270. 
+271. 
+272. 
+273. 
+274. 
+275. 
+276. 
+277. 
+278. 
+279. 
+280. 
+281. 
+282. 
+283. 
+284. 
+
+=== PAGE 30 ===
+Expected shortfall - Wikipedia https://en.wikipedia.org/wiki/Expected_shortfall
+conditional value at risk (CVaR) Research Papers - Academia.edu https://
+www.academia.edu/Documents/in/conditional_value_at_risk_CVaR_
+Conditional Value-at-Risk (CVaR) - Pomegra Wiki https://pomegra.io/wiki/
+conditional-value-at-risk/
+Conditional Value at Risk(CVaR) - Enhancing Risk Assessment with ... https://
+europepmc.org/article/ppr/ppr1018574
+exterior y cambios - adecuaciones - Jus.gob.ar - Infoleg https://
+servicios.infoleg.gob.ar/infolegInternet/verNorma.do?id=411820
+https://funds.dws.com/en-lu/StaticChartView102798/ https://funds.dws.com/en-lu/
+StaticChartView102798/
+- JPMorgan Liquidity Funds - USD Standard Money Market VNAV ... https://
+cbonds.com/etf/111822/
+Finland Institutional - BNPP AM - BNP Paribas Asset Management https://
+www.bnpparibas-am.com/en-fi/institutional/
+https://api.fundinfo.com/3.0/document?apiKey=f1160... https://api.fundinfo.com/
+3.0/document?apiKey=f11604c8-639f-4cef-a722-
+e6f41414b072&shareClass=LU0119066131&documentType=MR&Country=CH&lang
+uage=en&contraint=YES
+Investment Funds | Lombard Odier https://am.lombardodier.com/private/funds
+无主题 https://secure.icmarkets.com/?tblci=GiBDVdkzK4-SxZkMvY-mf5Fbm6jq-
+ML2Itangwbz6eyIIiDaq0Mok_j6zvD4tJGeATDIll8
+Fondos Comunes de Inversión - BBVA Asset Management https://
+www.bbvaassetmanagement.com/ar/fondos-inversion/
+Fondo Estrategia V USD - Fondos Balanz https://fondosbalanz.com/fondos/
+fondo_estrategia_v_usd
+[PDF] Balanz Capital Estrategia III USD - FIX SCR https://fixscr.com/site/download?
+file=rd-ZpshLKJUTqtYWjYXS6IQwNyJVu0y9.pdf
+BBVA Research - Centro de estudios económicos | Home https://
+www.bbvaresearch.com/
+Balanz Capital Estrategia I USD - Cohen Fondos https://fondos.cohen.com.ar/
+Bursatil/Fondo/4035/Balanz+Capital+Estrategia+I+USD+-+Clase+A
+Argentina Bonds TIR - Sovereign Bond Yield Curves Indicator https://
+es.tradingview.com/script/sgVbp1hG/
+[PDF] La relación entre el tipo de cambio oficial y el tipo de cambio negro ... https://
+cude.es/submit-a-manuscript/index.php/CUDE/article/download/128/110/110
+285. 
+286. 
+287. 
+288. 
+289. 
+290. 
+291. 
+292. 
+293. 
+294. 
+295. 
+296. 
+297. 
+298. 
+299. 
+300. 
+301. 
+302. 
+
+=== PAGE 31 ===
+aplicación para países latinoamericanos, 2010 - 2022 - vLex https://vlex.com.co/vid/
+analisis-tiempo-frecuencia-incertidumbre-1066102867
+RESUMEN - Comunicación A 8307 / 2025 - Argentina.gob.ar https://
+www.argentina.gob.ar/normativa/nacional/comunicaci%C3%B3n-8307-2025-416899
+Comunicación “A” 8307/2025 https://www.cira.org.ar/es/servicios/normativas-
+servicios/comunicacion/comunicacion-a-8307-2025/
+[PDF] Com. A 8226 https://www.bbva.com.ar/content/dam/public-web/argentina/
+documents/actualidad-normativa/Comweb8226.pdf
+[PDF] comunicación “a” 8307 - BCRA https://www.bcra.gob.ar/archivos/Pdfs/
+comytexord/A8307.pdf
+exterior y cambios - actualizacion del texto ordenado - Jus.gob.ar https://
+servicios.infoleg.gob.ar/infolegInternet/
+verNorma.do;jsessionid=78BE47C77C8E43FA4C6C73A546B5DEC0?id=416899
+Publicación de Marcos Nigro - LinkedIn https://es.linkedin.com/posts/marcos-
+nigro-5b2063237_novedades-de-la-com-a-8226-del-bcra-vigentes-
+activity-7318221515823493121-gC9H
+[PDF] Informe de Política Monetaria. Marzo de 2026 - BCRA https://
+www.bcra.gob.ar/archivos/Pdfs/PublicacionesEstadisticas/informes/informe-politica-
+monetaria-2026-T1.pdf
+Dólar MEP en Enero de 2026 — Cotizaciones historicas https://www.rava.com/
+cotizaciones/historico/dolar-mep/2026/01
+BANCO CENTRAL DE LA REPÚBLICA ARGENTINA https://www.boletinoficial.gob.ar/
+detalleAviso/primera/340665/20260413
+[PDF] INFORME DE POLITICA MONETARIA - Banco Central de Chile https://
+www.bcentral.cl/documents/d/banco-central/informe-de-politica-monetaria-
+marzo-2026-uai-elias-albagli-gerente-dpm-pdf?download=true
+Previsualizacion - PPI https://www3.portfoliopersonal.com/research/informes/
+Licitaci_n_MECON_CER_Tasa_fija_LELINKS_Compras_BCRA_Tesoro_DL_Merval_Acci
+ones_Powell_Trump_Fed
+Exportadores: nuevo mecanismo del BCRA para acumular divisas y ... https://
+es.linkedin.com/pulse/exportadores-nuevo-mecanismo-del-bcra-para-acumular-
+divisas-y-enghf
+TEXTO ORIGINAL - RESOLUCIÓN GENERAL 1038 / 2024 https://
+www.argentina.gob.ar/normativa/nacional/resoluci%C3%B3n-1038-2024-407618/
+texto
+Inflación (IPC) - OECD https://www.oecd.org/es/data/indicators/inflation-cpi.html
+Índice de inflación anual y mensual Últimos años Argentina https://
+estudiodelamo.com/inflacion-argentina-anual-mensual/
+303. 
+304. 
+305. 
+306. 
+307. 
+308. 
+309. 
+310. 
+311. 
+312. 
+313. 
+314. 
+315. 
+316. 
+317. 
+318. 
+
+=== PAGE 32 ===
+Índices FACPCE https://www.facpce.org.ar/indices-facpce/
+Indice de Precios al Consumidor - INEC https://inec.cr/indicadores/indice-precios-al-
+consumidor
+Índice de Precios al Consumidor - INE http://www.ine.gob.cl/estadisticas-por-tema/
+precios-e-inflacion/indice-de-precios-al-consumidor
+[PDF] Reporte Macro Junio 2026 - Proficio Investment https://
+proficioinvestment.com/wp-content/uploads/2026/06/Proficio-Reporte-Macro-
+Menusal-Junio-2026.pdf
+Índice de precios al consumidor (IPC) - BCCR https://gee.bccr.fi.cr/
+indicadoreseconomicos/cuadros/frmvercatcuadro.aspx?
+idioma=1&codcuadro=%202732
+[PDF] Indicadores Macroeconómicos de Contexto CyT - Enero 2026 https://grupo-
+epc.com/wp-content/uploads/2026/02/epc-imec-n.26-enero-2026.pdf
+[PDF] PERU: REPORTE DIARIO / DAILY REPORT https://www.mef.gob.pe/
+contenidos/english/report/2026/Daily_02_06_26.pdf
+Microsoft Power BI https://app.powerbi.com/view?
+r=eyJrIjoiNTZlNWExOWYtMDRiNS00M2Q1LWEzYzYtNzlmNzRkYWNmMDBiIiwidCI6
+IjAwNDY0ZmQyLTdiNzgtNGI3YS05M2NhLWY3OTQwZjk3NjRkZiJ9
+Argentina — Indicadores y estrategias - TradingView https://es.tradingview.com/
+scripts/argentina/
+Balanz Capital Estrategia I USD https://don-cap.com/Bursatil/FondoImpresion/12742
+Ratios de Acciones Argentinas -01-12-2022 | IOL invertironline https://
+www.invertironline.com/posts/reportes/ra-01122022
+[PDF] Qué define el nivel de la brecha hoy - Aurum Valores https://aurum.com.ar/
+wp-content/uploads/2024/06/Determinantes-de-la-brecha-cambiaria.pdf
+[PDF] RIESGO DE MODELO EN LA ESTIMACIÓN DEL VAR Y CVAR https://
+www.uv.es/bfc/TFM2017/13%20Ana%20Regina%20Heres%20%20car%20.pdf
+(PDF) Teoría cuantitativa del dinero y dominancia fiscal: un análisis ... https://
+www.researchgate.net/publication/
+401030254_Teoria_cuantitativa_del_dinero_y_dominancia_fiscal_un_analisis_VAR_-
+ARDL_de_Argentina_en_la_posconvertibilidad
+Noticias » Valiant Bursátil » Variables financieras 12.08.24 https://
+valiantbursatil.com/research/noticias/variables-financieras-12-08-24.html
+Harvard - UBA.ar https://ojs.economicas.uba.ar/RIMF/citationstylelanguage/get/
+harvard-cite-them-right?submissionId=1487&publicationId=1303&issueId=105
+319. 
+320. 
+321. 
+322. 
+323. 
+324. 
+325. 
+326. 
+327. 
+328. 
+329. 
+330. 
+331. 
+332. 
+333. 
+334. 
+
+=== PAGE 33 ===
+Dólar: cuáles son las tres variables que definirán el rumbo cambiario https://
+www.infobae.com/economia/2024/04/15/dolar-cuales-son-las-tres-variables-que-
+definiran-el-rumbo-cambiario/
+Gráfico de @Delphosinv muestra la relación #dolar MEP y Tasas de ... https://x.com/
+Slopezalfaro/status/1293689538519412737
+Beginning of stage 3 of the economic program with relaxation of ... https://
+www.bcra.gob.ar/en/news/inicio-de-la-fase-3-del-programa-economico/
+[PDF] The economic impact of uncertainty: transmission channels and ... https://
+www.bis.org/publ/bppdf/bispap163_c.pdf
+[PDF] Financial Imbalances, Systemic Stress, and Macroprudential ... https://
+www.imf.org/-/media/Files/Publications/WP/2025/English/WPIEA2025146.ashx
+[PDF] JPMorgan Active Value ETF-JPM https://am.jpmorgan.com/content/dam/jpm-
+am-aem/americas/us/en/literature/commentary/FC-JAVA.PDF
+[PDF] acceptable collateral - Argentina Clearing https://argentinaclearing.com.ar/wp-
+content/uploads/2022/03/ACCEPTABLE-COLLATERAL-Diciembre.pdf
+[PDF] Guide to the Markets Latin America (English) Read more https://
+am.jpmorgan.com/content/dam/jpm-am-aem/americas/br/en/insights/market-
+insights/mi-gtm-latam-br-en.pdf
+[PDF] Risk Report - CVM https://conteudo.cvm.gov.br/export/sites/cvm/
+subportal_ingles/menu/database/reports_risk_market/attachments/2020/
+RiskBulletin_75_202001.pdf
+[PDF] Banks' Risk Exposures∗ https://www.crei.cat/wp-content/uploads/2016/09/
+banks.pdf
+Due Diligence - BBVA CIB https://www.bbvacib.com/due-diligence/
+[PDF] Financial Stability Report | December 2023 | BCRA https://www.bcra.gob.ar/
+archivos/Pdfs/PublicacionesEstadisticas/ief0223i.pdf
+La norma COMUNICACIÓN A 8307 / 2025 modifica las siguientes https://
+www.argentina.gob.ar/normativa/nacional/
+comunicaci%C3%B3n-8307-2025-416899/normas-modificadas
+'A' 8307 - ADEBA | Asociación de Bancos Argentinos https://www.adeba.com.ar/
+a-8307/
+Normas que modifican y/o complementan a - Jus.gob.ar - Infoleg https://
+servicios.infoleg.gob.ar/infolegInternet/
+verVinculos.do;jsessionid=90BA28E8FF34041FF60AFE922F03D6CB?
+modo=2&id=416241
+[PDF] comunicación “a” 8099 - ARCA https://www.arca.gob.ar/rigi/ayuda/
+documentos/reglamentacion-BCRA-A8099.pdf
+335. 
+336. 
+337. 
+338. 
+339. 
+340. 
+341. 
+342. 
+343. 
+344. 
+345. 
+346. 
+347. 
+348. 
+349. 
+350. 
+
+=== PAGE 34 ===
+Informe Diario de Bonos y tasas: 24-06-2026 | IOL invertironline https://
+www.invertironline.com/posts/reportes/informe-diario-de-bonos-y-tasas-24-06-2026
+BANCO CENTRAL DE LA REPÚBLICA ARGENTINA https://www.boletinoficial.gob.ar/
+detalleAviso/primera/343396/20260622
+[PDF] PERU: REPORTE DIARIO / DAILY REPORT https://www.mef.gob.pe/
+contenidos/english/report/2026/Daily_06_08_26.pdf
+[PDF] Presentación del Informe de Política Monetaria, abril 2026 - BCCR https://
+www.bccr.fi.cr/publicaciones/DocPolticaMonetariaInflacin/presentacion-ipm-
+abril-2026.pdf
+[PDF] Perú | El BCRP deja sin cambios la tasa de referencia en 4,25 % https://
+www.bbvaresearch.com/wp-content/uploads/2026/02/PolMonPer0226-1.pdf
+Dólar MEP en Febrero de 2026 — Cotizaciones historicas https://www.rava.com/
+cotizaciones/historico/dolar-mep/2026/02
+[PDF] Nota Semanal N° 22 - 2026 - BCRP https://www.bcrp.gob.pe/docs/
+Publicaciones/Nota-Semanal/2026/ns-22-2026.pdf
+Break-Even Inflacionario: ¿conviene CER o tasa fija? | MacroLibre https://
+macrolibre.com/break-even
+Resumen Ejecutivo del REM (BCRA) – Junio 2026 Inflación Los ... https://x.com/
+robertojirusta/status/2062873484502466773
+[PDF] Flash Argentina | Inflación Nacional - BBVA Research https://
+www.bbvaresearch.com/wp-content/uploads/2026/03/
+Argentina_Inflacion_Nacional_Febrero_2026.pdf
+Tras el dato de inflación, los inversores ponen la mira en los bonos ... https://es-
+us.noticias.yahoo.com/dato-inflaci%C3%B3n-inversores-ponen-mira-110100136.html
+Ajuste por inflación - Consejo https://www.consejo.org.ar/micrositios-profesionales/
+ajuste-por-inflacion
+Argentine economy: key points and forecasts for 2026 - YouTube https://
+www.youtube.com/watch?v=xqYIVY8CFvI
+Inflación: qué cambió en los últimos meses - Instagram https://www.instagram.com/
+reel/DV2BTHLke6T/
+Publicación de Comisión Nacional de Valores - LinkedIn https://es.linkedin.com/
+posts/comision-nacional-de-valores_mediante-el-dictado-de-la-rg-n1126-el-directorio-
+activity-7447652201579290626-8tDS
+[PDF] MODELOS VAR-GARCH Y PORTAFOLIOS DE INVERSI´ON ... https://
+pdfs.semanticscholar.org/3cdf/e0a0fdfaa702f790b01308a11379f812d913.pdf
+Volatilidad condicional y correlación dinámica entre los mercados ... https://
+ideas.repec.org/a/sfr/efruam/v10y2020i2p195-220.html
+351. 
+352. 
+353. 
+354. 
+355. 
+356. 
+357. 
+358. 
+359. 
+360. 
+361. 
+362. 
+363. 
+364. 
+365. 
+366. 
+367. 
+
+=== PAGE 35 ===
+[PDF] EXPOSICIÓN CAMBIARIA Y USO DE INSTRUMENTOS ... https://
+papers.ssrn.com/sol3/Delivery.cfm/SSRN_ID2296974_code618497.pdf?
+abstractid=2296974&mirid=1
+[PDF] EL VALOR EN RIESGO CONDICIONAL- CVaR COMO MEDIDA https://
+www.emagister.com/uploads_user_home/Comunidad_Emagister_5840_valor.pdf
+[PDF] una aplicación del VaR y el ES a la tasa interbancaria de Colombi https://
+www.banrep.gov.co/sites/default/files/eventos/archivos/VaR_ES_Melo_Becerra_1.pdf
+[PDF] Valor en riesgo (VaR) calculado por simulación histórica - U-Cursos https://
+www.u-cursos.cl/ingenieria/2006/1/IN56B/1/material_docente/bajar?id=94519
+[PDF] VALOR EN RIESGO DEL TIPO DE CAMBIO EN DIVISAS VALUE AT ... https://
+riull.ull.es/xmlui/bitstream/
+915/16801/1/78536027C_Hernandez_Rodriguez_Yaiza_GCYF_Sept-2019.pdf.pdf
+La importancia del VaR al 95% y el CVaR al 95% en el análisis ... https://
+es.linkedin.com/pulse/la-importancia-del-var-al-95-y-el-cvar-en-an%C3%A1lisis-de-
+rub%C3%A9n-garc%C3%ADa-p1zye
+368. 
+369. 
+370. 
+371. 
+372. 
+373. 
+

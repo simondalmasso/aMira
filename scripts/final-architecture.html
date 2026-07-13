@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Santaninver Oracle — Final Architecture</title>
+<style>
+  @page {
+    size: 794px 1400px;
+    margin: 0;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #0d1117;
+    color: #c9d1d9;
+    font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+  .poster {
+    width: 794px;
+    min-height: 1400px;
+    background: linear-gradient(180deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+    padding: 50px 60px 60px 60px;
+    position: relative;
+    overflow: hidden;
+  }
+  /* Header */
+  .header {
+    border-bottom: 1px solid #30363d;
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+  }
+  .eyebrow {
+    color: #58a6ff;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 8px 0;
+    font-weight: 600;
+  }
+  .title {
+    color: #f0f6fc;
+    font-size: 32px;
+    font-weight: 700;
+    margin: 0 0 8px 0;
+    letter-spacing: -0.02em;
+  }
+  .subtitle {
+    color: #8b949e;
+    font-size: 14px;
+    margin: 0;
+    line-height: 1.5;
+  }
+  .verdict-badge {
+    position: absolute;
+    top: 50px;
+    right: 60px;
+    background: #1a7f37;
+    color: #f0f6fc;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  /* Section */
+  .section { margin-bottom: 36px; }
+  .section-title {
+    color: #58a6ff;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 16px 0;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #21262d;
+  }
+  /* Role table */
+  .role-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .role-table th {
+    background: #161b22;
+    color: #8b949e;
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 600;
+    border-bottom: 1px solid #30363d;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .role-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #21262d;
+    color: #c9d1d9;
+    font-family: 'SF Mono', 'JetBrains Mono', Consolas, monospace;
+    font-size: 11px;
+  }
+  .role-table td.role-name {
+    color: #f0f6fc;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+  }
+  .role-table tr:last-child td { border-bottom: none; }
+  .role-table .check {
+    color: #3fb950;
+    font-weight: 700;
+    text-align: center;
+  }
+  /* Pipeline diagram */
+  .pipeline {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .pipeline-row {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+  }
+  .pipeline-node {
+    flex: 1;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .pipeline-node.canonical {
+    border-color: #f78166;
+    background: linear-gradient(135deg, rgba(247,129,102,0.08), rgba(247,129,102,0.02));
+  }
+  .pipeline-node.enrichment {
+    border-color: #58a6ff;
+    background: linear-gradient(135deg, rgba(88,166,255,0.08), rgba(88,166,255,0.02));
+  }
+  .pipeline-node.auxiliary {
+    border-color: #3fb950;
+    background: linear-gradient(135deg, rgba(63,185,80,0.08), rgba(63,185,80,0.02));
+  }
+  .pipeline-node-icon {
+    font-size: 18px;
+    color: #8b949e;
+    margin-bottom: 4px;
+  }
+  .pipeline-node-title {
+    color: #f0f6fc;
+    font-size: 12px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+  }
+  .pipeline-node-subtitle {
+    color: #8b949e;
+    font-size: 10px;
+    line-height: 1.4;
+  }
+  .pipeline-arrow {
+    display: flex;
+    align-items: center;
+    color: #484f58;
+    font-size: 18px;
+  }
+  /* Gate grid */
+  .gate-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+  .gate-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 12px 10px;
+    text-align: center;
+  }
+  .gate-card.pass {
+    border-color: #1a7f37;
+    background: linear-gradient(135deg, rgba(26,127,55,0.08), rgba(26,127,55,0.02));
+  }
+  .gate-id {
+    color: #8b949e;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .gate-status {
+    color: #3fb950;
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .gate-name {
+    color: #c9d1d9;
+    font-size: 9px;
+    line-height: 1.3;
+  }
+  /* Metrics row */
+  .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .metric {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .metric-value {
+    color: #f0f6fc;
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 4px 0;
+    letter-spacing: -0.02em;
+  }
+  .metric-label {
+    color: #8b949e;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0;
+  }
+  /* Hash list */
+  .hash-list {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 16px;
+    font-family: 'SF Mono', 'JetBrains Mono', Consolas, monospace;
+    font-size: 10px;
+    line-height: 1.7;
+  }
+  .hash-row {
+    display: flex;
+    justify-content: space-between;
+    color: #c9d1d9;
+  }
+  .hash-key { color: #f78166; }
+  .hash-val { color: #79c0ff; }
+  /* Footer */
+  .footer {
+    position: absolute;
+    bottom: 24px;
+    left: 60px;
+    right: 60px;
+    border-top: 1px solid #21262d;
+    padding-top: 16px;
+    display: flex;
+    justify-content: space-between;
+    color: #6e7681;
+    font-size: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="poster">
+
+  <!-- HEADER -->
+  <div class="header">
+    <p class="eyebrow">ORACLE_FINAL_PRE_DEPLOY_ULTIMATUM · U10 INSTITUTIONAL READINESS</p>
+    <h1 class="title">Santaninver Oracle — Final Architecture</h1>
+    <p class="subtitle">Single-instance canonical pipeline · 10/10 pre-deploy gates PASS · 442 tests · 2820 assertions · 0 critical findings</p>
+    <div class="verdict-badge">DICTAMEN: PASS</div>
+  </div>
+
+  <!-- ROLE TABLE (U5) -->
+  <div class="section">
+    <p class="section-title">U5 — Architectural Proof · Single Instance per Role</p>
+    <table class="role-table">
+      <thead>
+        <tr>
+          <th style="width: 22%">Role</th>
+          <th style="width: 38%">Canonical File</th>
+          <th style="width: 12%">Importers</th>
+          <th style="width: 12%">Single?</th>
+          <th style="width: 16%">Anti-Frankenstein</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="role-name">Oracle Engine</td>
+          <td>src/lib/single-pass-oracle-engine.ts</td>
+          <td>17</td>
+          <td class="check">✓</td>
+          <td>one_engine_only</td>
+        </tr>
+        <tr>
+          <td class="role-name">Portfolio Engine</td>
+          <td>src/lib/oracle/portfolio-engine.ts</td>
+          <td>11</td>
+          <td class="check">✓</td>
+          <td>no_parallel_portfolio</td>
+        </tr>
+        <tr>
+          <td class="role-name">Prediction Engine</td>
+          <td>(inside Oracle — anti-Frankenstein)</td>
+          <td>17</td>
+          <td class="check">✓</td>
+          <td>no_parallel_prediction</td>
+        </tr>
+        <tr>
+          <td class="role-name">Lifecycle</td>
+          <td>src/lib/amira-prediction-lifecycle.ts</td>
+          <td>3</td>
+          <td class="check">✓</td>
+          <td>single_lifecycle</td>
+        </tr>
+        <tr>
+          <td class="role-name">MarketState</td>
+          <td>src/lib/single-market-state.ts</td>
+          <td>18</td>
+          <td class="check">✓</td>
+          <td>single_market_state</td>
+        </tr>
+        <tr>
+          <td class="role-name">Macro Pipeline</td>
+          <td>src/lib/live-data.ts</td>
+          <td>16</td>
+          <td class="check">✓</td>
+          <td>single_data_source</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- PIPELINE DIAGRAM -->
+  <div class="section">
+    <p class="section-title">Canonical Pipeline · /api/oracle/single</p>
+    <div class="pipeline">
+      <div class="pipeline-row">
+        <div class="pipeline-node auxiliary">
+          <div class="pipeline-node-icon">☁</div>
+          <p class="pipeline-node-title">External APIs</p>
+          <p class="pipeline-node-subtitle">BCRA · INDEC · Bluelytics · CER<br>via macro-oracle-proxy (CF Worker)</p>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node canonical">
+          <div class="pipeline-node-icon">◆</div>
+          <p class="pipeline-node-title">getMacroState()</p>
+          <p class="pipeline-node-subtitle">live-data.ts<br>SINGLE macro aggregator</p>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node canonical">
+          <div class="pipeline-node-icon">◆</div>
+          <p class="pipeline-node-title">buildMarketState()</p>
+          <p class="pipeline-node-subtitle">single-market-state.ts<br>MarketStateInput → MarketState</p>
+        </div>
+      </div>
+      <div class="pipeline-row">
+        <div class="pipeline-node canonical" style="border-color: #f78166;">
+          <div class="pipeline-node-icon">⚙</div>
+          <p class="pipeline-node-title">runSinglePass(input)</p>
+          <p class="pipeline-node-subtitle">single-pass-oracle-engine.ts<br>4 deterministic steps → AssetScoreVector<br>MODEL: linear_factor_model_v1</p>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node enrichment">
+          <div class="pipeline-node-icon">+</div>
+          <p class="pipeline-node-title">V2 Systemic Enrichment</p>
+          <p class="pipeline-node-subtitle">oracle/v2/index.ts · R1-R10<br>Wraps V1 — does NOT replace it</p>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-node enrichment">
+          <div class="pipeline-node-icon">+</div>
+          <p class="pipeline-node-title">V3 Intelligence Layer</p>
+          <p class="pipeline-node-subtitle">oracle/v3/index.ts · I1-I10<br>conformal · calibration · arbitration</p>
+        </div>
+      </div>
+      <div class="pipeline-row">
+        <div class="pipeline-node canonical" style="background: #1a7f37; border-color: #3fb950;">
+          <div class="pipeline-node-icon" style="color: #f0f6fc;">✓</div>
+          <p class="pipeline-node-title" style="color: #f0f6fc;">Response: { v1, v2, v3, learning }</p>
+          <p class="pipeline-node-subtitle" style="color: #c9d1d9;">Append-only enrichment<br>V1 shape unchanged</p>
+        </div>
+        <div class="pipeline-arrow"></div>
+        <div class="pipeline-node auxiliary">
+          <div class="pipeline-node-icon">⟶</div>
+          <p class="pipeline-node-title">5 Canonical Endpoints</p>
+          <p class="pipeline-node-subtitle">/api/oracle/single · /api/macro<br>/api/telemetry · /api/x10 · /api/portfolio</p>
+        </div>
+        <div class="pipeline-arrow"></div>
+        <div class="pipeline-node auxiliary">
+          <div class="pipeline-node-icon">⚿</div>
+          <p class="pipeline-node-title">KV Persistence</p>
+          <p class="pipeline-node-subtitle">3 namespaces:<br>ORACLE_PREDICTIONS · FCI_HISTORY · ASSETS_HISTORY</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GATES GRID -->
+  <div class="section">
+    <p class="section-title">U1–U10 Pre-Deploy Gates · All PASS</p>
+    <div class="gate-grid">
+      <div class="gate-card pass">
+        <div class="gate-id">U1</div>
+        <div class="gate-status">PASS</div>
+        <div class="gate-name">Dependency Audit</div>
+      </div>
+      <div class="gate-card pass">
+        <div class="gate-id">U2</div>
+        <div class="gate-status">PASS</div>
+        <div class="gate-name">Contract Verification</div>
+      </div>
+      <div class="gate-card pass">
+        <div class="gate-id">U3</div>
+        <div class="gate-status">PASS</div>
+        <div class="gate-name">Deterministic Snapshot</div>
+      </div>
+      <div class="gate-card pass">
+        <div class="gate-id">U4</div>
+        <div class="gate-status">PASS</div>
+        <div class="gate-name">Memory Leak Audit</div>
+      </div>
+      <div class="gate-card pass">
+        <div class="gate-id">U5</div>
+        <div class="gate-status">PASS</div>
+        <div class="gate-name">Architectural Proof</div>
+      </div>
+      <div class="gate-card pass">
+        <div class="gate-id">U6</div>
+        <div class="gate-status">PASS</div>
+        <div class="gate-name">KV Persistence Audit</div>
+      </div>
+      <div class="gate-card pass">
+        <div class="gate-id">U7</div>
+        <div class="gate-status">PASS</div>
+        <div class="gate-name">Failure Injection</div>
+      </div>
+      <div class="gate-card pass">
+        <div class="gate-id">U8</div>
+        <div class="gate-status">PASS</div>
+        <div class="gate-name">Security Audit</div>
+      </div>
+      <div class="gate-card pass">
+        <div class="gate-id">U9</div>
+        <div class="gate-status">PASS</div>
+        <div class="gate-name">Performance Envelope</div>
+      </div>
+      <div class="gate-card pass">
+        <div class="gate-id">U10</div>
+        <div class="gate-status">PASS</div>
+        <div class="gate-name">Institutional Readiness</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- METRICS -->
+  <div class="section">
+    <p class="section-title">U9 — Performance Envelope · Measured</p>
+    <div class="metrics-row">
+      <div class="metric">
+        <p class="metric-value">0.001ms</p>
+        <p class="metric-label">Warm p50 latency</p>
+      </div>
+      <div class="metric">
+        <p class="metric-value">0.035ms</p>
+        <p class="metric-label">Warm p99 latency</p>
+      </div>
+      <div class="metric">
+        <p class="metric-value">288K</p>
+        <p class="metric-label">req/sec single-thread</p>
+      </div>
+      <div class="metric">
+        <p class="metric-value">0 bytes</p>
+        <p class="metric-label">Heap delta / 10K runs</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- GOLDEN HASHES -->
+  <div class="section">
+    <p class="section-title">U3 — Canonical Golden Hashes (SHA-256, first 16 chars)</p>
+    <div class="hash-list">
+      <div class="hash-row"><span class="hash-key">baseline_2025</span><span class="hash-val">e8c9d995e7302e39…</span></div>
+      <div class="hash-row"><span class="hash-key">easing_2024</span><span class="hash-val">e58cc9e24cdf2667…</span></div>
+      <div class="hash-row"><span class="hash-key">tightening_2023</span><span class="hash-val">0abf8ea0825d3ddd…</span></div>
+      <div class="hash-row"><span class="hash-key">stagflation_2024</span><span class="hash-val">ad9e60d0585519de…</span></div>
+      <div class="hash-row"><span class="hash-key">partial_fallback</span><span class="hash-val">a52fd59b291e074b…</span></div>
+      <div class="hash-row"><span class="hash-key">stale</span><span class="hash-val">be32f0c95e1a63b7…</span></div>
+      <div class="hash-row"><span class="hash-key">error_state</span><span class="hash-val">8148da0303a2f71c…</span></div>
+      <div class="hash-row"><span class="hash-key">extreme_high</span><span class="hash-val">c0901422f14c9595…</span></div>
+      <div class="hash-row"><span class="hash-key">zero_edge</span><span class="hash-val">b21936460da13e52…</span></div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <span>Engine: linear_factor_model_v1 · Hash: SHA-256 · Mode: NO_NEW_FEATURES · Deploy: false (deferred)</span>
+    <span>442 tests · 2820 assertions · 0 fail</span>
+  </div>
+
+</div>
+</body>
+</html>

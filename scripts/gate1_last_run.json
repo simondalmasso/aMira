@@ -1,0 +1,46 @@
+{
+  "telemetry": {
+    "success": true,
+    "timestamp": "2026-07-13T07:30:07.923Z",
+    "telemetry": {
+      "pipelineExecutions": 28,
+      "regimeTransitions": 0,
+      "rebalancesExecuted": 0,
+      "killSwitchActivations": 0,
+      "emergencyFreezes": 4,
+      "dataIntegrityFailures": 0,
+      "staleDegradations": 0,
+      "recentConfidence": 0.51,
+      "recentRegime": null,
+      "decisionsWithOutcome": 0,
+      "correctDecisions": 0,
+      "decisionAccuracy": 0,
+      "dataQualityDistribution": {
+        "REAL": 9,
+        "PARTIAL_FALLBACK": 5,
+        "ERROR": 3
+      },
+      "lastPipelineExecution": "2026-07-12T23:03:09.588Z",
+      "lastRegimeChange": null,
+      "totalDecisions": 17,
+      "daysOfHistory": 24,
+      "oldestDecision": "2026-06-18T22:01:55.797Z",
+      "newestDecision": "2026-07-01T22:42:52.433Z"
+    },
+    "totalDecisions": 17,
+    "daysOfHistory": 24,
+    "oldestDecision": "2026-06-18T22:01:55.797Z",
+    "newestDecision": "2026-07-01T22:42:52.433Z"
+  },
+  "audit": {
+    "success": true,
+    "timestamp": "2026-07-13T07:30:08.572Z",
+    "stats": {
+      "totalEntries": 0,
+      "validationSuccessRate": 0,
+      "recentErrors": 0,
+      "recentWarnings": 0,
+      "sourceBreakdown": {}
+    }
+  }
+}

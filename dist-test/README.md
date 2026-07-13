@@ -1,0 +1,1 @@
+This folder contains the built output assets for the worker "santaninverter-oracle" generated at 2026-06-16T12:05:03.675Z.

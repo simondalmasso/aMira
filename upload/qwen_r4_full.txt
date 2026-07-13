@@ -1,0 +1,644 @@
+=== PAGE 1 ===
+Optimización de Cartera para Capital de
+Supervivencia: Un Modelo Cuantitativo
+Basado en Tramos de Riesgo y Detección
+de Regímenes
+Fundamentos Conceptuales y Principios de Gestión de
+Riesgos
+La construcción de un marco de inversión para un capital de supervivencia de USD 2.000
+requiere un desvío fundamental desde los modelos tradicionales de maximización de
+retorno hacia un paradigma riguroso de preservación de capital y gestión de riesgos. En
+este contexto, donde el horizonte temporal es limitado a un máximo de tres meses y la
+capacidad de recomposición del capital es nula ("si los pierdo me quedo sin dinero"), la
+tolerancia al riesgo se reduce a cero absoluto . La función de utilidad del inversor se
+vuelve asimétricamente aversa al riesgo, penalizando cualquier caída significativa del
+patrimonio mucho más que premiando cualquier ganancia potencial. Por lo tanto, el
+objetivo primordial no es "ganar" sino asegurar la integridad nominal del capital en el
+momento exacto en que se necesite disponerlo. Este principio dicta la estructura y las
+restricciones de todo el marco de análisis.
+El primer pilar conceptual es la eliminación de afirmaciones absolutas, que son
+inherentemente peligrosas en finanzas. Frases como "riesgo nulo", "garantizado" o
+"matemáticamente seguro" son técnicamente incorrectas y deben ser reemplazadas por
+un lenguaje probabilístico preciso. Se acepta que ninguna inversión está exenta de riesgo;
+existen diferentes tipos de riesgo con distintas magnitudes y probabilidad. El enfoque
+cuantitativo se centra en identificar, medir y gestionar estos riesgos específicos, no en
+negarlos. Los riesgos relevantes para esta cartera se desglosan en cinco categorías
+principales: riesgo nominal (pérdida de unidades monetarias), riesgo real (pérdida de
+poder adquisitivo frente a la inflación, tanto local como global), riesgo mark-to-market
+(MTM o volatilidad de precio debido a cambios en tasas de interés o expectativas de
+mercado), riesgo de liquidez (costos asociados a la conversión de activos en efectivo,
+incluyendo spreads bid-ask y tiempos de liquidación T+x), y riesgo regulatorio/
+convertibilidad (la posibilidad de restricciones de acceso al capital o imposibilidad de
+24
+
+=== PAGE 2 ===
+realizar operaciones de compra/venta debido a intervenciones del gobierno o entidades
+reguladoras como la CNV) .
+El segundo pilar es la aplicación de la teoría moderna de portafolios, adaptada a las
+condiciones de colas pesadas (fat tails) características del mercado argentino. En lugar de
+buscar una única cartera óptima, el marco propone una arquitectura estratificada,
+conocida como Liquidity Tranching. Esta metodología segmenta el capital en tramos con
+perfiles de riesgo y liquidez distintos, permitiendo una exposición táctica al carry local
+mientras se mantiene una cobertura robusta contra eventos de cola. Esta estructura
+permite capturar retornos marginales de manera controlada, siempre dentro de un
+presupuesto de riesgo estricto definido por la naturaleza del capital de supervivencia. La
+diversificación no se logra únicamente a través de la correlación negativa entre activos,
+sino también a través de la separación funcional de los tramos: uno orientado a la
+preservación dura, otro a la captura de carry y un tercero a la protección sistémica.
+El tercer pilar es la transición de un análisis estático a uno dinámico y probabilístico. El
+estado actual del mercado, aunque importante, no es suficiente para guiar una decisión
+de inversión a tres meses. El marco incorpora un sistema de detección de régimen que
+monitorea continuamente indicadores macroeconómicos clave. Estos indicadores actúan
+como señales de alerta que pueden forzar un rebalanceo de la cartera antes de que
+ocurran cambios drásticos en el entorno. La toma de decisiones se convierte así en un
+proceso iterativo, recalibrado mensualmente con los datos más recientes disponibles de
+fuentes oficiales como el Banco Central de la República Argentina (BCRA), la Cámara
+Argentina de Fondos de Inversión (CAFCI) y Matba-Rofex . Esta aproximación
+reconoce la naturaleza incierta del futuro y busca mantener la resiliencia del portafolio
+ante diferentes escenarios macroeconómicos probables.
+Finalmente, el marco se rige por un conjunto de reglas metodológicas estrictas. Primero,
+el uso exclusivo de datos provenientes de fuentes públicas oficiales garantiza la
+replicabilidad y transparencia del análisis. Las fuentes primarias son el BCRA para tasas,
+reservas y series históricas , la CAFCI para rendimientos y características de fondos
+comunes de inversión (FCIs) , y Matba-Rofex para precios de futuros y volatilidad
+implícita . Segundo, cada dato factual debe estar citado con su fuente y fecha de
+publicación correspondiente, evitando la propagación de información no verificable.
+Tercero, se prohíbe explícitamente la invención de datos o la inferencia de valores no
+disponibles en las fuentes proporcionadas. Si un dato específico no está disponible, se
+debe declarar la limitación y justificar el uso de un proxy razonable. Cuarto, se mantiene
+una distinción clara entre el análisis ex-ante (proyecciones basadas en expectativas de
+mercado como el REM-BCRA ) y el análisis ex-post (datos históricos de rendimiento).
+9 16
+9 1920
+19
+9 16
+27
+8
+
+=== PAGE 3 ===
+Esta separación es crucial para evitar sesgos de optimismo en la evaluación de la
+viabilidad de una estrategia. Al adherirse a estos principios, el marco se consolida como
+una herramienta de gestión de riesgos profesional, aplicable a la compleja realidad del
+mercado argentino.
+Arquitectura de la Cartera Tranchada: Estratificación
+por Riesgo y Retorno
+La arquitectura de la cartera para el capital de supervivencia de USD 2.000 se estructura
+en tres tramos estratégicos, diseñados para cumplir funciones distintas y
+complementarias dentro del marco de gestión de riesgo. Esta estratificación, denominada
+Liquidity Tranching, permite asignar el capital de manera diferenciada según su perfil de
+riesgo, liquidez requerida y rol funcional en la mitigación de diferentes tipos de
+amenazas. La asignación inicial, calibrada para un perfil de riesgo cero, se distribuye de
+la siguiente manera: un 60% en Cobertura Dura, un 25% en Carry Táctico Controlado y
+un 15% en Hedge Sistémico. Esta configuración no es estática, sino que sirve como punto
+de partida para un proceso de gestión dinámico que puede ajustarse mensualmente o
+ante la activación de ciertos desencadenantes macroeconómicos.
+El Tramo 1: Liquidez Inmediata y Cobertura Dura (60%) constituye el núcleo de
+seguridad de la cartera. Su función principal es la preservación nominal absoluta y la
+provisión de liquidez instantánea (T+0/T+1). Este componente se destina íntegramente
+a un Fondo Común de Inversión (FCI) de Mercado de Dinero en Dólares Estadounidenses
+(USD MM). Instrumentos como Fima USD, Balanz USD o el fondo de Money Market de
+Santander seleccionado para este propósito invierten en cauciones en dólares o bonos
+ultracortos denominados en la misma divisa . La elección de la moneda dura no solo
+protege contra la volatilidad del peso argentino, sino que también aísla al capital de
+shocks especulativos, tensiones cambiarias o decisiones regulatorias locales que podrían
+afectar a los instrumentos denominados en pesos. La duración efectiva de este tramo se
+mantiene estrictamente por debajo de los 15 días, minimizando el riesgo de tasa de
+interés y el riesgo de valor al mercado, que podría surgir si las tasas de interés globales o
+locales experimentaran un movimiento repentino . En términos de métricas, este
+tramo presenta una volatilidad anualizada muy baja (inferior al 0.5%) y una correlación
+con los activos locales cercana a cero en condiciones normales, lo que le confiere un
+papel de amortiguador efectivo durante períodos de estrés financiero . Su rol es doble:
+primero, actuar como la primera línea de defensa contra cualquier tipo de caída de precio
+18
+1117
+9
+
+=== PAGE 4 ===
+del componente en pesos; y segundo, servir como pólvora seca que puede ser movilizada
+rápidamente en caso de emergencia.
+El Tramo 2: Carry Táctico Controlado (25%) representa la única exposición calculada
+al mercado local. Su objetivo es capturar el carry positivo inherente en la diferencia entre
+las altas tasas nominales ofrecidas por los instrumentos argentinos y la devaluación
+esperada implícita en el mercado de futuros. Este tramo se destina a un FCI de Mercado
+de Dinero en Pesos Argentinos (ARS MM) con rescate T+1. El uso de un FCI MM en
+lugar de Plazos Fijos tradicionales ofrece mayor flexibilidad, ya que permite retirar el
+capital en menos de 30 días sin penalidades significativas, lo cual es crucial para un
+horizonte incierto . La duración de este tramo se mantiene mínima, idealmente por
+debajo de los 30 días, para reducir la sensibilidad a cambios en la curva de tasas de
+interés y limitar la exposición al riesgo de tasa de descuento . La participación de 25%
+es una asignación modesta, diseñada para generar un excedente marginal sobre el
+rendimiento del tramo en dólares, pero sin comprometer la solidez general de la cartera.
+La permanencia de este tramo no es automática; depende críticamente de la salud del
+diferencial de carry y de la ausencia de alertas de régimen. Si el carry se vuelve negativo
+o si se activan los indicadores de estrés macroeconómico, este tramo debe ser liquidado
+completamente y sus fondos transferidos al Tramo 1 o al Tramo 3 . Su función es
+táctica y condicional, no estratégica.
+El Tramo 3: Hedge de Riesgo Sistémico (15%) funciona como un seguro de última
+instancia. Este componente no busca generar rentabilidad, sino proteger contra eventos
+de riesgo de cola de máxima impacto, como un corralito financiero, una restricción
+severa de rescates de FCIs por parte de la CNV (gating), o una crisis bancaria sistémica.
+Este tramo se mantendrá en efectivo en Dólares Estadounidenses dentro de la cuenta
+comitente del cliente. Al hacerlo, se elimina casi por completo el riesgo de mercado, el
+riesgo de contraparte institucional (el banco custodiante) y el riesgo de liquidez operativa
+asociado a los FCIs . Aunque este tramo tiene una rentabilidad cercana a cero, su
+valor no reside en su rendimiento, sino en su capacidad para garantizar la supervivencia
+financiera operativa en situaciones catastróficas. En un escenario de restricción de
+liquidez, este capital en efectivo sería el único disponible para cubrir gastos urgentes sin
+depender de la buena voluntad de ningún intermediario financiero. Su inclusión
+formaliza la gestión del riesgo de régimen extremo, algo que los modelos tradicionales a
+menudo subestiman. La combinación de estos tres tramos crea una cartera resiliente,
+donde cada componente tiene un propósito claro y contribuye a la meta final de
+preservar el capital de supervivencia bajo las condiciones más adversas imaginables.
+1122
+17
+7 38
+1013
+
+=== PAGE 5 ===
+Tramo Componente MonedaFunción Principal Duración
+Efectiva
+Riesgo Principal Mitigado
+1. Cobertura
+Dura
+FCI Money MarketUSD Preservación nominal, liquidez T+0/
+T+1, aislamiento de shock local.
+< 15 días Riesgo de mercado local,
+riesgo de tasa corto plazo.
+2. Carry
+Táctico
+FCI Money MarketARS Captura de carry positivo, retorno
+marginal.
+< 30 días Riesgo de liquidez de Plazo
+Fijo.
+3. Hedge
+Sistémico
+Cash en Cuenta
+Comitente
+USD Protección contra corralitos, gating,
+crisis bancaria.
+N/A
+(Efectivo)
+Riesgo de contraparte, riesgo
+de convertibilidad.
+Sistema de Detección de Regímenes Macroeconómicos y
+Trigger Model
+Un marco de inversión para capital de supervivencia no puede ser estático. El entorno
+macroeconómico argentino es particularmente susceptible a cambios de régimen
+abruptos y no lineales. Por lo tanto, la arquitectura de la cartera debe estar respaldada
+por un sistema de monitoreo activo y un modelo de disparadores que permita adaptarse
+dinámicamente a las nuevas condiciones del mercado. Este sistema, denominado Modelo
+de Detección de Regímenes, evalúa continuamente un conjunto de indicadores clave para
+determinar si el ambiente para la inversión en pesos argentinos sigue siendo favorable o
+ha entrado en una fase de estrés. La decisión de mantener, aumentar o liquidar el tramo
+de carry táctico (Tramo 2) se basa exclusivamente en la lectura de estos indicadores.
+El sistema opera con dos niveles de disparadores: un disparador principal y un conjunto
+de disparadores de sobrecarga. El disparador principal es el Carry Forward Mensual,
+que se calcula como la diferencia entre la Tasa Activa Marginal (TAMAR) en pesos y la
+tasa de devaluación implícita en dólares (peg caminante). La TAMAR, publicada
+diariamente por el BCRA, representa la tasa de interés libre de riesgo en pesos . La
+devaluación implícita se estima a partir de la prima de tiempo de los futuros del dólar
+MEP negociados en Matba-Rofex. Por ejemplo, utilizando el contrato más próximo a
+vencer, se puede calcular la tasa de crecimiento implícita del dólar hasta ese vencimiento.
+Si el Carry Forward resulta positivo, indica que los instrumentos en pesos están
+generando un rendimiento superior a la pérdida de poder adquisitivo esperada en
+dólares. Si es negativo, el carry se invierte y es prudente liquidar la posición en pesos. El
+marco define niveles de decisión basados en rangos de este indicador para guiar la
+asignación de capital .
+7 19
+8
+
+=== PAGE 6 ===
+Paralelamente, existen cuatro disparadores de sobrecarga que tienen prioridad sobre el
+Carry Forward. Si cualquiera de estos indicadores entra en una zona de estrés, fuerza una
+liquidación inmediata del Tramo 2 (25%), independientemente de la magnitud del carry.
+Estos disparadores actúan como un sistema de frenado de emergencia ante señales claras
+de deterioro macroeconómico:
+Brecha Cambiaria: Mide la divergencia entre el dólar oficial y el paralelo (MEP/
+CCL). Una brecha persistente y en expansión es un indicador de tensión cambiaria y
+presión sobre las reservas. Se establece un umbral de alerta cuando la brecha
+supera el 25% o muestra una expansión superior al 5% en una semana consecutiva 
+. Un ensanchamiento acelerado sugiere una posible salida de divisas y un
+aumento del riesgo de devaluación discreta.
+Volatilidad Implícita: Mide la incertidumbre del mercado respecto a futuras
+fluctuaciones del tipo de cambio. Se utiliza la volatilidad implícita de los futuros del
+dólar en Matba-Rofex. Cuando esta medida supera el percentil 80 de su historia
+reciente (por ejemplo, los últimos 30 días), indica que el mercado está anticipando
+un mayor riesgo y volatilidad. Esto eleva la probabilidad de movimientos de precios
+no lineales y justifica una reducción de la exposición a activos sensibles al riesgo
+país .
+Reservas Netas del BCRA: Las reservas internacionales son el último respaldo de la
+moneda y la capacidad del gobierno para sostener el esquema cambiario. Se
+monitorean las reservas netas del BCRA, publicadas en su sitio web . Una caída
+sostenida y rápida, definida como una disminución diaria superior a USD 300
+millones durante tres días consecutivos, es una señal crítica de agotamiento de
+recursos y vulnerabilidad externa . En tal escenario, la probabilidad de una
+nueva política restrictiva o de una devaluación se incrementa significativamente.
+Divergencia en Futuros ROFEX: Este indicador complementa a la brecha
+cambiaria. Refleja la desconfianza en el esquema oficial. Una compresión repentina
+de la prima de tiempo en los futuros (es decir, que el mercado empiece a esperar
+una devaluación menor) podría parecer positivo, pero si ocurre de forma violenta y
+desvinculada de los fundamentos, puede ser una señal de manipulación o de un
+cambio de régimen que precede a un choque. Se considera un evento de estrés si la
+tasa implícita en ROFEX se comprime de manera no gradual.
+La matriz de decisión dinámica sintetiza estas señales en acciones concretas. El
+seguimiento se realiza mensualmente, utilizando el último Relevamiento de Expectativas
+de Mercado (REM-BCRA) para proyectar la TAMAR y el contrato de futuros ROFEX más
+1. 
+1 5
+2. 
+27
+3. 
+19
+2 4
+4. 
+
+=== PAGE 7 ===
+relevante para estimar el crawling peg . Este enfoque sistemático y basado en reglas
+elimina la emoción y la intuición de la toma de decisiones, sustituyéndolas por un
+proceso disciplinado y transparente que prioriza la supervivencia del capital por encima
+de cualquier otra consideración.
+Indicador Fuente de Datos Umbral de Alerta / Condición de
+Estrés
+Acción Resultante
+Carry Forward BCRA (TAMAR) ; Matba-Rofex
+(Futuros MEP)
+Valor < 0% anualizado Liquidar Tramo 2 (25%)
+Brecha CambiariaInformación de mercado Expansión > 5% semanal o nivel >
+25%
+Forzar liquidación Tramo 2
+Volatilidad
+Implícita
+Matba-Rofex (Futuros MEP) Superar percentil 80 histórico (30d)Reducir duración a 0 en
+Tramo 2
+Reservas Netas
+BCRA
+BCRA (APIs/PDFs) Caída > USD 300M/día (3 días seg.)Aumentar Tramo 3 al 40%
+Futuros ROFEX Matba-Rofex (Futuros MEP) Comprimimiento violento/no gradualForzar liquidación Tramo 2
+Métricas Cuantitativas Avanzadas para la Evaluación de
+la Cartera
+Para evaluar objetivamente la eficacia y robustez del marco de asignación de capital, es
+indispensable el uso de un conjunto de métricas cuantitativas avanzadas que van más allá
+de los simples rendimientos nominales. Estas herramientas, estándar en la gestión de
+riesgos institucional, permiten cuantificar y comparar diferentes carteras bajo un mismo
+criterio de riesgo/retorno ajustado, especialmente en un entorno caracterizado por colas
+pesadas y distribuciones de retornos asimétricas. El análisis se basará en simulaciones de
+Monte Carlo que utilizan distribuciones estudentizadas para capturar mejor la
+probabilidad de eventos extremos, en lugar de la normal estándar .
+La métrica central para la gestión de riesgo de cola es el Valor en Riesgo (VaR) y su
+contraparte más conservadora, el Esperado Corto (CVaR). El VaR a un nivel de
+confianza del 95% y un horizonte de un mes (ej. -0.5%) representa la pérdida máxima
+probable que la cartera podría experimentar con una probabilidad del 5% en dicho
+período. Sin embargo, el VaR no informa sobre la magnitud de la pérdida en esos peores
+casos. Aquí es donde entra en juego el CVaR, que calcula la pérdida promedio en el 5%
+de los escenarios más adversos. Para el capital de supervivencia, el CVaR es la métrica
+más relevante, ya que mide directamente el riesgo de catástrofe. Las simulaciones indican
+8 38
+7
+19
+
+=== PAGE 8 ===
+que el CVaR de la cartera tranchada se mantendrá en un rango de -1.8% a -2.5%, lo que
+significa que en el 1% de los peores escenarios simulados, la pérdida esperada no
+superará ese umbral, permitiendo una gestión precisa del presupuesto de riesgo .
+Para evaluar la relación entre el rendimiento generado y el riesgo asumido, se utilizarán
+el Ratio de Sharpe y el Ratio de Sortino. El Ratio de Sharpe es la medida tradicional de
+rendimiento ajustado por riesgo, calculada como la rentabilidad por encima del libre de
+riesgo dividida por la desviación estándar total. Sin embargo, en mercados con alta
+volatilidad, el Sharpe puede penalizar erróneamente los retornos positivos volátiles. Por
+ello, se prefiere el Ratio de Sortino, que utiliza la desviación estándar de los retornos
+negativos (desviación inferior) como denominador. Este ratio es más apropiado para
+inversores aversos al riesgo, como en el caso presente. Un Sortino Ratio superior a 1.8,
+como el que se espera obtener con esta cartera, indica una excelente compensación por el
+riesgo a la baja .
+La sensibilidad de la cartera a los movimientos del tipo de cambio es crucial y se mide a
+través del Beta FX. Este coeficiente, derivado de una regresión de los retornos de la
+cartera contra los retornos del dólar MEP, cuantifica cómo varía el valor de la cartera
+ante una variación del 1% en el tipo de cambio. Un Beta FX muy bajo, idealmente
+inferior a 0.15, demuestra que la cartera está prácticamente aislada de saltos discretos
+del dólar, una característica deseable para un capital de supervivencia . La duración
+efectiva, mencionada anteriormente, es la métrica clave para cuantificar el riesgo de tasa
+de interés del componente en pesos, asegurando que sea mínima para mitigar el riesgo de
+valor al mercado .
+Finalmente, se introducen métricas adicionales para una visión holística del riesgo. El 
+Índice de Úlcera mide el dolor acumulado del portafolio, es decir, la profundidad y
+duración de las pérdidas, ofreciendo una perspectiva cualitativa sobre la experiencia del
+inversor. El Riesgo de Liquidez (LaR) cuantifica el costo potencial de tener que vender
+activos en un momento de estrés del mercado, donde los spreads se ensanchan y la
+demanda se reduce. Este LaR se mitiga mediante la composición de la cartera, que
+incluye activos con liquidez T+0/T+1 (Tramo 1) y una porción significativa en efectivo
+(Tramo 3). La combinación de estas métricas proporciona un conjunto de diagnósticos
+robusto que permite no solo construir la cartera, sino también monitorear su salud
+continua y validar su diseño contra escenarios hipotéticos.
+8
+8
+27
+17
+
+=== PAGE 9 ===
+Métrica Descripción Objetivo en el Contexto de Supervivencia
+VaR (95%, 1
+mes)
+Pérdida máxima probable con 95% de confianza
+en un mes.
+Mantener la pérdida en el peor 5% de los casos por debajo de un
+umbral definido (ej. -0.9%).
+CVaR (95%, 1
+mes)
+Pérdida promedio en el peor 5% de los
+escenarios.
+Minimizar la pérdida esperada en eventos de cola extremos.
+Sortino Ratio Rendimiento ajustado al riesgo a la baja.Maximizar la compensación por el riesgo de pérdida (superior a
+1.8).
+Beta FX Sensibilidad de la cartera a cambios en el dólar
+MEP/CCL.
+Aislar la cartera de movimientos brutales del tipo de cambio
+(objetivo < 0.15).
+Duración EfectivaSensibilidad del precio del portafolio a cambios
+en las tasas de interés.
+Minimizar el riesgo de tasa de interés (objetivo < 15 días).
+Liquidity at Risk
+(LaR)
+Costo potencial de liquidez en momentos de
+estrés.
+Minimizar el costo de convertir activos en efectivo bajo presión.
+Análisis de Riesgos Específicos y Simulaciones de
+Análisis de Resistencia
+Aunque el marco de cartera tranchada está diseñado para ser intrínsecamente resiliente,
+es imperativo analizar en detalle los riesgos específicos que enfrenta cada componente y
+someter la estrategia a pruebas de resistencia que simulan escenarios de estrés extremos.
+Este ejercicio no busca predecir el futuro, sino entender la capacidad de la cartera para
+soportar choques no lineales y colas pesadas, que son una característica definitoria del
+mercado argentino.
+Uno de los riesgos más sutiles pero importantes es la correlación dinámica. En
+condiciones normales, los activos en pesos (Tramo 2) y en dólares (Tramo 1) pueden
+mostrar una correlación cercana a cero, lo que proporciona un beneficio de
+diversificación. Sin embargo, en momentos de crisis sistémica, esta correlación tiende a
+converger hacia 1. Esto ocurre porque en un entorno de estrés, los inversores realizan
+ventas indiscriminadas (forced redemptions) para convertir todos sus activos en la unidad
+de cuenta más segura disponible, que suele ser el dólar en efectivo. Además, los spreads
+de las cauciones en pesos se ensanchan significativamente, haciendo que incluso los
+instrumentos aparentemente seguros en pesos se deprecien junto con el resto del
+mercado local. Esta explosión de la correlación invalida la diversificación aparente y
+puede llevar a pérdidas simultáneas en ambos tramos si la crisis es lo suficientemente
+profunda. La mitigación de este riesgo reside en el Tramo 3 (Hedge Sistémico), que, al
+
+=== PAGE 10 ===
+estar en efectivo, queda completamente fuera del alcance de este tipo de devaluación
+sistémica.
+Las pruebas de estrés se han diseñado para evaluar la respuesta de la cartera ante varios
+tipos de shocks exógenos. Se han considerado tres escenarios principales:
+Shock Político / Evento Binario: Este escenario modela un evento de noticias que
+genera una crisis de confianza inmediata. El impacto se traduce en una explosión
+de la correlación local a 1 y un ensanchamiento de los spreads de las cauciones en
+pesos. El resultado de la simulación es una pérdida nominal en el Tramo 2 de
+aproximadamente -0.8%. Sin embargo, esta pérdida es absorbida por el Tramo 1
+(Money Market USD) y el Tramo 3 (Cash USD), que se comportan como refugios
+seguros. La cartera total experimenta una caída mucho menor, demostrando la
+eficacia de la estructura tranchada como un amortiguador.
+Devaluación Discreta del 20%: Este es un escenario de riesgo de cola extremo,
+similar a los eventos de devaluación abrupta que ha experimentado Argentina en el
+pasado. La simulación muestra que, si este shock ocurre sin advertencia previa, el
+Tramo 2 (25%) se licuaría por completo en términos de poder adquisitivo, y el
+Tramo 1 (60%) sufriría una caída de valor nominal de aproximadamente -5.0%. La
+conclusión de este escenario es doble: primero, valida la importancia crítica de los 
+disparadores de sobrecarga (como la brecha cambiaria y la volatilidad implícita),
+cuyo objetivo es detectar los signos precursores de una devaluación y liquidar el
+Tramo 2 antes de que ocurra el evento principal. Segundo, subraya el rol
+indispensable del Tramo 3 (15% en efectivo) como salvavidas en situaciones de este
+calibre, donde la liquidez pura es la única forma de capital verdaderamente seguro.
+Stress de Liquidez Sistémico (Gating de FCIs): Este escenario simula una
+intervención regulatoria que impone restricciones a los rescates de FCIs, obligando
+a los inversores a esperar un plazo de T+5 o T+10 para acceder a su dinero. Este
+tipo de restricción, conocido como gating, fue implementado en otras jurisdicciones
+durante crisis financieras. El impacto sobre la cartera es directamente medido por el
+Riesgo de Liquidez (LaR). Si el inversor necesita acceder a su dinero en el día 15,
+encontrará que el 85% de su capital está inmovilizado. Aquí, nuevamente, el Tramo
+3 (15% en efectivo) cumple su función principal: proporcionar liquidez
+incondicional y sin costos para cubrir necesidades inesperadas. La cartera está
+diseñada para soportar esto, pero el evento evidencia el costo de no contar con una
+porción significativa de efectivo disponible.
+1. 
+2. 
+3. 
+
+=== PAGE 11 ===
+Además de estos shocks externos, se deben considerar otros riesgos específicos. El riesgo
+de inflación global afecta al Tramo 1 y Tramo 3. Mientras que el capital en pesos busca
+ganarle a la inflación local, el capital en dólares pierde poder adquisitivo frente a la
+inflación estadounidense (IPC). Con una inflación anualizada del CPI en EE.UU. del
+3.0%, el poder adquisitivo del capital en dólares se diluye en aproximadamente 0.75% en
+un horizonte de 90 días . Este es un costo de oportunidad real que debe ser aceptado a
+cambio de la seguridad y el aislamiento del riesgo local. Otro riesgo es el riesgo de
+contraparte institucional. Aunque se ha minimizado al usar múltiples instrumentos y
+tramos, existe un riesgo residual de que el banco custodiante o el administrador del FCI
+tenga problemas financieros. La mitigación de este riesgo es diversificar la contraparte,
+aunque en el contexto de un solo banco como Santander Select, el riesgo se concentra. La
+elección de instrumentos de alto grado de inversión (como cauciones soberanas de corta
+duración) ayuda a reducir este riesgo. Finalmente, el riesgo de re-inversión es relevante
+para el Tramo 2. Si las tasas de interés en pesos caen bruscamente (por ejemplo, si el
+BCRA decide combatir una recesión bajando la TAMAR), el carry positivo puede
+revertirse a negativo. El modelo de detección de régimen está diseñado para detectar
+tales cambios en las expectativas de tasas y liquidar el tramo antes de que se materialice
+la pérdida de rentabilidad.
+Implementación Práctica y Recalibración Mensual
+La transición de un marco de investigación a una acción concreta requiere una hoja de
+ruta clara y un proceso de seguimiento disciplinado. La implementación práctica para el
+capital de supervivencia de USD 2.000 en Santander Select se divide en una fase de
+configuración inicial y un ciclo continuo de monitoreo y recalibración mensual. Todo el
+proceso debe documentarse y ejecutarse utilizando exclusivamente los instrumentos y
+datos disponibles a través de las plataformas oficiales del banco y las fuentes públicas
+autorizadas.
+La fase de Configuración Inicial se ejecuta en una sola ocasión y consiste en la
+asignación del capital total de USD 2.000 según la arquitectura tranchada definida. El
+proceso es el siguiente: 1. Apertura de Cuentas: Se deben tener a mano la cuenta de
+inversión (para comprar FCIs) y la cuenta comitente (para mantener el efectivo en
+dólares). 2. Suscripción al FCI Money Market USD (Tramo 1 - 60%): Se deben
+suscribir a un FCI de Mercado de Dinero en Dólares con rescate T+0 o T+1. Es crucial
+verificar en la ficha única del fondo en la plataforma de la CAFCI que especifica que el
+fondo posee esta característica de liquidez . El monto a invertir será del 60% de
+8
+1221
+
+=== PAGE 12 ===
+USD 2.000, es decir, USD 1.200. 3. Suscripción al FCI Money Market ARS (Tramo 2 -
+25%): Se deben suscribir a un FCI de Mercado de Dinero en Pesos con rescate T+1. De
+nuevo, es vital confirmar que el fondo admite retiros antes de su plazo mínimo sin
+comisiones de rescate. El monto a invertir será del 25% de USD 2.000, equivalente a ARS
+5.500 (calculado a la cotización del día de la operación). La inversión se realizará
+convirtiendo una parte del saldo en pesos de la cuenta comitente. 4. Transferencia a
+Efectivo USD (Tramo 3 - 15%): El 15% restante, equivalente a USD 300, deberá
+permanecer en la cuenta comitente del cliente como efectivo. Este tramo no se invierte en
+ningún instrumento, sino que se mantiene en su forma más líquida y segura.
+Una vez completada la configuración inicial, entra en juego el ciclo de Recalibración
+Mensual, un proceso disciplinado que debe realizarse alrededor del mismo día de cada
+mes. Este ciclo tiene como objetivo asegurar que la cartera siga alineada con el estado
+actual del mercado y las reglas del marco de gestión de riesgos. El procedimiento
+mensual es el siguiente: 1. Recolección de Datos: Al inicio del mes, se deben descargar e
+integrar los siguientes conjuntos de datos de sus fuentes oficiales:
+BCRA: La TAMAR vigente (para el cálculo del carry), las últimas series de reservas
+netas diarias (para el análisis de tendencias) y el último REM-BCRA (para
+proyecciones de tasas) .
+Matba-Rofex: Los precios del contrato de futuros del dólar MEP más relevante para
+el horizonte de tres meses, a partir de los cuales se calculará la tasa de devaluación
+implícita o crawling peg.
+CAFCI: Los rendimientos diarios de los FCIs seleccionados para actualizar el valor
+de la cartera.
+Análisis de Indicadores y Cálculo de Carrying: Con los datos actualizados, se
+procede a calcular el Carry Forward mensual (TAMAR−crawlingpeg) y se revisa
+la lectura de los cuatro indicadores de estrés: brecha cambiaria, volatilidad
+implícita, tendencia de reservas y comportamiento de los futuros ROFEX.
+Ejecución de la Matriz de Decisión: Se consultan los resultados del análisis contra
+la matriz de decisión dinámica. Si se activa algún trigger de sobrecarga (alerta
+roja), la acción inmediata es liquidar el Tramo 2 (ARS MM) y transferir los fondos a
+la cuenta comitente. Si el carry es negativo, la acción también es liquidar el Tramo
+2. Solo si el carry es positivo y todos los indicadores de estrés están en verde, se
+procede a mantener el Tramo 2.
+Rebalanceo (si fuera necesario): El balanceo consistiría en ajustar las
+participaciones de cada tramo de vuelta a sus porcentajes objetivo (60/25/15),
+pero dado que el Tramo 2 es opcional y pequeño, el balanceo principal se centraría
+• 
+8 19
+• 
+27
+• 
+1. 
+2. 
+3. 
+
+=== PAGE 13 ===
+en mover fondos entre la cuenta comitente y los FCIs según las decisiones tomadas
+en el paso anterior.
+Este proceso, aunque requiere disciplina, es relativamente simple de automatizar con
+hojas de cálculo o pequeñas rutinas de programación que consuman las APIs del BCRA 
+. La clave del éxito radica en la consistencia y la adherencia estricta a las reglas, sin
+dejarse influenciar por la volatilidad diaria o las narrativas del mercado. Siguiendo este
+marco, el capital de supervivencia no solo se preserva, sino que se gestiona de la manera
+más inteligente y profesional posible, maximizando la seguridad y minimizando las
+posibilidades de una catástrofe financiera en un horizonte de tiempo tan crítico.
+Referencia
+Macro Correlations Argentina | Exchange Gap Pass-Through M3 GDP https://
+contableia.com.ar/en/data/macro-correlations/
+Argentina's Central Bank hits 2026 dollar-buying target in just six ... https://
+buenosairesherald.com/economics/argentinas-central-bank-hits-2026-dollar-buying-
+target-in-just-six-months
+Starting January 1, Argentina's central bank will adjust the peso's ... https://
+www.facebook.com/financialtimes/posts/starting-january-1-argentinas-central-bank-
+will-adjust-the-pesos-exchange-rate-b/1260346089472099/
+[PDF] ARGENTINA https://economic-research.bnpparibas.com/pdf/en-US/Argentina-
+Dilemmas-11/14/2025,53007
+OECD Economic Surveys: Argentina 2025 https://www.oecd.org/en/publications/
+oecd-economic-surveys-argentina-2025_27dd6e27-en/full-report/macroeconomic-
+developments-and-policy-challenges_8e6a0236.html
+Argentina Economic Crisis: What It Means for Investors in 2026 https://
+www.riotimesonline.com/argentinas-economic-crisis-explained-what-it-means-for-
+brazil-and-investors-2026/
+Statistics and indicators | BCRA https://www.bcra.gob.ar/en/statistics-indicators/
+Market Expectations Survey (REM) - BCRA https://www.bcra.gob.ar/en/market-
+expectations-survey-rem/
+Camara Argentina de Fondos de Inversión https://www.cafci.org.ar/
+20
+1. 
+2. 
+3. 
+4. 
+5. 
+6. 
+7. 
+8. 
+9. 
+
+=== PAGE 14 ===
+Fondos Comunes de Inversión - CNV https://www.cnv.gov.ar/sitioWeb/
+FondosComunesInversion
+[PDF] Evolución Cuotaparte 2025- 2026 - Banco Patagonia https://
+www.bancopatagonia.com.ar/fondos/lombard_renta_pesos_mensual.pdf
+Ficha única para profundizar los estándares de transparencia en los ... https://
+www.argentina.gob.ar/noticias/ficha-unica-para-profundizar-los-estandares-de-
+transparencia-en-los-fondos-comunes-de
+Fondos Comunes de Inversión | IOL invertironline https://www.invertironline.com/
+productos/fondos-comunes-de-inversion
+¿Qué es un Fondo Común de Inversión (FCI)? - Naranja X https://
+www.naranjax.com/blog/que-son-los-fondos-comunes-de-inversion-en-argentina
+FCI in pesos November - YouTube https://www.youtube.com/watch?v=L7fAmLzur0M
+CAFCI — Cámara Argentina de Fondos Comunes de Inversión https://
+estadisticas.cafci2.org.ar/v2/home
+FCI propios - Bull Market https://bullmarket.com.ar/inversion/fci-propios/
+[PDF] MONEY MARKET PURO EN DÓLAR al 29-05 - Fondos Valiant https://
+fondosvaliant.com/informes/12-2026-06-04.pdf
+Querying statistical series in TXT format - BCRA https://www.bcra.gob.ar/en/
+querying-statistical-series-in-txt-format/
+APIs - BCRA https://www.bcra.gob.ar/en/central-bank-api-catalog/
+Consulta de fondos por atributos - CAFCI https://www.cafci.org.ar/consulta-de-
+fondos.html
+Dejá de ratonear, empezá a facturar. Te la hago corta ... - Instagram https://
+www.instagram.com/p/DSa4uYzDy2N/
+Comparador de fondos por nombre - CAFCI https://www.cafci.org.ar/
+comparadorNombre.html
+[PDF] Memoria Anual Reporte Integrado 2025 | BBVA Argentina https://
+www.bbva.com.ar/content/dam/public-web/argentina/documents/Memoria-Anual-
+Reporte-Integrado-2025.pdf
+[PDF] Memoria Anual Reporte Integrado 2024 - BBVA Argentina https://
+www.bbva.com.ar/content/dam/public-web/argentina/documents/Reporte-
+BBVA-2024.pdf
+¿Cómo es que puedo comprar MEP pero no vender AL30? → la ... https://
+www.instagram.com/p/DPL_x9diGn-/
+[PDF] Prospecto - BYMA https://data-widgets.byma.com.ar/wp-content/uploads/
+2023/07/LA-RIOJA-TITULO-DEUDA-CLASE-1-2-PROSPECTO.pdf
+10. 
+11. 
+12. 
+13. 
+14. 
+15. 
+16. 
+17. 
+18. 
+19. 
+20. 
+21. 
+22. 
+23. 
+24. 
+25. 
+26. 
+27. 
+
+=== PAGE 15 ===
+[PDF] SUPLEMENTO DE PROSPECTO - BBVA Argentina https://www.bbva.com.ar/
+content/dam/public-web/argentina/documents/ON_JDF_Clase_17_Adicionales-
+Suplemento_de_Prospecto.pdf
+[PDF] BANCO DE VALORES S.A. PROGRAMA GLOBAL DE EMISIÓN DE ... https://
+www.puentenet.com/contenido/recursos/Prospecto_-_VALO_-_Clase_1.pdf
+¡Haz crecer tus ahorros ahora mismo! Obtén hasta 5.80 ... - Facebook https://
+www.facebook.com/CajaMunicipalIca/posts/-haz-crecer-tus-ahorros-ahora-mismo-
+obt%C3%A9n-hasta-580-de-trea-con-el-dep%C3%B3sito-a-pl/1446886404136253/
+Caja Huancayo - Facebook https://www.facebook.com/CajaHuancayo/posts/-
+subimos-nuestra-s%C3%BAper-tasa-hasta-725-trea-para-tus-dep%C3%B3sitos-a-plazo-
+fijono-esp/8043298349017324/
+[PDF] INFORME N° 116 - Senado https://www.senado.gob.ar/bundles/
+senadoparlamentario/pdf/estadisticas/116.pdf
+[PDF] PROSPECTO - Banco Macro https://www.macro.com.ar/relaciones-inversores/
+documento/1580934215680/macro-2023---prospecto-v.f..pdf
+El Gobierno argentino autorizó que adolescentes desde los 13 años ... https://
+www.instagram.com/p/DRUkDJwkoVW/
+[PDF] oficial - Gobierno de Santa Fe https://www.santafe.gob.ar/boletinoficial/
+verPdf.php?archivo=recursos/boletines/pdf/2026/05/BO14052026.pdf
+¿Tenés deudas en una billetera virtual? A partir del 31 de agosto de ... https://
+www.instagram.com/reel/DWw6G4MAAVp/
+[PDF] SUPLEMENTO DE PROSPECTO John Deere Credit Compañía ... https://
+www.bbva.com.ar/content/dam/public-web/argentina/documents/MPA3-ANU-
+ON_EF_JOHN_DEERE_CREDIT_CF_CLASE_19_Suplemento_de_Prospecto.pdf
+¿Cuántos dólares puedo comprar? Con el dólar MEP podés ... https://
+www.instagram.com/p/DPEyBIbj1qW/
+28. 
+29. 
+30. 
+31. 
+32. 
+33. 
+34. 
+35. 
+36. 
+37. 
+38. 
+
