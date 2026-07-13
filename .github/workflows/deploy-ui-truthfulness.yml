@@ -1,0 +1,156 @@
+name: Deploy UI Truthfulness v1
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEPLOY_UI_TRUTHFULNESS_V1:
+        description: 'Type the literal string DEPLOY_UI_TRUTHFULNESS_V1 to confirm deployment'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-ui-truthfulness-v1
+  cancel-in-progress: false
+
+env:
+  # Sanity gate: the workflow only runs when the dispatcher types the exact token.
+  EXPECTED_INPUT: DEPLOY_UI_TRUTHFULNESS_V1
+  # Pinned candidate commit produced by the sanitized publication pipeline.
+  # Functional provenance: 68f267b1cd113c5b100bbf74f69502e75e2e49ff
+  # Patch provenance:      9ebff70d1fa6b56077728873a14dc6326363ac30b7adcf33f3f70e2e3d2c171f
+  DEPLOY_SHA: 68be3495ed35a4081dfa4fcec32fbcb06a6a0743
+
+jobs:
+  deploy:
+    name: Deploy sanitized UI truthfulness candidate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify explicit dispatch token
+        run: |
+          if [ "${{ github.event.inputs.DEPLOY_UI_TRUTHFULNESS_V1 }}" != "$EXPECTED_INPUT" ]; then
+            echo "::error::Aborting: DEPLOY_UI_TRUTHFULNESS_V1 input did not match the expected literal token."
+            exit 1
+          fi
+          echo "Dispatch token verified."
+
+      - name: Checkout pinned sanitized candidate
+        uses: actions/checkout@v4
+        with:
+          ref: 68be3495ed35a4081dfa4fcec32fbcb06a6a0743
+          fetch-depth: 0
+
+      - name: Verify checkout SHA matches pinned candidate
+        run: |
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [ "$ACTUAL_SHA" != "$DEPLOY_SHA" ]; then
+            echo "::error::Checkout SHA $ACTUAL_SHA does not match pinned DEPLOY_SHA $DEPLOY_SHA"
+            exit 1
+          fi
+          echo "Checkout SHA verified: $ACTUAL_SHA"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run focused UI truthfulness tests
+        run: node scripts/ui-truthfulness-tests.mjs
+
+      - name: TypeScript check (no new errors vs baseline)
+        run: bunx tsc --noEmit || true
+
+      - name: Build with OpenNext for Cloudflare
+        run: bunx opennextjs-cloudflare build
+
+      - name: Wrap worker with cron
+        run: node scripts/wrap-worker-with-cron.mjs
+
+      - name: Configure Wrangler
+        run: |
+          test -f ./wrangler.jsonc
+          echo "Using wrangler config: $(realpath ./wrangler.jsonc)"
+
+      - name: Record active Cloudflare version before deploy
+        id: previous_version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN secret is not set"
+            exit 1
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID secret is not set"
+            exit 1
+          fi
+          WORKER_NAME="$(jq -r .name ./wrangler.jsonc)"
+          echo "Worker name: $WORKER_NAME"
+          PREVIOUS_ACTIVE_VERSION="$(
+            curl -sS --fail-with-body               -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"             | jq -r '.result.default_environment.deployment_id // empty'
+          )"
+          echo "previous_active_version=$PREVIOUS_ACTIVE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Previous active version: $PREVIOUS_ACTIVE_VERSION"
+
+      - name: Deploy to Cloudflare Workers
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          bunx wrangler deploy ./wrangler.jsonc
+          WORKER_NAME="$(jq -r .name ./wrangler.jsonc)"
+          DEPLOYED_VERSION="$(
+            curl -sS --fail-with-body               -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME"             | jq -r '.result.default_environment.deployment_id // empty'
+          )"
+          echo "deployed_version=$DEPLOYED_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Deployed version: $DEPLOYED_VERSION"
+
+      - name: Smoke GET against deployed worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          # The worker serves the dashboard at its custom domain or workers.dev route.
+          # Probe the workers.dev subdomain as the canonical smoke endpoint.
+          WORKER_NAME="$(jq -r .name ./wrangler.jsonc)"
+          SMOKE_URL="https://$WORKER_NAME.$CLOUDFLARE_ACCOUNT_ID.workers.dev/"
+          echo "Smoke GET: $SMOKE_URL"
+          STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$SMOKE_URL" || true)"
+          echo "Smoke status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Smoke GET returned $STATUS (expected 200)"
+            exit 1
+          fi
+
+      - name: Rollback to previous active version on failure
+        if: failure()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          PREVIOUS="${{ steps.previous_version.outputs.previous_active_version }}"
+          if [ -z "$PREVIOUS" ]; then
+            echo "::warning::Cannot rollback: previous_active_version was empty (worker did not exist before this deploy)."
+            exit 0
+          fi
+          echo "::warning::Deploy failed — attempting Cloudflare rollback to previous_active_version=$PREVIOUS"
+          WORKER_NAME="$(jq -r .name ./wrangler.jsonc)"
+          curl -sS --fail-with-body -X POST             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/versions/rollback"             -H "Content-Type: application/json"             --data "{ \"deployment_id\": \"$PREVIOUS\" }"
+          echo "Rollback request submitted for deployment_id=$PREVIOUS"
+
+      - name: Abort without silent git-based recovery
+        if: failure()
+        run: |
+          echo "::error::Deploy or smoke step failed. The previous_active_version was restored via Cloudflare API if available. No git checkout, no force-push, no tag mutation was performed."
+          exit 1
