@@ -18,7 +18,7 @@ concurrency:
 env:
   EXPECTED_INPUT: VALIDATE_INITIAL_LOADING_STATE_V1
   BASELINE_SHA: 68be3495ed35a4081dfa4fcec32fbcb06a6a0743
-  CANDIDATE_SHA: 05c5fd1b9a324ef4acb970c64752609df7f91885
+  CANDIDATE_SHA: ef20779f564a79cf74856a8000abd5c4811ffb8c
 
 jobs:
   validate:
@@ -33,7 +33,7 @@ jobs:
       - name: Checkout pinned candidate
         uses: actions/checkout@v4
         with:
-          ref: 05c5fd1b9a324ef4acb970c64752609df7f91885
+          ref: ef20779f564a79cf74856a8000abd5c4811ffb8c
           fetch-depth: 0
 
       - name: Verify candidate and diff scope
@@ -42,7 +42,7 @@ jobs:
           mkdir -p validation-evidence
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           git cat-file -e "${BASELINE_SHA}^{commit}"
-          test "$(git rev-list --count "${BASELINE_SHA}..${CANDIDATE_SHA}")" = "2"
+          test "$(git rev-list --count "${BASELINE_SHA}..${CANDIDATE_SHA}")" = "3"
           git diff --name-only "$BASELINE_SHA" "$CANDIDATE_SHA" | sort > validation-evidence/changed-files.txt
           printf '%s\n' scripts/initial-loading-tests.mjs src/components/dashboard/main-dashboard.tsx | sort > validation-evidence/expected-files.txt
           diff -u validation-evidence/expected-files.txt validation-evidence/changed-files.txt
