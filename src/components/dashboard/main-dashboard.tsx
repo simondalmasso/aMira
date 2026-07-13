@@ -93,6 +93,7 @@ export function MainDashboard() {
     dataLabel,
     backtest,
     realDataPct,
+    provenance,
     fetchPortfolio,
     sync,
     rebalance,
@@ -299,6 +300,16 @@ export function MainDashboard() {
     return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
+  // ─── U9 FIX: Compute fresh/degraded/stale source counts from provenance ───
+  // Per COUNCIL EXECUTION ORDER UI_TRUTHFULNESS_PATCH_v1 Fix U9:
+  //   Show counts of fresh/degraded/stale sources when provenance is available.
+  //   Do NOT recalculate SLAs or states — use existing labels.
+  const provenanceEntries = provenance ? Object.values(provenance) : [];
+  const freshCount = provenanceEntries.filter(p => p?.label === 'REAL' || p?.label === 'OBSERVADO').length;
+  const degradedCount = provenanceEntries.filter(p => p?.label === 'PARTIAL_FALLBACK' || p?.label === 'RECONSTRUIDO' || p?.label === 'SIMULADO').length;
+  const staleCount = provenanceEntries.filter(p => p?.label === 'STALE' || p?.label === 'ERROR').length;
+  const hasProvenanceCounts = provenanceEntries.length > 0;
+
   return (
     <div className="min-h-screen bg-[#ffffff] text-[#000000]">
       {/* ─── Encabezado (V7: responsive + global action buttons inline) ─── */}
@@ -313,7 +324,7 @@ export function MainDashboard() {
                 isLive ? 'bg-[#16a34a] animate-pulse' : 'bg-[#eaeaea]'
               }`} />
               <span className="text-[10px] sm:text-[11px] font-semibold text-[#999999] tracking-[0.05em] whitespace-nowrap">
-                <span className="hidden sm:inline">Actualización: </span>
+                <span className="hidden sm:inline">Último fetch: </span>
                 {formatTime(lastSync)}
               </span>
               {oracle && (
@@ -331,9 +342,14 @@ export function MainDashboard() {
                 realDataPct >= 70 ? 'bg-[#16a34a]/10 text-[#16a34a]' :
                 realDataPct >= 40 ? 'bg-[#ca8a04]/10 text-[#ca8a04]' :
                 'bg-[#dc2626]/10 text-[#dc2626]'
-              }`}>
-                {realDataPct}% REAL
+              }`} title="Cobertura macro real — no incluye predicciones, backtests, VaR, Sharpe, retornos esperados, historial simulado ni precios de todas las clases.">
+                Macro real: {realDataPct}%
               </span>
+              {hasProvenanceCounts && (
+                <span className="text-[8px] font-semibold text-[#999999] whitespace-nowrap" data-testid="source-freshness-counts">
+                  {freshCount} fresh · {degradedCount} degraded · {staleCount} stale
+                </span>
+              )}
             </div>
 
             {/* Right: global action buttons (V7 relocation) */}

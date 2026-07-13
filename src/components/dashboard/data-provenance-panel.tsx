@@ -82,11 +82,15 @@ export function DataProvenancePanel() {
         <div className="flex justify-between mt-1">
           <span className="text-[8px] font-semibold text-[#999999]">0% modelo</span>
           <span className="text-[8px] font-semibold text-[#999999]">META: 70%+</span>
-          <span className="text-[8px] font-semibold text-[#999999]">100% real</span>
+          <span className="text-[8px] font-semibold text-[#999999]">Macro real 100%</span>
         </div>
         <p className="text-[9px] font-semibold text-[#666666] leading-snug mt-2">
+          <strong className="text-[#999999]">Alcance:</strong> Cobertura macro real (BCRA, INDEC, Bluelytics).
+          No incluye predicciones, backtests, VaR, Sharpe, retornos esperados, historial simulado ni precios de todas las clases.
+        </p>
+        <p className="text-[9px] font-semibold text-[#666666] leading-snug mt-1">
           {realPct >= 70
-            ? 'La mayoría de los parámetros provienen de APIs públicas verificables (BCRA, INDEC, Bluelytics). Las proyecciones tienen base real.'
+            ? 'La mayoría de los parámetros provienen de APIs públicas verificables. Las proyecciones tienen base real.'
             : realPct >= 40
             ? 'Algunos datos son reales, pero otros son estimaciones modeladas. Verificar tasas con fuentes oficiales antes de invertir.'
             : 'Los parámetros de tasas, inflación y CER son estimaciones modeladas, no datos observados. Las proyecciones deben interpretarse con cautela.'

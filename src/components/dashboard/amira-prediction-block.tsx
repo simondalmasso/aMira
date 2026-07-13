@@ -176,8 +176,16 @@ export function AmiraPredictionBlock({
           {/* Left: value + percent */}
           <div className="flex-1 min-w-0">
             <div className="text-[10px] uppercase font-bold tracking-wider text-[#999999] mb-1">
-              GANANCIA estimada · {current.label}
+              {pred.source === 'fallback'
+                ? 'Escenario estático de referencia · ' + current.label
+                : 'GANANCIA estimada · ' + current.label}
             </div>
+            {pred.source === 'fallback' && (
+              <div className="flex items-center gap-1 mb-1">
+                <span className="text-[7px] font-bold px-1 py-0.5 rounded bg-[#dc2626] text-white tracking-wider">PRED OFF</span>
+                <span className="text-[7px] font-bold px-1 py-0.5 rounded bg-[#6b7280] text-white tracking-wider">NO ES PREDICCIÓN ML</span>
+              </div>
+            )}
             <div
               data-testid="profit-gain-value"
               className="text-[27px] sm:text-[29px] font-extrabold tabular-nums leading-none"

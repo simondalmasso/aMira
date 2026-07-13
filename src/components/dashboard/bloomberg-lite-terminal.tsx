@@ -127,11 +127,37 @@ function MacroIndicators({
   reserves_delta: number;
   liquidity: number;
 }) {
+  // ─── U1 FIX: REAL CARRY — Fisher canonical formula ───────────────────
+  // Per COUNCIL EXECUTION ORDER UI_TRUTHFULNESS_PATCH_v1 Fix U1:
+  //   Previous buggy formula: tna - Math.pow(1 + inflation, 12) - 1 + 1
+  //   This subtracted the compounding FACTOR (1.5637) instead of the
+  //   annualized RATE (0.5637), producing -127.4% instead of -17.5%.
+  //
+  //   Canonical Fisher (same as carry-panel.tsx):
+  //     inflationAnnual = (1 + inflationMonthly)^12 - 1
+  //     realCarry = (1 + tna) / (1 + inflationAnnual) - 1
+  //
+  //   For tna=0.29, inflationMonthly=0.038:
+  //     inflationAnnual = 0.5645
+  //     realCarry = 1.29 / 1.5645 - 1 = -0.1754 → -17.5%
+  //
+  //   Guards: tna finite, inflation finite, inflation > -1, denominator > 0.
+  //   If any guard fails: display 'N/D'.
+  const tnaFinite = typeof tna === 'number' && isFinite(tna);
+  const inflationFinite = typeof inflation === 'number' && isFinite(inflation);
+  const inflationValid = inflationFinite && inflation > -1;
+  const inflationAnnual = inflationValid ? Math.pow(1 + inflation, 12) - 1 : NaN;
+  const denominatorValid = isFinite(inflationAnnual) && (1 + inflationAnnual) > 0;
+  const realCarryValid = tnaFinite && inflationValid && denominatorValid;
+  const realCarry = realCarryValid ? (1 + tna) / (1 + inflationAnnual) - 1 : NaN;
+  const realCarryDisplay = realCarryValid ? fmtPct(realCarry, 1) : 'N/D';
+  const realCarryColor = realCarryValid ? (realCarry >= 0 ? '#00ff00' : '#ff3030') : '#666666';
+
   const rows = [
     { label: 'INFL m/o', val: fmtPct(inflation, 2), color: '#fff' },
     { label: 'INFL y/y', val: fmtPct(Math.pow(1 + inflation, 12) - 1, 1), color: '#fff' },
     { label: 'TNA', val: `${(tna * 100).toFixed(1)}%`, color: '#fff' },
-    { label: 'REAL CARRY', val: fmtPct(tna - Math.pow(1 + inflation, 12) - 1 + 1, 1), color: tna - Math.pow(1 + inflation, 12) - 1 + 1 >= 0 ? '#00ff00' : '#ff3030' },
+    { label: 'REAL CARRY', val: realCarryDisplay, color: realCarryColor },
     { label: 'RESERVES Δ', val: `${reserves_delta >= 0 ? '+' : ''}${fmtNum(reserves_delta, 1)}B`, color: reserves_delta >= 0 ? '#00ff00' : '#ff3030' },
     { label: 'LIQUIDITY', val: fmtNum(liquidity, 2), color: '#fff' },
   ];
@@ -241,10 +267,18 @@ export function BloombergLiteTerminal() {
         </div>
       </div>
 
-      {/* Disclaimer — read-only / must-not-influence-core */}
+      {/* U7 FIX: Visible READ-ONLY MIRROR badge + disclaimer */}
       <div className="border border-[#1a1a1a] rounded bg-[#0a0a0a] px-2 py-1">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span
+            data-testid="bloomberg-role-badge"
+            className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded bg-[#1e3a5f] text-[#60a5fa] border border-[#3b82f640] tracking-wider"
+          >
+            READ-ONLY MIRROR
+          </span>
+        </div>
         <p className="text-[7px] font-mono text-[#666] leading-tight">
-          READ-ONLY MIRROR · VISUALIZATION &amp; CONTEXT ONLY · DOES NOT INFLUENCE ORACLE CORE
+          VISUALIZATION &amp; CONTEXT ONLY · DOES NOT INFLUENCE ORACLE CORE
         </p>
       </div>
 

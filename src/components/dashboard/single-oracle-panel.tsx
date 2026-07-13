@@ -282,9 +282,16 @@ function PredictionBlock({ score }: { score: SingleOracleResponse['vector']['sco
 
 // ─── BLOCK 4: OutcomeComparison ───────────────────────────────────────────
 function OutcomeComparisonBlock({ learning }: { learning: SingleOracleResponse['learning'] }) {
-  const hitRate = (learning.directional_accuracy_rate * 100).toFixed(1);
-  const maePct = (learning.mean_absolute_error * 100).toFixed(3);
-  const brier = learning.mean_brier_score.toFixed(4);
+  // ─── U2 FIX: When total_verifications === 0, display 'N/D' instead of
+  // the closed-loop-learning defaults (hit_rate=50%, MAE=0%, Brier=0.0000).
+  // Those defaults are misleadingly perfect when no verifications exist.
+  // Per COUNCIL EXECUTION ORDER UI_TRUTHFULNESS_PATCH_v1 Fix U2:
+  //   Do NOT modify closed-loop-learning.ts defaults — only prevent the UI
+  //   from presenting them as calculated results.
+  const hasVerifications = learning.total_verifications > 0;
+  const hitRate = hasVerifications ? (learning.directional_accuracy_rate * 100).toFixed(1) : 'N/D';
+  const maePct = hasVerifications ? (learning.mean_absolute_error * 100).toFixed(3) : 'N/D';
+  const brier = hasVerifications ? learning.mean_brier_score.toFixed(4) : 'N/D';
 
   return (
     <div className="border border-[#e5e7eb] rounded-[8px] p-4 bg-white">
@@ -302,11 +309,11 @@ function OutcomeComparisonBlock({ learning }: { learning: SingleOracleResponse['
       <div className="grid grid-cols-3 gap-3">
         <div>
           <div className="text-[9px] text-[#999] uppercase tracking-wide mb-1">Hit rate (direction)</div>
-          <div className="font-mono font-extrabold text-[22px] leading-none text-[#0066cc]">{hitRate}<span className="text-[14px]">%</span></div>
+          <div className="font-mono font-extrabold text-[22px] leading-none text-[#0066cc]">{hitRate}{hasVerifications && <span className="text-[14px]">%</span>}</div>
         </div>
         <div>
           <div className="text-[9px] text-[#999] uppercase tracking-wide mb-1">MAE</div>
-          <div className="font-mono font-extrabold text-[22px] leading-none">{maePct}<span className="text-[14px] text-[#999]">%</span></div>
+          <div className="font-mono font-extrabold text-[22px] leading-none">{maePct}{hasVerifications && <span className="text-[14px] text-[#999]">%</span>}</div>
         </div>
         <div>
           <div className="text-[9px] text-[#999] uppercase tracking-wide mb-1">Brier score</div>
@@ -316,7 +323,9 @@ function OutcomeComparisonBlock({ learning }: { learning: SingleOracleResponse['
 
       <div className="mt-3 pt-2 border-t border-[#f0f0f0]">
         <p className="text-[9px] text-[#666] italic">
-          Only verified predictions update model weights (per closed_loop_learning_v1 spec).
+          {hasVerifications
+            ? 'Only verified predictions update model weights (per closed_loop_learning_v1 spec).'
+            : 'Sin verificaciones todavía — las métricas se mostrarán cuando existan predicciones verificadas.'}
         </p>
       </div>
     </div>
@@ -388,6 +397,13 @@ export function SingleOraclePanel() {
       <div className="flex items-center justify-between mb-2">
         <div>
           <h2 className="text-[18px] font-extrabold tracking-tight">Santander Oracle v1 — Minimal Bloomberg</h2>
+          <span
+            data-testid="oracle-canonical-badge"
+            className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#0066cc] text-white tracking-[0.08em] ml-1"
+            title="Panel canónico — single_pass_oracle_engine (one_engine · one_loop · one_score)"
+          >
+            CANÓNICO
+          </span>
           <p className="text-[10px] text-[#999] font-mono">
             one_engine · one_loop · one_score · model: {data.vector.model_version}
           </p>

@@ -840,6 +840,13 @@ export function MultiOraclePanel() {
           <div className="flex items-center gap-1.5">
             <Database className="w-4 h-4 text-[#0066cc]" />
             <h3 className="text-[14px] font-extrabold text-[#000000]">Predicciones Amira vision</h3>
+            <span
+              data-testid="amira-advisory-badge"
+              className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#ca8a04]/20 text-[#ca8a04] border border-[#ca8a0430] tracking-[0.08em]"
+              title="Panel advisory — consume el view-model y el decision engine. No es el panel canónico (ver SingleOraclePanel)."
+            >
+              ADVISORY · VISUALIZACIÓN
+            </span>
             {data && <SourceStatus status={data.source_status} />}
           </div>
           <p className="text-[10px] text-[#666666] mt-0.5">
@@ -1457,13 +1464,16 @@ function StickyTopBar({
             {formatUsd(totalPortfolioValue)}
           </div>
           <div className="text-[9px] text-[#9ca3af]">
-            Valor total del portfolio · confianza {(totalPortfolioConfidence * 100).toFixed(0)}%
+            Valor total del portfolio · <span data-testid="portfolio-value-label">Valor derivado del portfolio</span>
           </div>
           {profitAbs != null && (
             <div className="text-[11px] font-bold tabular-nums mt-0.5" style={{ color: profitColor }}>
-              P&L ({decision?.stress ?? 'SIDEWAYS'}): {formatUsd(profitAbs)} ({formatPercent(profitPct ?? 0)})
+              <span data-testid="pnl-stress-label">P&L proyectado — escenario stress</span> ({decision?.stress ?? 'SIDEWAYS'}): {formatUsd(profitAbs)} ({formatPercent(profitPct ?? 0)})
             </div>
           )}
+          <div className="text-[8px] text-[#9ca3af] mt-0.5" title="El P&L proyectado no es el P&L actual. Es una hipótesis bajo escenario de stress.">
+            ⚠ El stress P&L no es el P&L actual.
+          </div>
         </div>
 
         {stressedTotal != null && (
@@ -2010,7 +2020,7 @@ function HoldingsTotalFooterRowV2({
           <strong>Modo seleccionado:</strong> <span className="font-bold" style={{ color: selected === 'conservative' ? '#16a34a' : selected === 'balanced' ? '#ca8a04' : '#dc2626' }}>{riskLabelEsUpper(selected)}</span>
         </span>
         <span className="tabular-nums" data-testid="footer-pnl-delta">
-          P&L <strong style={{ color: portfolio.profit_absolute_usd >= 0 ? '#16a34a' : '#dc2626' }}>{formatUsd(portfolio.profit_absolute_usd)} ({formatPercent(portfolio.profit_percent)})</strong>
+          <span data-testid="pnl-live-label">P&L actual (paper)</span> <strong style={{ color: portfolio.profit_absolute_usd >= 0 ? '#16a34a' : '#dc2626' }}>{formatUsd(portfolio.profit_absolute_usd)} ({formatPercent(portfolio.profit_percent)})</strong>
         </span>
       </div>
     </div>
