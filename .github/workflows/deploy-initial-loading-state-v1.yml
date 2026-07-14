@@ -1,0 +1,608 @@
+name: Deploy Initial Loading State v1
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEPLOY_INITIAL_LOADING_STATE_V1:
+        description: 'Type DEPLOY_INITIAL_LOADING_STATE_V1 to confirm deployment'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-initial-loading-state-v1
+  cancel-in-progress: false
+
+env:
+  EXPECTED_INPUT: DEPLOY_INITIAL_LOADING_STATE_V1
+  BASELINE_SHA: 68be3495ed35a4081dfa4fcec32fbcb06a6a0743
+  DEPLOY_SHA: ef20779f564a79cf74856a8000abd5c4811ffb8c
+  BASE_URL: https://santaninverter-oracle.simondalmasso44.workers.dev
+
+jobs:
+  deploy:
+    name: Deploy pinned initial loading candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Verify explicit dispatch token
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ github.event.inputs.DEPLOY_INITIAL_LOADING_STATE_V1 }}" = "$EXPECTED_INPUT"
+          test "${{ github.ref }}" = "refs/heads/main"
+
+      - name: Checkout pinned candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ef20779f564a79cf74856a8000abd5c4811ffb8c
+          fetch-depth: 0
+
+      - name: Initialize evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment-evidence
+          touch \
+            deployment-evidence/tsc-baseline.txt \
+            deployment-evidence/tsc-candidate.txt \
+            deployment-evidence/tsc-baseline.normalized.txt \
+            deployment-evidence/tsc-candidate.normalized.txt \
+            deployment-evidence/tsc-new-errors.txt \
+            deployment-evidence/tsc-resolved-errors.txt \
+            deployment-evidence/tsc-summary.txt \
+            deployment-evidence/assets.txt \
+            deployment-evidence/build-sha256.txt \
+            deployment-evidence/smoke.txt
+
+      - name: Verify checkout, history, and exact diff scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          test "$ACTUAL_SHA" = "$DEPLOY_SHA"
+          git cat-file -e "${BASELINE_SHA}^{commit}"
+          test "$(git rev-list --count "${BASELINE_SHA}..${DEPLOY_SHA}")" = "3"
+
+          git diff --name-only "$BASELINE_SHA" "$DEPLOY_SHA" | sort > deployment-evidence/changed-files.txt
+          printf '%s\n' \
+            scripts/initial-loading-tests.mjs \
+            src/components/dashboard/main-dashboard.tsx \
+            | sort > deployment-evidence/expected-files.txt
+          diff -u deployment-evidence/expected-files.txt deployment-evidence/changed-files.txt
+          git log --format='%H %s' "${BASELINE_SHA}..${DEPLOY_SHA}" > deployment-evidence/commits.txt
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run 17 initial loading tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/initial-loading-tests.mjs | tee deployment-evidence/initial-loading-tests.txt
+          grep -Fxq '17 behavioral tests passed' deployment-evidence/initial-loading-tests.txt
+
+      - name: Run 32 UI truthfulness tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/ui-truthfulness-tests.mjs | tee deployment-evidence/ui-truthfulness-tests.txt
+          grep -Fxq 'RESULTS: 32 passed, 0 failed, 32 total' deployment-evidence/ui-truthfulness-tests.txt
+
+      - name: TypeScript no-new-errors gate against deployed baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASELINE_DIR="$RUNNER_TEMP/ts-baseline"
+          git worktree add --detach "$BASELINE_DIR" "$BASELINE_SHA"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$BASELINE_DIR/node_modules"
+
+          run_tsc() {
+            local workdir="$1"
+            local raw_output="$2"
+            local normalized_output="$3"
+
+            set +e
+            (
+              cd "$workdir"
+              NO_COLOR=1 "$GITHUB_WORKSPACE/node_modules/.bin/tsc" --noEmit --pretty false
+            ) > "$raw_output" 2>&1
+            local status=$?
+            set -e
+
+            grep -E 'error TS[0-9]+:' "$raw_output" |
+              sed -E \
+                -e "s#${workdir%/}/##g" \
+                -e 's/\([0-9]+,[0-9]+\): error/(): error/' |
+              sort > "$normalized_output" || true
+
+            printf '%s' "$status"
+          }
+
+          BASELINE_STATUS="$(
+            run_tsc \
+              "$BASELINE_DIR" \
+              "$GITHUB_WORKSPACE/deployment-evidence/tsc-baseline.txt" \
+              "$GITHUB_WORKSPACE/deployment-evidence/tsc-baseline.normalized.txt"
+          )"
+          CANDIDATE_STATUS="$(
+            run_tsc \
+              "$GITHUB_WORKSPACE" \
+              "$GITHUB_WORKSPACE/deployment-evidence/tsc-candidate.txt" \
+              "$GITHUB_WORKSPACE/deployment-evidence/tsc-candidate.normalized.txt"
+          )"
+
+          comm -13 \
+            deployment-evidence/tsc-baseline.normalized.txt \
+            deployment-evidence/tsc-candidate.normalized.txt \
+            > deployment-evidence/tsc-new-errors.txt
+          comm -23 \
+            deployment-evidence/tsc-baseline.normalized.txt \
+            deployment-evidence/tsc-candidate.normalized.txt \
+            > deployment-evidence/tsc-resolved-errors.txt
+
+          BASELINE_COUNT="$(grep -cE 'error TS[0-9]+:' deployment-evidence/tsc-baseline.txt || true)"
+          CANDIDATE_COUNT="$(grep -cE 'error TS[0-9]+:' deployment-evidence/tsc-candidate.txt || true)"
+          NEW_COUNT="$(wc -l < deployment-evidence/tsc-new-errors.txt)"
+          RESOLVED_COUNT="$(wc -l < deployment-evidence/tsc-resolved-errors.txt)"
+
+          {
+            echo "baseline_status=$BASELINE_STATUS"
+            echo "candidate_status=$CANDIDATE_STATUS"
+            echo "baseline_count=$BASELINE_COUNT"
+            echo "candidate_count=$CANDIDATE_COUNT"
+            echo "new_diagnostics=$NEW_COUNT"
+            echo "resolved_diagnostics=$RESOLVED_COUNT"
+          } | tee deployment-evidence/tsc-summary.txt
+
+          test "$NEW_COUNT" = "0"
+
+      - name: Verify patch whitespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check "$BASELINE_SHA" "$DEPLOY_SHA"
+
+      - name: Build OpenNext for Cloudflare
+        run: bunx opennextjs-cloudflare build
+
+      - name: Generate cron worker wrapper
+        run: node scripts/wrap-worker-with-cron.mjs
+
+      - name: Validate build and canonical Wrangler configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .open-next/worker-with-cron.js
+          test -d .open-next/assets
+          test -f src/app/api/audit/route.ts
+          jq -e empty wrangler.jsonc >/dev/null
+          jq -e '
+            .name == "santaninverter-oracle" and
+            .main == ".open-next/worker-with-cron.js" and
+            .assets.binding == "ASSETS" and
+            .assets.directory == ".open-next/assets" and
+            .compatibility_date == "2026-06-16" and
+            .triggers.crons == ["0 23 * * 1-5"] and
+            ([.kv_namespaces[].binding] | sort) == (["ORACLE_ASSETS_HISTORY", "ORACLE_FCI_HISTORY", "ORACLE_PREDICTIONS"] | sort) and
+            ([.services[].binding] | index("MACRO_PROXY")) != null
+          ' wrangler.jsonc >/dev/null
+
+          find .open-next/assets -type f | sort > deployment-evidence/assets.txt
+          test -s deployment-evidence/assets.txt
+          while IFS= read -r asset; do
+            sha256sum "$asset"
+          done < deployment-evidence/assets.txt > deployment-evidence/assets-sha256.txt
+
+          sha256sum \
+            wrangler.jsonc \
+            .open-next/worker-with-cron.js \
+            deployment-evidence/assets.txt \
+            > deployment-evidence/build-sha256.txt
+
+      - name: Verify Cloudflare credentials are present
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+
+      - name: Capture active Cloudflare deployment before deploy
+        id: previous
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          touch deployment-evidence/cloudflare-accessed
+          WORKER_NAME="$(jq -er '.name' wrangler.jsonc)"
+          API_URL="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/deployments"
+
+          curl -fsS \
+            --connect-timeout 10 \
+            --max-time 60 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "$API_URL" \
+            -o deployment-evidence/pre-deploy-cloudflare.json
+          jq -e '.success == true' deployment-evidence/pre-deploy-cloudflare.json >/dev/null
+
+          LATEST_DEPLOYMENT="$(
+            jq -cer '
+              .result.deployments as $items
+              | if ($items | length) == 0 then
+                  error("No existing Cloudflare deployment found")
+                elif $items[0].created_on? != null then
+                  ($items | max_by(.created_on))
+                else
+                  $items[0]
+                end
+            ' deployment-evidence/pre-deploy-cloudflare.json
+          )"
+          PREVIOUS_DEPLOYMENT_ID="$(printf '%s\n' "$LATEST_DEPLOYMENT" | jq -er '.id')"
+          PREVIOUS_VERSION_ID="$(
+            printf '%s\n' "$LATEST_DEPLOYMENT" |
+              jq -er '.versions | map(select((.percentage | tonumber) == 100)) | first | .version_id'
+          )"
+
+          test -n "$PREVIOUS_DEPLOYMENT_ID"
+          test -n "$PREVIOUS_VERSION_ID"
+          echo "previous_deployment_id=$PREVIOUS_DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+          echo "previous_version_id=$PREVIOUS_VERSION_ID" >> "$GITHUB_OUTPUT"
+          printf 'deployment_id=%s\nversion_id=%s\npercentage=100\n' \
+            "$PREVIOUS_DEPLOYMENT_ID" "$PREVIOUS_VERSION_ID" \
+            > deployment-evidence/pre-deploy-summary.txt
+
+      - name: Deploy pinned candidate to Cloudflare Workers
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          touch deployment-evidence/deploy-attempted
+          echo "attempted=true" >> "$GITHUB_OUTPUT"
+
+          bunx wrangler deploy --config wrangler.jsonc | tee deployment-evidence/wrangler-deploy.txt
+
+          WORKER_NAME="$(jq -er '.name' wrangler.jsonc)"
+          API_URL="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/deployments"
+          PREVIOUS_DEPLOYMENT_ID="${{ steps.previous.outputs.previous_deployment_id }}"
+          PREVIOUS_VERSION_ID="${{ steps.previous.outputs.previous_version_id }}"
+
+          NEW_DEPLOYMENT_ID=''
+          NEW_VERSION_ID=''
+          NEW_PERCENTAGE=''
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            curl -fsS \
+              --connect-timeout 10 \
+              --max-time 60 \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "$API_URL" \
+              -o deployment-evidence/post-deploy-cloudflare.json
+            jq -e '.success == true' deployment-evidence/post-deploy-cloudflare.json >/dev/null
+
+            LATEST_DEPLOYMENT="$(
+              jq -cer '
+                .result.deployments as $items
+                | if ($items | length) == 0 then
+                    error("No Cloudflare deployment found after deploy")
+                  elif $items[0].created_on? != null then
+                    ($items | max_by(.created_on))
+                  else
+                    $items[0]
+                  end
+              ' deployment-evidence/post-deploy-cloudflare.json
+            )"
+            NEW_DEPLOYMENT_ID="$(printf '%s\n' "$LATEST_DEPLOYMENT" | jq -er '.id')"
+            NEW_VERSION_ID="$(printf '%s\n' "$LATEST_DEPLOYMENT" | jq -er '.versions | max_by(.percentage | tonumber) | .version_id')"
+            NEW_PERCENTAGE="$(printf '%s\n' "$LATEST_DEPLOYMENT" | jq -er '.versions | max_by(.percentage | tonumber) | .percentage | tonumber')"
+
+            if [ "$NEW_DEPLOYMENT_ID" != "$PREVIOUS_DEPLOYMENT_ID" ] && \
+               [ "$NEW_VERSION_ID" != "$PREVIOUS_VERSION_ID" ] && \
+               [ "$NEW_PERCENTAGE" = "100" ]; then
+              break
+            fi
+
+            NEW_DEPLOYMENT_ID=''
+            sleep 3
+          done
+
+          test -n "$NEW_DEPLOYMENT_ID"
+          test -n "$NEW_VERSION_ID"
+          test "$NEW_PERCENTAGE" = "100"
+          echo "deployment_id=$NEW_DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+          echo "version_id=$NEW_VERSION_ID" >> "$GITHUB_OUTPUT"
+          printf 'deployment_id=%s\nversion_id=%s\npercentage=%s\n' \
+            "$NEW_DEPLOYMENT_ID" "$NEW_VERSION_ID" "$NEW_PERCENTAGE" \
+            > deployment-evidence/post-deploy-summary.txt
+
+      - name: Smoke production HTTP endpoints and JavaScript asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT_HTML=deployment-evidence/root.html
+          : > deployment-evidence/smoke.txt
+
+          fetch() {
+            local url="$1"
+            local output="$2"
+            echo "GET $url" | tee -a deployment-evidence/smoke.txt
+            curl -fsS \
+              --retry 5 \
+              --retry-delay 3 \
+              --retry-all-errors \
+              --connect-timeout 10 \
+              --max-time 90 \
+              "$url" \
+              -o "$output"
+          }
+
+          fetch "$BASE_URL/" "$ROOT_HTML"
+          test -s "$ROOT_HTML"
+
+          fetch "$BASE_URL/api/macro" deployment-evidence/api-macro.json
+          jq -e '.success == true' deployment-evidence/api-macro.json >/dev/null
+
+          fetch "$BASE_URL/api/oracle/rankings" deployment-evidence/api-oracle-rankings.json
+          jq -e 'type == "object"' deployment-evidence/api-oracle-rankings.json >/dev/null
+
+          JS_PATH="$(
+            grep -oE 'src="[^"]+\.js[^"]*"' "$ROOT_HTML" |
+              head -n 1 |
+              cut -d'"' -f2
+          )"
+          test -n "$JS_PATH"
+          case "$JS_PATH" in
+            http://*|https://*) JS_URL="$JS_PATH" ;;
+            /*) JS_URL="$BASE_URL$JS_PATH" ;;
+            *) JS_URL="$BASE_URL/$JS_PATH" ;;
+          esac
+          fetch "$JS_URL" deployment-evidence/browser-app.js
+          test -s deployment-evidence/browser-app.js
+
+      - name: Install pinned browser smoke runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Browser smoke initial loading state
+        env:
+          BROWSER_BASE_URL: ${{ env.BASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/browser-smoke.cjs" <<'BROWSER'
+          const fs = require('node:fs');
+          const { chromium } = require('playwright');
+
+          const baseURL = process.env.BROWSER_BASE_URL;
+          const evidenceDir = `${process.env.GITHUB_WORKSPACE}/deployment-evidence`;
+          const loadingSelector = 'span[title="Esperando la primera respuesta de macro"]';
+          const errorSelector = 'span[title="Error al obtener dato — usando fallback"]';
+          const consoleErrors = [];
+          const networkErrors = [];
+          let browser;
+          let page;
+
+          const timeout = (promise, ms, label) => new Promise((resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error(label)), ms);
+            promise.then(
+              (value) => {
+                clearTimeout(timer);
+                resolve(value);
+              },
+              (error) => {
+                clearTimeout(timer);
+                reject(error);
+              },
+            );
+          });
+
+          (async () => {
+            let releaseMacro;
+            let markMacroSeen;
+            const macroGate = new Promise((resolve) => { releaseMacro = resolve; });
+            const macroSeen = new Promise((resolve) => { markMacroSeen = resolve; });
+
+            try {
+              browser = await chromium.launch({ headless: true });
+              page = await browser.newPage();
+              page.on('console', (message) => {
+                if (message.type() === 'error') consoleErrors.push(`console: ${message.text()}`);
+              });
+              page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.stack || error.message}`));
+              page.on('requestfailed', (request) => {
+                const pathname = new URL(request.url()).pathname;
+                if (pathname === '/' || pathname === '/api/macro' || pathname.endsWith('.js')) {
+                  networkErrors.push(`${request.method()} ${request.url()} ${request.failure()?.errorText || 'failed'}`);
+                }
+              });
+
+              await page.route('**/api/macro', async (route) => {
+                markMacroSeen();
+                await macroGate;
+                await route.continue();
+              });
+
+              await page.goto(baseURL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await timeout(macroSeen, 15000, 'Initial /api/macro request was not observed');
+              await page.locator(loadingSelector).waitFor({ state: 'visible', timeout: 10000 });
+              if (await page.locator(errorSelector).isVisible().catch(() => false)) {
+                throw new Error('ERROR badge flashed while initial /api/macro was pending');
+              }
+
+              const macroResponse = page.waitForResponse(
+                (response) => new URL(response.url()).pathname === '/api/macro' && response.request().method() === 'GET',
+                { timeout: 30000 },
+              );
+              releaseMacro();
+              const response = await macroResponse;
+              if (!response.ok()) throw new Error(`/api/macro returned HTTP ${response.status()}`);
+              const body = await response.json();
+              if (body?.success !== true) throw new Error('/api/macro returned success:false');
+
+              await page.locator(loadingSelector).waitFor({ state: 'hidden', timeout: 15000 });
+              if (await page.locator(errorSelector).isVisible().catch(() => false)) {
+                throw new Error('ERROR badge appeared after a successful /api/macro response');
+              }
+              if (consoleErrors.length > 0) throw new Error(`Browser console errors: ${consoleErrors.join(' | ')}`);
+              if (networkErrors.length > 0) throw new Error(`Critical browser network errors: ${networkErrors.join(' | ')}`);
+            } finally {
+              fs.writeFileSync(`${evidenceDir}/browser-console.txt`, `${consoleErrors.join('\n')}\n`);
+              fs.writeFileSync(`${evidenceDir}/browser-network.txt`, `${networkErrors.join('\n')}\n`);
+              if (page) {
+                await page.screenshot({ path: `${evidenceDir}/browser-initial-loading.png`, fullPage: true }).catch(() => {});
+              }
+              if (browser) await browser.close().catch(() => {});
+            }
+          })().catch((error) => {
+            fs.appendFileSync(`${evidenceDir}/browser-console.txt`, `fatal: ${error.stack || error.message}\n`);
+            process.exitCode = 1;
+          });
+          BROWSER
+
+          node "$RUNNER_TEMP/browser-smoke.cjs"
+
+      - name: Roll back previous Cloudflare version after post-deploy failure
+        if: ${{ failure() && (steps.deploy.outcome == 'success' || steps.deploy.outcome == 'failure') }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          touch deployment-evidence/rollback-attempted
+          PREVIOUS_VERSION_ID="${{ steps.previous.outputs.previous_version_id }}"
+          test -n "$PREVIOUS_VERSION_ID"
+
+          WORKER_NAME="$(jq -er '.name' wrangler.jsonc)"
+          API_URL="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/deployments"
+          PAYLOAD="$(
+            jq -nc \
+              --arg version_id "$PREVIOUS_VERSION_ID" \
+              '{
+                strategy: "percentage",
+                versions: [{percentage: 100, version_id: $version_id}],
+                annotations: {
+                  "workers/message": "Automated rollback after initial loading state v1 deployment failure",
+                  "workers/triggered_by": "deployment"
+                }
+              }'
+          )"
+
+          curl -fsS \
+            --connect-timeout 10 \
+            --max-time 60 \
+            -X POST \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data "$PAYLOAD" \
+            "$API_URL" \
+            -o deployment-evidence/rollback-response.json
+          jq -e '.success == true' deployment-evidence/rollback-response.json >/dev/null
+
+          RESTORED='false'
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            curl -fsS \
+              --connect-timeout 10 \
+              --max-time 60 \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "$API_URL" \
+              -o deployment-evidence/rollback-verify.json
+            LATEST_DEPLOYMENT="$(
+              jq -cer '
+                .result.deployments as $items
+                | if $items[0].created_on? != null then
+                    ($items | max_by(.created_on))
+                  else
+                    $items[0]
+                  end
+              ' deployment-evidence/rollback-verify.json
+            )"
+            RESTORED_VERSION_ID="$(printf '%s\n' "$LATEST_DEPLOYMENT" | jq -er '.versions | max_by(.percentage | tonumber) | .version_id')"
+            RESTORED_PERCENTAGE="$(printf '%s\n' "$LATEST_DEPLOYMENT" | jq -er '.versions | max_by(.percentage | tonumber) | .percentage | tonumber')"
+            if [ "$RESTORED_VERSION_ID" = "$PREVIOUS_VERSION_ID" ] && [ "$RESTORED_PERCENTAGE" = "100" ]; then
+              RESTORED='true'
+              break
+            fi
+            sleep 3
+          done
+
+          jq -n \
+            --arg previous_version_id "$PREVIOUS_VERSION_ID" \
+            --arg restored_version_id "$RESTORED_VERSION_ID" \
+            --arg restored_percentage "$RESTORED_PERCENTAGE" \
+            --arg restored "$RESTORED" \
+            '{
+              previous_version_id: $previous_version_id,
+              restored_version_id: $restored_version_id,
+              restored_percentage: ($restored_percentage | tonumber),
+              rollback_succeeded: ($restored == "true")
+            }' > deployment-evidence/rollback.json
+
+          test "$RESTORED" = "true"
+          touch deployment-evidence/rollback-succeeded
+
+      - name: Write immutable deployment manifest
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment-evidence
+          touch \
+            deployment-evidence/commits.txt \
+            deployment-evidence/changed-files.txt \
+            deployment-evidence/expected-files.txt \
+            deployment-evidence/tsc-baseline.txt \
+            deployment-evidence/tsc-candidate.txt \
+            deployment-evidence/tsc-baseline.normalized.txt \
+            deployment-evidence/tsc-candidate.normalized.txt \
+            deployment-evidence/tsc-new-errors.txt \
+            deployment-evidence/tsc-resolved-errors.txt \
+            deployment-evidence/tsc-summary.txt \
+            deployment-evidence/assets.txt \
+            deployment-evidence/build-sha256.txt \
+            deployment-evidence/smoke.txt
+          deploy_attempted=false
+          cloudflare_accessed=false
+          rollback_attempted=false
+          rollback_succeeded=false
+          test ! -f deployment-evidence/deploy-attempted || deploy_attempted=true
+          test ! -f deployment-evidence/cloudflare-accessed || cloudflare_accessed=true
+          test ! -f deployment-evidence/rollback-attempted || rollback_attempted=true
+          test ! -f deployment-evidence/rollback-succeeded || rollback_succeeded=true
+
+          {
+            echo "baseline_sha=$BASELINE_SHA"
+            echo "deploy_sha=$DEPLOY_SHA"
+            echo "workflow_sha=${{ github.sha }}"
+            echo "deploy_attempted=$deploy_attempted"
+            echo "cloudflare_accessed=$cloudflare_accessed"
+            echo "rollback_attempted=$rollback_attempted"
+            echo "rollback_succeeded=$rollback_succeeded"
+            echo "conclusion=${{ job.status }}"
+          } > deployment-evidence/manifest.txt
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: initial-loading-deployment-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: deployment-evidence/
+          if-no-files-found: error
+          retention-days: 30
