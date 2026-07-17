@@ -1,0 +1,105 @@
+name: Oraculo Santander Validation
+
+on:
+  push:
+    branches:
+      - feat/oraculo-santander-completion-sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oraculo-santander-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    name: Baseline and architecture inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Capture repository inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "HEAD=$(git rev-parse HEAD)"
+          echo "BASE=a76be0d2d1272b533c2fcfbb6d285718def8f6cc"
+          echo "STATUS_BEGIN"
+          git status --short
+          echo "STATUS_END"
+          echo "FILES_BEGIN"
+          find . \
+            -path './.git' -prune -o \
+            -path './node_modules' -prune -o \
+            -path './.next' -prune -o \
+            -path './.open-next' -prune -o \
+            -type f -print | sort
+          echo "FILES_END"
+          echo "PACKAGE_LOCKS_BEGIN"
+          find . -maxdepth 2 -type f \( -name 'bun.lock' -o -name 'bun.lockb' -o -name 'package-lock.json' -o -name 'pnpm-lock.yaml' -o -name 'yarn.lock' \) -print
+          echo "PACKAGE_LOCKS_END"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Capture baseline diagnostics
+        shell: bash
+        run: |
+          set +e
+          mkdir -p validation-evidence
+
+          run_gate() {
+            local name="$1"
+            shift
+            echo "=== ${name}: COMMAND: $* ===" | tee "validation-evidence/${name}.log"
+            "$@" >> "validation-evidence/${name}.log" 2>&1
+            local code=$?
+            echo "=== ${name}: EXIT_CODE=${code} ===" | tee -a "validation-evidence/${name}.log"
+            echo "${name}=${code}" >> validation-evidence/exit-codes.txt
+            cat "validation-evidence/${name}.log"
+          }
+
+          run_gate typecheck bunx tsc --noEmit --pretty false
+          run_gate lint bun run lint
+
+          if bun run test --help >/dev/null 2>&1; then
+            run_gate test bun run test
+          else
+            echo "test=127" >> validation-evidence/exit-codes.txt
+            echo "No package.json test script" | tee validation-evidence/test.log
+          fi
+
+          run_gate next-build bun run build
+          run_gate opennext-build bunx opennextjs-cloudflare build
+
+          if [ -f .open-next/worker.js ]; then
+            run_gate wrap-worker node scripts/wrap-worker-with-cron.mjs
+          else
+            echo "wrap-worker=125" >> validation-evidence/exit-codes.txt
+            echo "OpenNext worker missing; wrapper not executed" | tee validation-evidence/wrap-worker.log
+          fi
+
+          echo "EXIT_CODES_BEGIN"
+          cat validation-evidence/exit-codes.txt
+          echo "EXIT_CODES_END"
+          exit 0
+
+      - name: Upload baseline evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oraculo-santander-baseline-${{ github.sha }}
+          path: validation-evidence
+          if-no-files-found: error
+          retention-days: 14
