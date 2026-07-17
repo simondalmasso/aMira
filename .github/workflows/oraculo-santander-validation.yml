@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - feat/oraculo-santander-completion-sol
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: oraculo-santander-validation-${{ github.ref }}
+  group: oraculo-santander-validation-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -73,7 +76,7 @@ jobs:
           run_gate typecheck bunx tsc --noEmit --pretty false
           run_gate lint bun run lint
 
-          if bun run test --help >/dev/null 2>&1; then
+          if node -e "const p=require('./package.json'); process.exit(p.scripts?.test ? 0 : 1)"; then
             run_gate test bun run test
           else
             echo "test=127" >> validation-evidence/exit-codes.txt
