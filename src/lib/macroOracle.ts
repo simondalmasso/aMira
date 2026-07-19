@@ -4,7 +4,7 @@
 // Usa datos live Bluelytics + proxies derivados
 // ============================================================================
 
-import { type MacroState } from './live-data';
+import { type DataLabel, type MacroState } from './live-data';
 
 // ============================================================================
 // TYPES
@@ -21,7 +21,7 @@ export interface OracleState {
   reservePressure: number;            // 0–100 normalized (proxy)
   rateGapUSD: number;                 // 0–100 normalized
   timestamp: string;
-  source: 'OBSERVADO' | 'REAL' | 'PARTIAL_FALLBACK' | 'ERROR' | 'STALE' | 'ERROR';
+  source: DataLabel;
   signals: OracleSignal[];
   dataQualityPct: number;       // % of oracle inputs from real data (0-100)
 }
@@ -217,7 +217,7 @@ export function computeProjections(
   totalUSD: number,
   riskAppetite: RiskAppetite,
   returnTarget: ReturnTargetMode,
-  macroSource: 'OBSERVADO' | 'REAL' | 'PARTIAL_FALLBACK' | 'ERROR' | 'STALE' | 'ERROR'
+  macroSource: DataLabel
 ): ProjectionOutput {
   const base30d = metrics?.expectedRealReturn30d ?? 0;
   const base90d = metrics?.expectedRealReturn90d ?? 0;
