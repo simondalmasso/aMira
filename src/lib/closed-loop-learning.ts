@@ -25,6 +25,7 @@
 // for the model.
 
 import { setActiveWeights, getActiveWeights, DEFAULT_WEIGHTS, type LinearFactorWeights } from './linear-factor-model';
+import { getLifecycleSnapshot, type LifecycleSnapshot } from './amira-prediction-lifecycle';
 
 // ─── Learning hyperparameters ─────────────────────────────────────────────
 //
@@ -63,6 +64,7 @@ export interface LearningState {
   mean_brier_score: number;          // rolling brier
   weights_history: LinearFactorWeights[]; // last N weight snapshots
   last_update_timestamp: string | null;
+  lifecycle: LifecycleSnapshot;
 }
 
 let _learningState: LearningState = {
@@ -72,10 +74,15 @@ let _learningState: LearningState = {
   mean_brier_score: 0,
   weights_history: [{ ...DEFAULT_WEIGHTS }],
   last_update_timestamp: null,
+  lifecycle: getLifecycleSnapshot(),
 };
 
 export function getLearningState(): LearningState {
-  return { ..._learningState, weights_history: [..._learningState.weights_history] };
+  return {
+    ..._learningState,
+    weights_history: [..._learningState.weights_history],
+    lifecycle: getLifecycleSnapshot(),
+  };
 }
 
 export function resetLearningState(): void {
@@ -86,6 +93,7 @@ export function resetLearningState(): void {
     mean_brier_score: 0,
     weights_history: [{ ...DEFAULT_WEIGHTS }],
     last_update_timestamp: null,
+    lifecycle: getLifecycleSnapshot(),
   };
   setActiveWeights({ ...DEFAULT_WEIGHTS });
 }

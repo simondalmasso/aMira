@@ -1,88 +1,93 @@
 // src/app/api/oracle/single/route.ts
-// oracle_santander_v1_bloomberg_minimal — CANONICAL ENDPOINT
-//
-// GET /api/oracle/single
-// Returns the output of the single_pass_oracle_engine + closed_loop_learning
-// state, in the canonical contract:
-//   {
-//     success: true,
-//     vector: AssetScoreVector,        // single engine output
-//     learning: LearningState          // closed-loop feedback state
-//   }
-//
-// This endpoint is the ONLY endpoint that the SingleOraclePanel reads.
-// It does NOT replace /api/oracle/{predictions,rankings,search,...} which
-// remain for backward compatibility with the legacy multi-oracle UI.
-//
-// Per spec `data_layer.refresh_mode`: "interval_60s" — we set revalidate=60
-// so Cloudflare caches for ~60s. The client also polls every 60s.
+// CANONICAL ORACLE ENDPOINT — one macro state, one V1→V2→V3 pipeline.
 
 import { NextResponse } from 'next/server';
-import { runSinglePass } from '@/lib/single-pass-oracle-engine';
+import { applyStaleDegradation, getMacroState } from '@/lib/live-data';
+import { macroStateToMarketInput } from '@/lib/macro-market-adapter';
+import { runV3IntelligenceEnrichment } from '@/lib/oracle/v3';
 import { getLearningState } from '@/lib/closed-loop-learning';
-import { fetchBCRAData } from '@/lib/bcra-api';
-import { fetchBluelytics } from '@/lib/live-data';
+import { getLifecycleSnapshot, recordPrediction } from '@/lib/amira-prediction-lifecycle';
+import { flushTelemetryWrites, logEvent } from '@/lib/telemetry';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 60;
 
+const PAPER_REFERENCE_CAPITAL_USD = 2_000;
+
 export async function GET() {
+  const startedAt = Date.now();
   try {
-    // Fetch real data from BCRA + Bluelytics in parallel.
-    // Per spec data_layer.sources: [BCRA_API, INDEC_SERIES, BLUELYTICS_FX, LOCAL_MARKET_PRICES]
-    const [bcra, bluelytics] = await Promise.allSettled([
-      fetchBCRAData(),
-      fetchBluelytics(),
-    ]);
+    const macro = applyStaleDegradation(await getMacroState());
+    const adapter = macroStateToMarketInput(macro);
+    const { v1, v2, v3 } = await runV3IntelligenceEnrichment(adapter.input);
 
-    const bcraData = bcra.status === 'fulfilled' ? bcra.value : null;
-    const blue = bluelytics.status === 'fulfilled' ? bluelytics.value : null;
-
-    // Build MarketStateInput from real fetched data, with conservative fallbacks
-    const fx_mep = blue?.blue?.value_avg ?? bcraData?.officialRate ?? 1200;
-    const rates_tna = (bcraData?.bcraPolicyTNA ?? 30) / 100; // BCRA returns TNA as percent (e.g. 30 = 30%)
-    const inflation_monthly = 0.038; // INDEC monthly inflation — placeholder (would fetch from INDEC series)
-    const reserves_usd = bcraData?.reservesUSD ?? 26000;
-    const reserves_usd_prev = reserves_usd; // no prior snapshot in this call
-
-    // FX gap (MEP vs official) — risk sentiment input
-    const official = bcraData?.officialRate ?? fx_mep;
-    const fx_gap_pct = ((fx_mep - official) / official) * 100;
-
-    const sources: string[] = [];
-    if (bcra.status === 'fulfilled') sources.push('BCRA_API');
-    if (bluelytics.status === 'fulfilled') sources.push('BLUELYTICS_FX');
-    sources.push('INDEC_SERIES', 'LOCAL_MARKET_PRICES');
-
-    const quality = sources.length >= 3 ? 'REAL' : sources.length >= 2 ? 'PARTIAL_FALLBACK' : 'STALE';
-
-    // Run the single pass — deterministic
-    const vector = runSinglePass({
-      fx_mep,
-      inflation_monthly,
-      rates_tna,
-      reserves_usd,
-      reserves_usd_prev,
-      fx_gap_pct,
-      market_breadth: 0.5, // placeholder — local market breadth would come from a market data feed
-      sources,
-      quality: quality as 'REAL' | 'PARTIAL_FALLBACK' | 'STALE',
+    const primaryScore = v1.scores[0];
+    const lifecycleRecord = recordPrediction({
+      horizon_days: primaryScore.prediction.horizon_days,
+      asset_context: primaryScore.asset,
+      expected_return: primaryScore.prediction.expected_return,
+      expected_profit_usd: primaryScore.prediction.expected_return * PAPER_REFERENCE_CAPITAL_USD,
+      confidence_score: primaryScore.prediction.confidence,
+      data_sources: adapter.input.sources ?? [],
+      capital: PAPER_REFERENCE_CAPITAL_USD,
+      risk: Math.abs(primaryScore.prediction.risk_var_95),
+      stress_mode: primaryScore.regime.regime,
+      freshness: adapter.quality,
+      fallback_level: adapter.overallLabel,
     });
 
-    const learning = getLearningState();
+    logEvent({
+      eventType: 'PIPELINE_EXECUTION',
+      source: '/api/oracle/single',
+      data: {
+        modelVersion: v1.model_version,
+        v2Version: v2.version,
+        v3Version: v3.version,
+        macroQuality: adapter.quality,
+        lifecyclePredictionId: lifecycleRecord.prediction_id,
+      },
+      durationMs: Date.now() - startedAt,
+      success: !lifecycleRecord.rejected,
+      error: lifecycleRecord.rejection_reason ?? undefined,
+    });
+    const telemetryStorage = await flushTelemetryWrites();
 
     return NextResponse.json({
       success: true,
-      vector,
-      learning,
-    });
-  } catch (err) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: err instanceof Error ? err.message : 'unknown error',
+      timestamp: new Date().toISOString(),
+      vector: v1,
+      learning: getLearningState(),
+      lifecycle: getLifecycleSnapshot(),
+      lifecycleRecord,
+      v2,
+      v3,
+      macro: {
+        source: macro.source,
+        overallLabel: adapter.overallLabel,
+        realDataPct: macro.realDataPct,
+        fetchedAt: macro.fetchedAt,
+        lastSuccessfulFetch: macro.lastSuccessfulFetch,
+        fieldProvenance: adapter.fieldProvenance,
+        limitations: adapter.limitations,
       },
-      { status: 500 }
-    );
+      telemetryStorage,
+    });
+  } catch (error) {
+    logEvent({
+      eventType: 'SYSTEM_ERROR',
+      source: '/api/oracle/single',
+      data: { stage: 'canonical-v1-v2-v3' },
+      durationMs: Date.now() - startedAt,
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const telemetryStorage = await flushTelemetryWrites();
+    return NextResponse.json({
+      success: false,
+      code: 'CANONICAL_ORACLE_PIPELINE_FAILED',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      telemetryStorage,
+      timestamp: new Date().toISOString(),
+    }, { status: 500 });
   }
 }

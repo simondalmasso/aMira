@@ -145,14 +145,15 @@ export function consensus(input: AmiraConsensusInput): AmiraConsensusOutput | nu
   });
 
   // Step 3: consensus filter — drop outliers if ≥3 sources and divergence > threshold
-  const rejected: AmiraSourceObservation[] = [];
-  let sourcesUsed = [...pool];
+  type ObservationWithFreshness = AmiraSourceObservation & { freshness: number };
+  const rejected: ObservationWithFreshness[] = [];
+  let sourcesUsed: ObservationWithFreshness[] = [...pool];
 
   if (pool.length >= 3) {
     // Compute median to detect outliers
     const sortedVals = pool.map((o) => o.value).sort((a, b) => a - b);
     const median = sortedVals[Math.floor(sortedVals.length / 2)];
-    const filtered: AmiraSourceObservation[] = [];
+    const filtered: ObservationWithFreshness[] = [];
     for (const obs of pool) {
       const divergence = Math.abs(obs.value - median) / Math.max(Math.abs(median), 1e-9);
       if (divergence <= divergenceThreshold) {
