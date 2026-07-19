@@ -15,6 +15,12 @@ import {
 } from './live-data';
 import type { MarketState, MarketStateInput } from './single-market-state';
 
+type ExtendedProvenance = DataProvenance & {
+  observedAt?: string | null;
+  limitations?: string[];
+  transformations?: string[];
+};
+
 const RECONSTRUCTED_RESERVES_USD_MILLIONS = 26_000;
 const RECONSTRUCTED_MARKET_BREADTH = 0.5;
 
@@ -63,9 +69,10 @@ function qualityFromLabel(label: DataLabel): MarketState['quality'] {
 
 function provenanceFor(
   field: CanonicalMarketFieldProvenance['field'],
-  provenance: DataProvenance,
+  rawProvenance: DataProvenance,
   extraTransformations: string[] = [],
 ): CanonicalMarketFieldProvenance {
+  const provenance = rawProvenance as ExtendedProvenance;
   return {
     field,
     label: provenance.label,
@@ -103,7 +110,7 @@ export function macroStateToMarketInput(macro: MacroState): CanonicalMarketAdapt
       observedAt: null,
       fetchedAt: macro.fetchedAt,
       limitations: [
-        ...(macro.provenance.reserves.limitations ?? []),
+        ...((macro.provenance.reserves as ExtendedProvenance).limitations ?? []),
         'No existe una observación anterior en este contrato; el delta se mantiene neutral.',
       ],
       transformations: [

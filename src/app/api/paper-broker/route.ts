@@ -17,6 +17,10 @@ const strategies = [
   'carry_optimization', 'mean_reversion_micro', 'rate_arbitrage_simulation',
   'usd_hedged_allocations', 'capital_preservation', 'rebalance', 'manual',
 ] as const;
+const rebalanceStrategies = [
+  'carry_optimization', 'mean_reversion_micro', 'rate_arbitrage_simulation',
+  'usd_hedged_allocations', 'capital_preservation', 'rebalance',
+] as const;
 const buckets = [
   'CAPITAL_PRESERVATION', 'INFLATION_HEDGE', 'CARRY_OPPORTUNISTIC',
   'USD_HEDGE_GROWTH', 'OPPORTUNISTIC_TACTICAL',
@@ -68,9 +72,7 @@ const targetAllocationSchema = z.object({
   productId: z.string().trim().min(1).max(100),
   productName: z.string().trim().min(1).max(200),
   weight,
-  strategySource: z.enum(strategies).refine((value) => value !== 'manual', {
-    message: 'manual is not a valid rebalance strategy source',
-  }),
+  strategySource: z.enum(rebalanceStrategies),
   bucketId: z.enum(buckets).nullable().optional(),
   currentPrice: positiveFinite,
   currency: z.enum(['ARS', 'USD']).default('ARS'),

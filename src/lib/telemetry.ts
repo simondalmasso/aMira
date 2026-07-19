@@ -109,7 +109,7 @@ async function listRead<T>(prefix: string, limit: number): Promise<T[]> {
       return raw ? JSON.parse(raw) as T : null;
     }));
     markSuccess('read');
-    return values.filter((value): value is T => value !== null);
+    return values.flatMap((value) => value === null ? [] : [value]);
   } catch (error) {
     markFailure(error);
     return [];

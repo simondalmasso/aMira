@@ -5,8 +5,7 @@ import { NextResponse } from 'next/server';
 import { applyStaleDegradation, getMacroState } from '@/lib/live-data';
 import { macroStateToMarketInput } from '@/lib/macro-market-adapter';
 import { runV3IntelligenceEnrichment } from '@/lib/oracle/v3';
-import { getLearningState } from '@/lib/closed-loop-learning';
-import { getLifecycleSnapshot, recordPrediction } from '@/lib/amira-prediction-lifecycle';
+import { getLifecycleLedgerSnapshot, recordLifecyclePrediction } from '@/lib/amira-prediction-lifecycle-ledger';
 import { flushTelemetryWrites, logEvent } from '@/lib/telemetry';
 
 export const dynamic = 'force-dynamic';
@@ -22,7 +21,7 @@ export async function GET() {
     const { v1, v2, v3 } = await runV3IntelligenceEnrichment(adapter.input);
 
     const primaryScore = v1.scores[0];
-    const lifecycleRecord = recordPrediction({
+    const lifecycleRecord = await recordLifecyclePrediction({
       horizon_days: primaryScore.prediction.horizon_days,
       asset_context: primaryScore.asset,
       expected_return: primaryScore.prediction.expected_return,
@@ -56,8 +55,7 @@ export async function GET() {
       success: true,
       timestamp: new Date().toISOString(),
       vector: v1,
-      learning: getLearningState(),
-      lifecycle: getLifecycleSnapshot(),
+      lifecycle: await getLifecycleLedgerSnapshot(),
       lifecycleRecord,
       v2,
       v3,
