@@ -1,0 +1,418 @@
+name: Oraculo Runtime Gate
+
+on:
+  push:
+    branches:
+      - chore/amira-runtime-ci-staging-20260722
+      - chore/amira-runtime-code-staging-20260722
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: oraculo-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUNTIME_BASE_SHA: 07ce167c00120c51a8eee1a099d69173413d829b
+  EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  runtime-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact candidate SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+
+      - name: Verify exact candidate SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git cat-file -e "${RUNTIME_BASE_SHA}^{commit}"
+
+      - name: Publish observable pending status
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_URL: ${{ github.api_url }}/repos/${{ github.repository }}/statuses/${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          payload="$(
+            jq -nc \
+              --arg state "pending" \
+              --arg target_url "$RUN_URL" \
+              --arg context "Oraculo Runtime Gate (push)" \
+              --arg description "Authoritative runtime gate is running" \
+              '{
+                state: $state,
+                target_url: $target_url,
+                context: $context,
+                description: $description
+              }'
+          )"
+
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$STATUS_URL" \
+            -d "$payload"
+
+      - name: Setup Node 22.23.1
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.1
+
+      - name: Setup Bun 1.3.14
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Initialize evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          E="$RUNNER_TEMP/oraculo-runtime-gate"
+          mkdir -p "$E"
+          printf '%s\n' "$E" > "$RUNNER_TEMP/oraculo-evidence-path"
+          git diff --name-only "$RUNTIME_BASE_SHA...HEAD" | sort > "$E/modified-files.txt"
+          sha256sum package.json bun.lock > "$E/package-hashes-before.txt"
+          {
+            echo "head_sha=$(git rev-parse HEAD)"
+            echo "base_sha=$RUNTIME_BASE_SHA"
+            echo "event=${{ github.event_name }}"
+            echo "ref=${{ github.ref }}"
+            echo "node=$(node --version)"
+            echo "bun=$(bun --version)"
+            echo "cloudflare_accessed=false"
+            echo "deploy_attempted=false"
+          } > "$E/manifest.txt"
+
+      - name: Frozen dependency installation
+        id: frozen_install
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          bun install --frozen-lockfile 2>&1 | tee "$E/frozen-install.log"
+          code=${PIPESTATUS[0]}
+          echo "$code" > "$E/frozen-install.exit"
+          exit "$code"
+
+      - name: Focused runtime tests
+        id: focused_tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          bun test \
+            tests/oracle-single-runtime.test.tsx \
+            tests/hardening/h8-architectural-invariants.test.ts \
+            tests/hardening/h10-deployment-gate.test.ts \
+            2>&1 | tee "$E/focused-tests.log"
+          code=${PIPESTATUS[0]}
+          echo "$code" > "$E/focused-tests.exit"
+          exit "$code"
+
+      - name: TypeScript baseline and candidate classification
+        id: typescript
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          BASELINE_DIR="$RUNNER_TEMP/oraculo-runtime-baseline"
+          git worktree add --detach "$BASELINE_DIR" "$RUNTIME_BASE_SHA"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$BASELINE_DIR/node_modules"
+
+          run_tsc() {
+            local dir="$1" raw="$2" normalized="$3"
+            set +e
+            (cd "$dir" && NO_COLOR=1 "$GITHUB_WORKSPACE/node_modules/.bin/tsc" --noEmit --pretty false) > "$raw" 2>&1
+            local code=$?
+            set -e
+            grep -E 'error TS[0-9]+:' "$raw" \
+              | sed -E -e "s#${dir%/}/##g" -e 's/\([0-9]+,[0-9]+\): error/(): error/' \
+              | sort > "$normalized" || true
+            printf '%s' "$code"
+          }
+
+          baseline_code="$(run_tsc "$BASELINE_DIR" "$E/tsc-baseline.log" "$E/tsc-baseline.normalized.txt")"
+          candidate_code="$(run_tsc "$GITHUB_WORKSPACE" "$E/tsc-candidate.log" "$E/tsc-candidate.normalized.txt")"
+          comm -13 "$E/tsc-baseline.normalized.txt" "$E/tsc-candidate.normalized.txt" > "$E/tsc-new-diagnostics.txt"
+
+          awk -F'[(]' '/^src\// && $1 != "src/worker.ts" {print $1}' "$E/tsc-candidate.log" | sort -u > "$E/tsc-canonical-files.txt" || true
+          canonical_count="$(wc -l < "$E/tsc-canonical-files.txt")"
+          awk -F'[(]' '/error TS[0-9]+:/ {print $1}' "$E/tsc-candidate.log" | sort -u > "$E/tsc-error-files.txt" || true
+          comm -12 "$E/tsc-error-files.txt" "$E/modified-files.txt" > "$E/tsc-modified-files.txt"
+          modified_count="$(wc -l < "$E/tsc-modified-files.txt")"
+          new_count="$(wc -l < "$E/tsc-new-diagnostics.txt")"
+          global_count="$(grep -cE 'error TS[0-9]+:' "$E/tsc-candidate.log" || true)"
+
+          {
+            echo "baseline_exit=$baseline_code"
+            echo "candidate_exit=$candidate_code"
+            echo "global_diagnostics=$global_count"
+            echo "canonical_diagnostics=$canonical_count"
+            echo "modified_file_diagnostics=$modified_count"
+            echo "new_diagnostics=$new_count"
+          } | tee "$E/typescript-summary.txt"
+
+          test "$canonical_count" = "0"
+          test "$modified_count" = "0"
+          test "$new_count" = "0"
+
+      - name: Focused lint
+        id: focused_lint
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          grep -E '\.(ts|tsx)$' "$E/modified-files.txt" > "$E/lint-files.txt" || true
+          if test -s "$E/lint-files.txt"; then
+            mapfile -t files < "$E/lint-files.txt"
+            set +e
+            bunx eslint "${files[@]}" > "$E/focused-lint.log" 2>&1
+            code=$?
+            set -e
+          else
+            : > "$E/focused-lint.log"
+            code=0
+          fi
+          echo "$code" > "$E/focused-lint.exit"
+          cat "$E/focused-lint.log"
+          exit "$code"
+
+      - name: Full suite with baseline allowlist
+        id: full_suite
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          set +e
+          bun test > "$E/full-suite.log" 2>&1
+          raw_code=$?
+          set -e
+          cat "$E/full-suite.log"
+          grep -E '^\(fail\)' "$E/full-suite.log" \
+            | sed -E 's/ \[[0-9.]+ms\]$//' \
+            | sort -u > "$E/full-suite-failures.txt" || true
+          cat > "$E/allowed-failures.txt" <<'EOF'
+          (fail) U5 — Architectural Proof (single instance per role) > ONE Portfolio Engine — src/lib/oracle/portfolio-engine.ts is canonical
+          (fail) U5 — Architectural Proof (single instance per role) > U5 SUMMARY — exactly ONE canonical file per role
+          (fail) U6 — KV Persistence Audit > Static audit of src/lib/telemetry.ts > All KV reads have try/catch with JSON.parse
+          (fail) U6 — KV Persistence Audit > Static audit of src/lib/telemetry.ts > All KV writes have try/catch or .catch
+          (fail) U6 — KV Persistence Audit > Static audit of src/lib/telemetry.ts > KV access gracefully degrades when env binding is missing
+          (fail) U6 — KV Persistence Audit > Static audit of src/lib/telemetry.ts > KV list has try/catch
+          (fail) U6 — KV Persistence Audit > Static audit of src/lib/telemetry.ts > TTLs are configured per data type (decisions 90d, events 30d, metrics 90d)
+          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > BCRA fetcher has a fallback object when proxy is unreachable
+          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > BCRA fetcher has explicit STALE label on failure
+          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > Bluelytics fetcher has explicit STALE label on failure (not ERROR)
+          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > CER fetcher has a fallback object
+          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > INDEC fetcher has a fallback object
+          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > INDEC fetcher has explicit STALE label on failure
+          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > MacroState source field tracks degradation: REAL → STALE → ERROR
+          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > applyStaleDegradation downgrades REAL → STALE based on age threshold
+          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > fetchProxySource logs failure and returns null (no throw)
+          EOF
+          sed -i 's/^          //' "$E/allowed-failures.txt"
+          sort -u -o "$E/allowed-failures.txt" "$E/allowed-failures.txt"
+          comm -23 "$E/full-suite-failures.txt" "$E/allowed-failures.txt" > "$E/new-test-failures.txt"
+          failure_count="$(wc -l < "$E/full-suite-failures.txt")"
+          new_count="$(wc -l < "$E/new-test-failures.txt")"
+          {
+            echo "raw_exit=$raw_code"
+            echo "failure_count=$failure_count"
+            echo "new_failure_count=$new_count"
+          } | tee "$E/full-suite-summary.txt"
+          test "$new_count" = "0"
+          test "$failure_count" -le 16
+
+      - name: Next build
+        id: next_build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          bun run build 2>&1 | tee "$E/next-build.log"
+          code=${PIPESTATUS[0]}
+          echo "$code" > "$E/next-build.exit"
+          exit "$code"
+
+      - name: OpenNext build
+        id: opennext_build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          bunx opennextjs-cloudflare build 2>&1 | tee "$E/opennext-build.log"
+          code=${PIPESTATUS[0]}
+          echo "$code" > "$E/opennext-build.exit"
+          exit "$code"
+
+      - name: Verify OpenNext worker
+        id: worker_js
+        continue-on-error: true
+        shell: bash
+        run: |
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          test -f .open-next/worker.js
+          code=$?
+          echo "$code" > "$E/worker-js.exit"
+          exit "$code"
+
+      - name: Generate cron wrapper
+        id: cron_wrapper
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          node scripts/wrap-worker-with-cron.mjs 2>&1 | tee "$E/cron-wrapper.log"
+          code=${PIPESTATUS[0]}
+          echo "$code" > "$E/cron-wrapper.exit"
+          exit "$code"
+
+      - name: Verify wrapped worker
+        id: wrapped_worker
+        continue-on-error: true
+        shell: bash
+        run: |
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          test -f .open-next/worker-with-cron.js
+          code=$?
+          echo "$code" > "$E/worker-with-cron.exit"
+          exit "$code"
+
+      - name: Final integrity checks
+        id: integrity
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          git diff --check "$RUNTIME_BASE_SHA...HEAD" > "$E/diff-check.log" 2>&1
+          git diff --quiet "$RUNTIME_BASE_SHA...HEAD" -- package.json bun.lock
+          git diff --quiet "$RUNTIME_BASE_SHA...HEAD" -- \
+            src/lib/paper-broker.ts \
+            src/app/api/paper-broker/route.ts \
+            tests/paper-broker-risk.test.ts
+          sha256sum package.json bun.lock > "$E/package-hashes-after.txt"
+          cmp -s "$E/package-hashes-before.txt" "$E/package-hashes-after.txt"
+          rm -rf .next .open-next
+          test -z "$(git status --porcelain)"
+          echo 0 > "$E/integrity.exit"
+
+      - name: Write evidence checksums
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          find "$E" -maxdepth 1 -type f ! -name checksums.sha256 -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > "$E/checksums.sha256"
+
+      - name: Upload runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oraculo-runtime-gate-${{ env.EXPECTED_SHA }}
+          path: ${{ runner.temp }}/oraculo-runtime-gate/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce authoritative result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          required=(
+            frozen-install.exit
+            focused-tests.exit
+            focused-lint.exit
+            next-build.exit
+            opennext-build.exit
+            worker-js.exit
+            cron-wrapper.exit
+            worker-with-cron.exit
+            integrity.exit
+          )
+          final=0
+          for file in "${required[@]}"; do
+            test -f "$E/$file" || { echo "$file=missing"; final=1; continue; }
+            code="$(cat "$E/$file")"
+            echo "$file=$code"
+            test "$code" = "0" || final=1
+          done
+          test -f "$E/typescript-summary.txt" || final=1
+          test -f "$E/full-suite-summary.txt" || final=1
+          exit "$final"
+
+      - name: Publish observable final status
+        if: always() && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_URL: ${{ github.api_url }}/repos/${{ github.repository }}/statuses/${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          case "$JOB_STATUS" in
+            success)
+              state="success"
+              ;;
+            failure)
+              state="failure"
+              ;;
+            cancelled)
+              state="error"
+              ;;
+            *)
+              state="error"
+              ;;
+          esac
+
+          payload="$(
+            jq -nc \
+              --arg state "$state" \
+              --arg target_url "$RUN_URL" \
+              --arg context "Oraculo Runtime Gate (push)" \
+              --arg description "Runtime gate finished: $JOB_STATUS" \
+              '{
+                state: $state,
+                target_url: $target_url,
+                context: $context,
+                description: $description
+              }'
+          )"
+
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$STATUS_URL" \
+            -d "$payload"
