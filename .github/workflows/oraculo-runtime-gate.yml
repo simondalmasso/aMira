@@ -5,6 +5,7 @@ on:
     branches:
       - chore/amira-runtime-ci-staging-20260722
       - chore/amira-runtime-code-staging-20260722
+      - chore/amira-runtime-code-staging-v2-20260722
   pull_request:
     branches:
       - main
@@ -108,9 +109,13 @@ jobs:
         run: |
           set -o pipefail
           E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+
+          set +e
           bun install --frozen-lockfile 2>&1 | tee "$E/frozen-install.log"
           code=${PIPESTATUS[0]}
-          echo "$code" > "$E/frozen-install.exit"
+          set -e
+
+          printf '%s\n' "$code" > "$E/frozen-install.exit"
           exit "$code"
 
       - name: Focused runtime tests
@@ -120,13 +125,17 @@ jobs:
         run: |
           set -o pipefail
           E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+
+          set +e
           bun test \
             tests/oracle-single-runtime.test.tsx \
             tests/hardening/h8-architectural-invariants.test.ts \
             tests/hardening/h10-deployment-gate.test.ts \
             2>&1 | tee "$E/focused-tests.log"
           code=${PIPESTATUS[0]}
-          echo "$code" > "$E/focused-tests.exit"
+          set -e
+
+          printf '%s\n' "$code" > "$E/focused-tests.exit"
           exit "$code"
 
       - name: TypeScript baseline and candidate classification
@@ -137,8 +146,14 @@ jobs:
           set -euo pipefail
           E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
           BASELINE_DIR="$RUNNER_TEMP/oraculo-runtime-baseline"
-          git worktree add --detach "$BASELINE_DIR" "$RUNTIME_BASE_SHA"
-          ln -s "$GITHUB_WORKSPACE/node_modules" "$BASELINE_DIR/node_modules"
+
+          if ! test -d "$BASELINE_DIR"; then
+            git worktree add --detach "$BASELINE_DIR" "$RUNTIME_BASE_SHA"
+          fi
+
+          if ! test -e "$BASELINE_DIR/node_modules"; then
+            ln -s "$GITHUB_WORKSPACE/node_modules" "$BASELINE_DIR/node_modules"
+          fi
 
           run_tsc() {
             local dir="$1" raw="$2" normalized="$3"
@@ -173,9 +188,13 @@ jobs:
             echo "new_diagnostics=$new_count"
           } | tee "$E/typescript-summary.txt"
 
-          test "$canonical_count" = "0"
-          test "$modified_count" = "0"
-          test "$new_count" = "0"
+          final=0
+          test "$canonical_count" = "0" || final=1
+          test "$modified_count" = "0" || final=1
+          test "$new_count" = "0" || final=1
+
+          printf '%s\n' "$final" > "$E/typescript.exit"
+          exit "$final"
 
       - name: Focused lint
         id: focused_lint
@@ -195,55 +214,71 @@ jobs:
             : > "$E/focused-lint.log"
             code=0
           fi
-          echo "$code" > "$E/focused-lint.exit"
+          printf '%s\n' "$code" > "$E/focused-lint.exit"
           cat "$E/focused-lint.log"
           exit "$code"
 
-      - name: Full suite with baseline allowlist
+      - name: Full suite baseline delta
         id: full_suite
         continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+          BASELINE_DIR="$RUNNER_TEMP/oraculo-runtime-baseline"
+
+          if ! test -d "$BASELINE_DIR"; then
+            git worktree add --detach "$BASELINE_DIR" "$RUNTIME_BASE_SHA"
+          fi
+
+          if ! test -e "$BASELINE_DIR/node_modules"; then
+            ln -s "$GITHUB_WORKSPACE/node_modules" "$BASELINE_DIR/node_modules"
+          fi
+
           set +e
-          bun test > "$E/full-suite.log" 2>&1
-          raw_code=$?
+          (
+            cd "$BASELINE_DIR"
+            bun test
+          ) > "$E/full-suite-baseline.log" 2>&1
+          baseline_raw_code=$?
+
+          bun test > "$E/full-suite-candidate.log" 2>&1
+          candidate_raw_code=$?
           set -e
-          cat "$E/full-suite.log"
-          grep -E '^\(fail\)' "$E/full-suite.log" \
+
+          cat "$E/full-suite-candidate.log"
+
+          grep -E '^\(fail\)' "$E/full-suite-baseline.log" \
             | sed -E 's/ \[[0-9.]+ms\]$//' \
-            | sort -u > "$E/full-suite-failures.txt" || true
-          cat > "$E/allowed-failures.txt" <<'EOF'
-          (fail) U5 — Architectural Proof (single instance per role) > ONE Portfolio Engine — src/lib/oracle/portfolio-engine.ts is canonical
-          (fail) U5 — Architectural Proof (single instance per role) > U5 SUMMARY — exactly ONE canonical file per role
-          (fail) U6 — KV Persistence Audit > Static audit of src/lib/telemetry.ts > All KV reads have try/catch with JSON.parse
-          (fail) U6 — KV Persistence Audit > Static audit of src/lib/telemetry.ts > All KV writes have try/catch or .catch
-          (fail) U6 — KV Persistence Audit > Static audit of src/lib/telemetry.ts > KV access gracefully degrades when env binding is missing
-          (fail) U6 — KV Persistence Audit > Static audit of src/lib/telemetry.ts > KV list has try/catch
-          (fail) U6 — KV Persistence Audit > Static audit of src/lib/telemetry.ts > TTLs are configured per data type (decisions 90d, events 30d, metrics 90d)
-          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > BCRA fetcher has a fallback object when proxy is unreachable
-          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > BCRA fetcher has explicit STALE label on failure
-          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > Bluelytics fetcher has explicit STALE label on failure (not ERROR)
-          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > CER fetcher has a fallback object
-          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > INDEC fetcher has a fallback object
-          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > INDEC fetcher has explicit STALE label on failure
-          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > MacroState source field tracks degradation: REAL → STALE → ERROR
-          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > applyStaleDegradation downgrades REAL → STALE based on age threshold
-          (fail) U7 — Failure Injection > Static audit — every data source has a fallback path > fetchProxySource logs failure and returns null (no throw)
-          EOF
-          sed -i 's/^          //' "$E/allowed-failures.txt"
-          sort -u -o "$E/allowed-failures.txt" "$E/allowed-failures.txt"
-          comm -23 "$E/full-suite-failures.txt" "$E/allowed-failures.txt" > "$E/new-test-failures.txt"
-          failure_count="$(wc -l < "$E/full-suite-failures.txt")"
-          new_count="$(wc -l < "$E/new-test-failures.txt")"
+            | sort -u > "$E/full-suite-baseline-failures.txt" || true
+
+          grep -E '^\(fail\)' "$E/full-suite-candidate.log" \
+            | sed -E 's/ \[[0-9.]+ms\]$//' \
+            | sort -u > "$E/full-suite-candidate-failures.txt" || true
+
+          comm -13 \
+            "$E/full-suite-baseline-failures.txt" \
+            "$E/full-suite-candidate-failures.txt" \
+            > "$E/new-test-failures.txt"
+
+          baseline_failure_count="$(wc -l < "$E/full-suite-baseline-failures.txt")"
+          candidate_failure_count="$(wc -l < "$E/full-suite-candidate-failures.txt")"
+          new_failure_count="$(wc -l < "$E/new-test-failures.txt")"
+
           {
-            echo "raw_exit=$raw_code"
-            echo "failure_count=$failure_count"
-            echo "new_failure_count=$new_count"
+            echo "baseline_raw_exit=$baseline_raw_code"
+            echo "candidate_raw_exit=$candidate_raw_code"
+            echo "baseline_failure_count=$baseline_failure_count"
+            echo "candidate_failure_count=$candidate_failure_count"
+            echo "new_failure_count=$new_failure_count"
           } | tee "$E/full-suite-summary.txt"
-          test "$new_count" = "0"
-          test "$failure_count" -le 16
+
+          final=0
+          test "$new_failure_count" = "0" || final=1
+          test "$candidate_failure_count" -le "$baseline_failure_count" || final=1
+
+          printf '%s\n' "$final" > "$E/full-suite.exit"
+          exit "$final"
 
       - name: Next build
         id: next_build
@@ -252,9 +287,13 @@ jobs:
         run: |
           set -o pipefail
           E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+
+          set +e
           bun run build 2>&1 | tee "$E/next-build.log"
           code=${PIPESTATUS[0]}
-          echo "$code" > "$E/next-build.exit"
+          set -e
+
+          printf '%s\n' "$code" > "$E/next-build.exit"
           exit "$code"
 
       - name: OpenNext build
@@ -264,9 +303,13 @@ jobs:
         run: |
           set -o pipefail
           E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+
+          set +e
           bunx opennextjs-cloudflare build 2>&1 | tee "$E/opennext-build.log"
           code=${PIPESTATUS[0]}
-          echo "$code" > "$E/opennext-build.exit"
+          set -e
+
+          printf '%s\n' "$code" > "$E/opennext-build.exit"
           exit "$code"
 
       - name: Verify OpenNext worker
@@ -275,9 +318,13 @@ jobs:
         shell: bash
         run: |
           E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+
+          set +e
           test -f .open-next/worker.js
           code=$?
-          echo "$code" > "$E/worker-js.exit"
+          set -e
+
+          printf '%s\n' "$code" > "$E/worker-js.exit"
           exit "$code"
 
       - name: Generate cron wrapper
@@ -287,9 +334,13 @@ jobs:
         run: |
           set -o pipefail
           E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+
+          set +e
           node scripts/wrap-worker-with-cron.mjs 2>&1 | tee "$E/cron-wrapper.log"
           code=${PIPESTATUS[0]}
-          echo "$code" > "$E/cron-wrapper.exit"
+          set -e
+
+          printf '%s\n' "$code" > "$E/cron-wrapper.exit"
           exit "$code"
 
       - name: Verify wrapped worker
@@ -298,9 +349,13 @@ jobs:
         shell: bash
         run: |
           E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
+
+          set +e
           test -f .open-next/worker-with-cron.js
           code=$?
-          echo "$code" > "$E/worker-with-cron.exit"
+          set -e
+
+          printf '%s\n' "$code" > "$E/worker-with-cron.exit"
           exit "$code"
 
       - name: Final integrity checks
@@ -308,19 +363,28 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           E="$(cat "$RUNNER_TEMP/oraculo-evidence-path")"
-          git diff --check "$RUNTIME_BASE_SHA...HEAD" > "$E/diff-check.log" 2>&1
-          git diff --quiet "$RUNTIME_BASE_SHA...HEAD" -- package.json bun.lock
+          final=0
+
+          git diff --check "$RUNTIME_BASE_SHA...HEAD" > "$E/diff-check.log" 2>&1 || final=1
+
+          git diff --quiet "$RUNTIME_BASE_SHA...HEAD" -- \
+            package.json bun.lock || final=1
+
           git diff --quiet "$RUNTIME_BASE_SHA...HEAD" -- \
             src/lib/paper-broker.ts \
             src/app/api/paper-broker/route.ts \
-            tests/paper-broker-risk.test.ts
-          sha256sum package.json bun.lock > "$E/package-hashes-after.txt"
-          cmp -s "$E/package-hashes-before.txt" "$E/package-hashes-after.txt"
+            tests/paper-broker-risk.test.ts || final=1
+
+          sha256sum package.json bun.lock > "$E/package-hashes-after.txt" || final=1
+          cmp -s "$E/package-hashes-before.txt" "$E/package-hashes-after.txt" || final=1
+
           rm -rf .next .open-next
-          test -z "$(git status --porcelain)"
-          echo 0 > "$E/integrity.exit"
+          test -z "$(git status --porcelain)" || final=1
+
+          printf '%s\n' "$final" > "$E/integrity.exit"
+          exit "$final"
 
       - name: Write evidence checksums
         if: always()
@@ -350,7 +414,9 @@ jobs:
           required=(
             frozen-install.exit
             focused-tests.exit
+            typescript.exit
             focused-lint.exit
+            full-suite.exit
             next-build.exit
             opennext-build.exit
             worker-js.exit
