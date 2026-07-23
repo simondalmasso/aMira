@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: oraculo-runtime-${{ github.ref }}
@@ -31,6 +32,45 @@ jobs:
           ref: ${{ env.EXPECTED_SHA }}
           fetch-depth: 0
 
+      - name: Verify exact candidate SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git cat-file -e "${RUNTIME_BASE_SHA}^{commit}"
+
+      - name: Publish observable pending status
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_URL: ${{ github.api_url }}/repos/${{ github.repository }}/statuses/${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          payload="$(
+            jq -nc \
+              --arg state "pending" \
+              --arg target_url "$RUN_URL" \
+              --arg context "Oraculo Runtime Gate (push)" \
+              --arg description "Authoritative runtime gate is running" \
+              '{
+                state: $state,
+                target_url: $target_url,
+                context: $context,
+                description: $description
+              }'
+          )"
+
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$STATUS_URL" \
+            -d "$payload"
+
       - name: Setup Node 22.23.1
         uses: actions/setup-node@v4
         with:
@@ -41,15 +81,13 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Initialize evidence and verify SHA
+      - name: Initialize evidence
         shell: bash
         run: |
           set -euo pipefail
           E="$RUNNER_TEMP/oraculo-runtime-gate"
           mkdir -p "$E"
           printf '%s\n' "$E" > "$RUNNER_TEMP/oraculo-evidence-path"
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          git cat-file -e "${RUNTIME_BASE_SHA}^{commit}"
           git diff --name-only "$RUNTIME_BASE_SHA...HEAD" | sort > "$E/modified-files.txt"
           sha256sum package.json bun.lock > "$E/package-hashes-before.txt"
           {
@@ -330,3 +368,51 @@ jobs:
           test -f "$E/typescript-summary.txt" || final=1
           test -f "$E/full-suite-summary.txt" || final=1
           exit "$final"
+
+      - name: Publish observable final status
+        if: always() && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_URL: ${{ github.api_url }}/repos/${{ github.repository }}/statuses/${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          case "$JOB_STATUS" in
+            success)
+              state="success"
+              ;;
+            failure)
+              state="failure"
+              ;;
+            cancelled)
+              state="error"
+              ;;
+            *)
+              state="error"
+              ;;
+          esac
+
+          payload="$(
+            jq -nc \
+              --arg state "$state" \
+              --arg target_url "$RUN_URL" \
+              --arg context "Oraculo Runtime Gate (push)" \
+              --arg description "Runtime gate finished: $JOB_STATUS" \
+              '{
+                state: $state,
+                target_url: $target_url,
+                context: $context,
+                description: $description
+              }'
+          )"
+
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$STATUS_URL" \
+            -d "$payload"
