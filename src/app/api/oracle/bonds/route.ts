@@ -11,7 +11,6 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
 function getEnv() {
-  // CRON_PERSISTENCE_WIRING_FIX — see /api/oracle/cron/route.ts for rationale.
   try {
     const ctx = getCloudflareContext();
     const env = ctx.env as {
@@ -61,11 +60,27 @@ export async function GET(req: NextRequest): Promise<NextResponse<ClassOracleRes
   }
 }
 
-export async function POST(): Promise<NextResponse<{ success: boolean; snapshot_date?: string; error?: string }>> {
+export async function POST(): Promise<NextResponse<{
+  success: boolean;
+  snapshot_date?: string;
+  persistence_expected?: boolean;
+  source_status?: ClassOracleResponse['source_status'];
+  total_assets?: number;
+  reason?: string;
+  error?: string;
+}>> {
   try {
     const storage = resolveMultiStorage(getEnv());
     const result = await runClassOracle('BONOS', { storage, topN: 1 });
-    return NextResponse.json({ success: true, snapshot_date: result.snapshot_date });
+    const persistenceExpected = result.total_assets > 0;
+    return NextResponse.json({
+      success: true,
+      snapshot_date: result.snapshot_date,
+      persistence_expected: persistenceExpected,
+      source_status: result.source_status,
+      total_assets: result.total_assets,
+      reason: persistenceExpected ? undefined : 'NO_OBSERVED_BOND_DATA_AVAILABLE',
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
