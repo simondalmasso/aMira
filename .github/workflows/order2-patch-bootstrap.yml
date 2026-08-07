@@ -14,49 +14,88 @@ jobs:
     timeout-minutes: 15
     env:
       TARGET_BRANCH: feat/oraculo-santander-completion-sol
-      EXPECTED_OLD_SHA: 86b3464933f601cc86b06fc08ddd8be634660612
-      B64_SHA256: 365ed9f17f958ff6184fc8e3e7aea05fbebc68aa20331c34a4ed71c0cd4349d0
-      PATCH_SHA256: a1276d21ea1b4436706335f4cdca206cd19aaf4bffcec4d9232f9f7bd0926116
-      B64_LENGTH: "54860"
+      EXPECTED_OLD_SHA: 4482e25baa769203e0c2600d5072cc0e8f8cc78a
     steps:
-      - name: Checkout staging evidence
+      - name: Checkout staging controller
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Assemble and verify exact patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat \
-            .order2-patch/chunk-01 \
-            .order2-patch/chunk-02 \
-            .order2-patch/chunk-03 \
-            .order2-patch/chunk-04 \
-            .order2-patch/chunk-05 \
-            .order2-patch/chunk-06a \
-            .order2-patch/chunk-06b \
-            .order2-patch/chunk-07a \
-            .order2-patch/chunk-07b > /tmp/order2.patch.gz.b64
-          test "$(wc -c < /tmp/order2.patch.gz.b64)" = "$B64_LENGTH"
-          echo "$B64_SHA256  /tmp/order2.patch.gz.b64" | sha256sum -c -
-          base64 -d /tmp/order2.patch.gz.b64 | gzip -dc > /tmp/order2.patch
-          echo "$PATCH_SHA256  /tmp/order2.patch" | sha256sum -c -
-
-      - name: Apply source-only patch to exact target head
+      - name: Repair exact target head
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin "$TARGET_BRANCH"
           git checkout --detach "origin/$TARGET_BRANCH"
           test "$(git rev-parse HEAD)" = "$EXPECTED_OLD_SHA"
-          git apply --check /tmp/order2.patch
-          git apply /tmp/order2.patch
-          git checkout -- .github/workflows/oraculo-runtime-gate.yml
-          rm -f .github/workflows/oraculo-production-deploy.yml
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str):
+              p = Path(path)
+              s = p.read_text()
+              if s.count(old) != 1:
+                  raise SystemExit(f"expected exactly one match in {path}, got {s.count(old)}")
+              p.write_text(s.replace(old, new))
+
+          replace(
+              'scripts/d-post-deploy-validation.ts',
+              "const checks = await Promise.all(endpoints.map(async (ep) => {",
+              "const checks: GateResult['checks'] = await Promise.all(endpoints.map(async (ep): Promise<GateResult['checks'][number]> => {",
+          )
+          replace(
+              'src/lib/oracle-multi/cron.ts',
+              "): Promise<CronJobResult['persistence_ack']> {",
+              "): Promise<NonNullable<CronJobResult['persistence_ack']>> {",
+          )
+          replace(
+              'tests/hardening/u6-kv-persistence-audit.test.ts',
+              "const raw = await failingKv.get<string>('any-key');",
+              "const raw = await failingKv.get('any-key');",
+          )
+
+          p = Path('tests/oracle-single-runtime.test.tsx')
+          s = p.read_text()
+          old_import = "import { resetLearningState, getLearningSummary } from '@/lib/closed-loop-learning';"
+          new_import = old_import + "\nimport type { LifecycleLedgerSnapshot } from '@/lib/amira-prediction-lifecycle-ledger';"
+          if s.count(old_import) != 1:
+              raise SystemExit('runtime test import mismatch')
+          s = s.replace(old_import, new_import)
+          start = s.index('const LIFECYCLE = {')
+          end = s.index('\n};', start) + 3
+          block = """const LIFECYCLE: LifecycleLedgerSnapshot = {
+  storage: 'durable',
+  binding: 'ORACLE_PREDICTIONS',
+  total_predictions: 0,
+  pending: 0,
+  rejected: 0,
+  latest_prediction: null,
+  records: [],
+  canonical: {
+    active_stage: 'EMPTY',
+    latest_prediction: null,
+    latest_outcome: null,
+    latest_verification: null,
+    counts: { total_predictions: 0, pending: 0, outcome_captured: 0, verified: 0, expired: 0, rejected: 0 },
+    pending_outcomes: 0,
+    verification_score: { brier_like: null, mae: null, directional_accuracy_pct: null, sample_count: 0, status: 'NO_HISTORY', label: 'Sin histórico suficiente (0/5 verif.)' },
+    drift_indicator: { signal: 0, threshold: 0.15, detected: false, label: 'Sin drift significativo (0.00%)' },
+    audit_mode: true,
+    all_predictions_have_id: true,
+    all_predictions_have_sources_or_rejected: true,
+    log_size_predictions: 0,
+    log_size_outcomes: 0,
+    log_size_verifications: 0,
+  },
+  last_error: null,
+  last_successful_read_at: new Date(0).toISOString(),
+  last_successful_write_at: new Date(0).toISOString(),
+};"""
+          s = s[:start] + block + s[end:]
+          p.write_text(s)
+          PY
           git diff --check
-          test "$(git status --short | wc -l)" = "42"
-          test -z "$(git status --short | grep -E '^.. \.order2-patch/' || true)"
+          git diff --stat
 
       - name: Commit and fast-forward target
         shell: bash
@@ -64,18 +103,18 @@ jobs:
           set -euo pipefail
           git config user.name "aMira ARQ"
           git config user.email "actions@users.noreply.github.com"
-          git add -A
-          git commit -m "fix(order2): close end-to-end runtime and repository debt"
+          git add scripts/d-post-deploy-validation.ts src/lib/oracle-multi/cron.ts tests/hardening/u6-kv-persistence-audit.test.ts tests/oracle-single-runtime.test.tsx
+          git commit -m "fix(order2): clear strict TypeScript diagnostics"
           NEW_SHA="$(git rev-parse HEAD)"
           git merge-base --is-ancestor "$EXPECTED_OLD_SHA" "$NEW_SHA"
           git push origin "HEAD:refs/heads/$TARGET_BRANCH"
-          echo "SOURCE_SHA=$NEW_SHA" | tee /tmp/order2-bootstrap-result.txt
+          echo "SOURCE_SHA=$NEW_SHA" | tee /tmp/order2-repair-result.txt
 
-      - name: Upload bootstrap evidence
+      - name: Upload repair evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: order2-patch-bootstrap-${{ github.sha }}
-          path: /tmp/order2-bootstrap-result.txt
+          name: order2-typescript-repair-${{ github.sha }}
+          path: /tmp/order2-repair-result.txt
           if-no-files-found: warn
           retention-days: 14
