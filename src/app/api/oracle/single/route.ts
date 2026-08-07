@@ -17,6 +17,7 @@ export const revalidate = 60;
 
 const PAPER_REFERENCE_CAPITAL_USD = 2_000;
 const DEFAULT_ASSET = 'SAN' as const;
+const CANONICAL_CONTRACT = 'order2-canonical-v2' as const;
 
 const OracleSingleRequestSchema = z.object({
   asset: z.literal(DEFAULT_ASSET).optional(),
@@ -55,7 +56,13 @@ function macroMetadata(
 }
 
 function json(response: OracleSingleResponse, status = 200): NextResponse<OracleSingleResponse> {
-  return NextResponse.json(response, { status });
+  return NextResponse.json(response, {
+    status,
+    headers: {
+      'X-aMira-Contract': CANONICAL_CONTRACT,
+      'Cache-Control': 'no-store',
+    },
+  });
 }
 
 export function createOracleSingleHandlers(
