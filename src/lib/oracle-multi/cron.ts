@@ -45,7 +45,7 @@ async function verifySnapshotWrites(
   storage: MultiStorage,
   classes: AssetClass[],
   snapshotDate: string,
-): Promise<CronJobResult['persistence_ack']> {
+): Promise<NonNullable<CronJobResult['persistence_ack']>> {
   const keys = classes.map((cls) => `snap:${cls}:${snapshotDate}`);
   const verified_keys: string[] = [];
   const missing_keys: string[] = [];

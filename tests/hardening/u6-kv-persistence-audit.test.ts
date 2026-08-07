@@ -281,7 +281,7 @@ describe('U6 — KV Persistence Audit', () => {
       // Simulate the kvRead pattern: catch error, return null
       let result: unknown = null;
       try {
-        const raw = await failingKv.get<string>('any-key');
+        const raw = await failingKv.get('any-key');
         result = raw ? JSON.parse(raw) : null;
       } catch {
         result = null;  // graceful degradation

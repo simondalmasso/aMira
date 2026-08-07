@@ -47,7 +47,7 @@ async function d1_smoke(): Promise<GateResult> {
     '/api/oracle/rankings',
     '/api/telemetry?action=summary',
   ];
-  const checks = await Promise.all(endpoints.map(async (ep) => {
+  const checks: GateResult['checks'] = await Promise.all(endpoints.map(async (ep): Promise<GateResult['checks'][number]> => {
     try {
       const r = await http('GET', ep);
       const ok = r.status === 200;
