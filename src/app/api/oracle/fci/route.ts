@@ -3,6 +3,7 @@
 // Cache TTL: 1 hour (per spec). Storage: KV binding ORACLE_FCI_HISTORY (or memory fallback).
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { runOracleFci, KVStorageAdapter, MemoryStorageAdapter } from '@/lib/oracle-fci';
 import type { OracleFciResponse } from '@/lib/oracle-fci';
 
@@ -10,14 +11,13 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 3600; // 1 hour cache
 
 function getKV(): KVNamespace | undefined {
-  // OpenNext exposes KV bindings via process.env on Cloudflare Workers
   try {
-    const fromProc = (process.env as unknown as { ORACLE_FCI_HISTORY?: KVNamespace }).ORACLE_FCI_HISTORY;
-    if (fromProc && typeof fromProc.get === 'function') return fromProc;
+    const env = getCloudflareContext().env as { ORACLE_FCI_HISTORY?: KVNamespace };
+    const kv = env.ORACLE_FCI_HISTORY;
+    return kv && typeof kv.get === 'function' && typeof kv.put === 'function' ? kv : undefined;
   } catch {
-    // ignore
+    return undefined;
   }
-  return undefined;
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse<OracleFciResponse | { success: false; error: string }>> {
@@ -59,15 +59,27 @@ export async function GET(req: NextRequest): Promise<NextResponse<OracleFciRespo
 }
 
 /** POST endpoint — trigger snapshot save (for cron or manual refresh) */
-export async function POST(): Promise<NextResponse<{ success: boolean; snapshot_date?: string; error?: string }>> {
+export async function POST(): Promise<NextResponse<{
+  success: boolean;
+  snapshot_date?: string;
+  persistence_expected?: boolean;
+  source_status?: OracleFciResponse['source_status'];
+  total_funds?: number;
+  error?: string;
+}>> {
   try {
     const kv = getKV();
-    const storage = kv ? new KVStorageAdapter(kv) : new MemoryStorageAdapter();
-    const result = await runOracleFci({ storage, topN: 1 });
+    if (!kv) {
+      return NextResponse.json({ success: false, error: 'ORACLE_FCI_HISTORY binding unavailable' }, { status: 503 });
+    }
+    const result = await runOracleFci({ storage: new KVStorageAdapter(kv), topN: 1 });
     return NextResponse.json({
-      success: true,
+      success: result.source_status !== 'ERROR',
       snapshot_date: result.snapshot_date,
-    });
+      persistence_expected: result.total_funds > 0,
+      source_status: result.source_status,
+      total_funds: result.total_funds,
+    }, { status: result.source_status === 'ERROR' ? 503 : 200 });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
