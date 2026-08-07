@@ -1,0 +1,151 @@
+name: Oraculo Production Deploy
+
+on:
+  workflow_run:
+    workflows: ["Oraculo Runtime Gate"]
+    types: [completed]
+    branches: [feat/oraculo-santander-completion-sol]
+
+permissions:
+  contents: read
+
+env:
+  BASE_URL: https://santaninverter-oracle.simondalmasso44.workers.dev
+
+concurrency:
+  group: oraculo-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'feat/oraculo-santander-completion-sol' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact green source SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Verify source and budget invariants
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.workflow_run.head_sha }}"
+          grep -q '"main": ".open-next/worker-with-cron.js"' wrangler.jsonc
+          test "$(jq -r '.name' wrangler.jsonc)" = "santaninverter-oracle"
+          git diff --quiet acda0aca84220c676941367b2da691e9ba69c638...HEAD -- src/lib/paper-broker.ts src/app/api/paper-broker/route.ts tests/paper-broker-risk.test.ts
+          mkdir -p deployment-evidence
+          {
+            echo "source_sha=$(git rev-parse HEAD)"
+            echo "runtime_gate_run=${{ github.event.workflow_run.id }}"
+            echo "incremental_cost_usd=0"
+            echo "paper_only=true"
+            echo "card_data_used=false"
+          } > deployment-evidence/manifest.txt
+
+      - name: Setup Node and Bun
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.1
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Frozen install and exact-tree rebuild
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          bunx tsc --noEmit --pretty false
+          bun run lint
+          bun test
+          bun run build
+          bunx opennextjs-cloudflare build
+          node scripts/wrap-worker-with-cron.mjs
+          test -f .open-next/worker-with-cron.js
+          sha256sum .open-next/worker-with-cron.js > deployment-evidence/worker-with-cron.sha256
+
+      - name: Verify Cloudflare credentials without exposing them
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          bunx wrangler whoami > deployment-evidence/wrangler-whoami.txt
+
+      - name: Capture rollback anchor
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          WORKER_NAME="$(jq -er '.name' wrangler.jsonc)"
+          API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/deployments"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" "$API" \
+            | tee deployment-evidence/deployments-before.json >/dev/null
+          jq -e '.success == true' deployment-evidence/deployments-before.json >/dev/null
+          jq '{latest:(.result.deployments // .result // [])[0]}' deployment-evidence/deployments-before.json > deployment-evidence/rollback-anchor.json
+
+      - name: Deploy exact candidate to Cloudflare Workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          bunx wrangler deploy --config wrangler.jsonc 2>&1 | tee deployment-evidence/wrangler-deploy.txt
+
+      - name: Capture deployed version and traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          WORKER_NAME="$(jq -er '.name' wrangler.jsonc)"
+          API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/deployments"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" "$API" \
+            | tee deployment-evidence/deployments-after.json >/dev/null
+          jq -e '.success == true' deployment-evidence/deployments-after.json >/dev/null
+          jq '{latest:(.result.deployments // .result // [])[0]}' deployment-evidence/deployments-after.json > deployment-evidence/deployment-latest.json
+
+      - name: Production smoke and canonical cron persistence verification
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error "$BASE_URL/" -o deployment-evidence/home.html
+          curl --fail-with-body --silent --show-error "$BASE_URL/api/oracle/single" -o deployment-evidence/oracle-single.json
+          jq -e '.success == true and (.status == "READY" or .status == "PARTIAL")' deployment-evidence/oracle-single.json >/dev/null
+          jq -e '.macro.fieldProvenance | type == "array"' deployment-evidence/oracle-single.json >/dev/null
+          curl --fail-with-body --silent --show-error "$BASE_URL/api/oracle/cron" -o deployment-evidence/cron-health.json
+          jq -e '.success == true and .mode == "READ_ONLY_HEALTH" and (.bindings.fci and .bindings.assets and .bindings.predictions)' deployment-evidence/cron-health.json >/dev/null
+          curl --fail-with-body --silent --show-error -X POST "$BASE_URL/api/oracle/cron" -o deployment-evidence/cron-execution.json
+          jq -e '.success == true and .lifecycle.storage == "durable" and ([.jobs[] | select(.ok == true and .persistence_ack.durable == true)] | length) == (.jobs | length)' deployment-evidence/cron-execution.json >/dev/null
+
+      - name: Production contract assertions
+        run: |
+          set -euo pipefail
+          jq -e '.learning.status == "READY" or .learning.status == "NO_HISTORY"' deployment-evidence/oracle-single.json >/dev/null
+          jq -e 'if .learning.status == "NO_HISTORY" then (.learning.sampleCount == 0 and .learning.mean_absolute_error == null and .learning.directional_accuracy_rate == null and .learning.mean_brier_score == null) else true end' deployment-evidence/oracle-single.json >/dev/null
+          jq -e '.lifecycle.storage == "durable"' deployment-evidence/oracle-single.json >/dev/null
+          jq -e '.telemetryStorage.state == "durable"' deployment-evidence/oracle-single.json >/dev/null
+          ! grep -Eqi 'SECRET_INTERNAL_DETAIL|stack trace|/home/runner/' deployment-evidence/oracle-single.json
+          printf '%s\n' "production_smoke=PASS" "production_cron=PASS" "production_errors=0_observed" > deployment-evidence/production-summary.txt
+
+      - name: Evidence checksums
+        if: always()
+        run: |
+          set -euo pipefail
+          find deployment-evidence -maxdepth 1 -type f ! -name checksums.sha256 -print0 | sort -z | xargs -0 sha256sum > deployment-evidence/checksums.sha256
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oraculo-production-deploy-${{ github.event.workflow_run.head_sha }}
+          path: deployment-evidence/
+          if-no-files-found: error
+          retention-days: 30
