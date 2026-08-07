@@ -96,11 +96,12 @@ let _journal: AdaptiveWeightJournalEntry[] = [];
 let _totalUpdates = 0;
 let _totalRejections = 0;
 let _lastUpdateTimestamp: string | null = null;
+let _journalIdSequence = 0;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 function genId(): string {
-  return `awje_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  return `awje_${Date.now().toString(36)}_${(++_journalIdSequence).toString(36)}`;
 }
 
 function driftFromDefault(w: LinearFactorWeights): number {
@@ -274,5 +275,6 @@ export function resetAdaptiveWeights(): void {
   _totalUpdates = 0;
   _totalRejections = 0;
   _lastUpdateTimestamp = null;
+  _journalIdSequence = 0;
   setActiveWeights({ ...DEFAULT_WEIGHTS });
 }
