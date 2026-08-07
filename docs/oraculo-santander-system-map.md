@@ -352,14 +352,13 @@ The previous key-count-delta heuristic is not authoritative evidence and is no l
 
 ```text
 exact branch SHA
-  -> Oraculo Runtime Gate (strict)
-  -> workflow_run success
-  -> Oraculo Production Deploy
-      -> checkout same head SHA
+  -> Oraculo Runtime Gate / runtime-gate (strict)
+  -> production-deploy job (needs runtime-gate=success; same workflow run)
+      -> checkout same exact head SHA
       -> rebuild same tree
       -> capture rollback anchor
       -> wrangler deploy
-      -> Cloudflare deployment/version/100% traffic evidence
+      -> capture Cloudflare deployment/version/traffic evidence
       -> production API + cron persistence smoke
 ```
 

@@ -46,7 +46,7 @@ Order #2 final gates are strict for the configured authoritative repository grap
 
 ## CI and production reconciliation
 
-`.github/workflows/oraculo-runtime-gate.yml` is the authoritative source gate for the exact branch SHA. A successful gate triggers `.github/workflows/oraculo-production-deploy.yml`, which checks out the exact green SHA, rebuilds it, captures the Cloudflare rollback anchor, deploys with existing repository secrets, then verifies production `/`, `/api/oracle/single`, cron binding health and one idempotent cron persistence run.
+`.github/workflows/oraculo-runtime-gate.yml` is the single authoritative Order #2 gate for the exact branch SHA. Its `production-deploy` job is dependency-bound to the strict source gate (`needs: runtime-gate`), checks out that same green SHA, rebuilds it, captures the Cloudflare rollback anchor, deploys with existing repository secrets, then verifies production `/`, `/api/oracle/single`, cron binding health and one idempotent cron persistence run. There is no second production workflow authority.
 
 Exact CI run IDs, artifact IDs/digests, Cloudflare version/deployment IDs, traffic, smoke results and final source SHA are deliberately recorded in the final Issue #2 checkpoint rather than hard-coded here, so this document never treats stale deployment identifiers as current truth.
 
