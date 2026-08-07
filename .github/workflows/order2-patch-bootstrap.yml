@@ -14,14 +14,14 @@ jobs:
     timeout-minutes: 15
     env:
       TARGET_BRANCH: feat/oraculo-santander-completion-sol
-      EXPECTED_OLD_SHA: aff82f66f741da48a2475ced7692ed51221c4c26
+      EXPECTED_OLD_SHA: db317d5586c3b6668b1e834776027b49842a9d94
     steps:
       - name: Checkout staging controller
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Repair deterministic identifiers on exact target head
+      - name: Reconcile docs on exact target head
         shell: bash
         run: |
           set -euo pipefail
@@ -37,37 +37,18 @@ jobs:
                   raise SystemExit(f'{path}: expected one match, found {s.count(old)}')
               p.write_text(s.replace(old,new))
 
-          once('src/lib/oracle/v2/adaptive-weights.ts',
-               "let _lastUpdateTimestamp: string | null = null;",
-               "let _lastUpdateTimestamp: string | null = null;\nlet _journalIdSequence = 0;")
-          once('src/lib/oracle/v2/adaptive-weights.ts',
-               "function genId(): string {\n  return `awje_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;\n}",
-               "function genId(): string {\n  return `awje_${Date.now().toString(36)}_${(++_journalIdSequence).toString(36)}`;\n}")
-          once('src/lib/oracle/v2/adaptive-weights.ts',
-               "  _lastUpdateTimestamp = null;\n  setActiveWeights({ ...DEFAULT_WEIGHTS });",
-               "  _lastUpdateTimestamp = null;\n  _journalIdSequence = 0;\n  setActiveWeights({ ...DEFAULT_WEIGHTS });")
+          once(
+              'docs/CURRENT_STATE.md',
+              ".github/workflows/oraculo-runtime-gate.yml` is the authoritative source gate for the exact branch SHA. A successful gate triggers `.github/workflows/oraculo-production-deploy.yml`, which checks out the exact green SHA, rebuilds it, captures the Cloudflare rollback anchor, deploys with existing repository secrets, then verifies production `/`, `/api/oracle/single`, cron binding health and one idempotent cron persistence run.",
+              ".github/workflows/oraculo-runtime-gate.yml` is the single authoritative Order #2 gate for the exact branch SHA. Its `production-deploy` job is dependency-bound to the strict source gate (`needs: runtime-gate`), checks out that same green SHA, rebuilds it, captures the Cloudflare rollback anchor, deploys with existing repository secrets, then verifies production `/`, `/api/oracle/single`, cron binding health and one idempotent cron persistence run. There is no second production workflow authority."
+          )
 
-          once('src/lib/oracle/v2/audit-trail.ts',
-               "let _auditBuffer: AuditEntry[] = [];",
-               "let _auditBuffer: AuditEntry[] = [];\nlet _auditIdSequence = 0;")
-          once('src/lib/oracle/v2/audit-trail.ts',
-               "function genDecisionId(): string {\n  return `dec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;\n}",
-               "function genDecisionId(): string {\n  return `dec_${Date.now().toString(36)}_${(++_auditIdSequence).toString(36)}`;\n}")
-          once('src/lib/oracle/v2/audit-trail.ts',
-               "export function clearAuditTrail(): void {\n  _auditBuffer = [];\n}",
-               "export function clearAuditTrail(): void {\n  _auditBuffer = [];\n  _auditIdSequence = 0;\n}")
-
-          once('src/lib/oracle/v3/self-diagnosis.ts',
-               "let _alerts: Alert[] = [];",
-               "let _alerts: Alert[] = [];\nlet _alertIdSequence = 0;")
-          once('src/lib/oracle/v3/self-diagnosis.ts',
-               "function genAlertId(): string {\n  return `alert_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;\n}",
-               "function genAlertId(): string {\n  return `alert_${Date.now().toString(36)}_${(++_alertIdSequence).toString(36)}`;\n}")
-          once('src/lib/oracle/v3/self-diagnosis.ts',
-               "export function clearAlerts(): void {\n  _alerts = [];\n}",
-               "export function clearAlerts(): void {\n  _alerts = [];\n  _alertIdSequence = 0;\n}")
+          once(
+              'docs/oraculo-santander-system-map.md',
+              "exact branch SHA\n  -> Oraculo Runtime Gate (strict)\n  -> workflow_run success\n  -> Oraculo Production Deploy\n      -> checkout same head SHA\n      -> rebuild same tree\n      -> capture rollback anchor\n      -> wrangler deploy\n      -> Cloudflare deployment/version/100% traffic evidence\n      -> production API + cron persistence smoke",
+              "exact branch SHA\n  -> Oraculo Runtime Gate / runtime-gate (strict)\n  -> production-deploy job (needs runtime-gate=success; same workflow run)\n      -> checkout same exact head SHA\n      -> rebuild same tree\n      -> capture rollback anchor\n      -> wrangler deploy\n      -> capture Cloudflare deployment/version/traffic evidence\n      -> production API + cron persistence smoke"
+          )
           PY
-          ! grep -R "Math.random" src/lib/oracle/v2/adaptive-weights.ts src/lib/oracle/v2/audit-trail.ts src/lib/oracle/v3/self-diagnosis.ts
           git diff --check
 
       - name: Commit and fast-forward target
@@ -76,18 +57,18 @@ jobs:
           set -euo pipefail
           git config user.name "aMira ARQ"
           git config user.email "actions@users.noreply.github.com"
-          git add src/lib/oracle/v2/adaptive-weights.ts src/lib/oracle/v2/audit-trail.ts src/lib/oracle/v3/self-diagnosis.ts
-          git commit -m "fix(order2): make audit identifiers deterministic"
+          git add docs/CURRENT_STATE.md docs/oraculo-santander-system-map.md
+          git commit -m "docs(order2): reconcile final deployment authority"
           NEW_SHA="$(git rev-parse HEAD)"
           git merge-base --is-ancestor "$EXPECTED_OLD_SHA" "$NEW_SHA"
           git push origin "HEAD:refs/heads/$TARGET_BRANCH"
-          echo "SOURCE_SHA=$NEW_SHA" | tee /tmp/order2-repair-result.txt
+          echo "SOURCE_SHA=$NEW_SHA" | tee /tmp/order2-docs-result.txt
 
-      - name: Upload repair evidence
+      - name: Upload documentation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: order2-determinism-repair-${{ github.sha }}
-          path: /tmp/order2-repair-result.txt
+          name: order2-docs-reconcile-${{ github.sha }}
+          path: /tmp/order2-docs-result.txt
           if-no-files-found: warn
           retention-days: 14
