@@ -43,7 +43,7 @@ jobs:
           base64 -d /tmp/order2.patch.gz.b64 | gzip -dc > /tmp/order2.patch
           echo "$PATCH_SHA256  /tmp/order2.patch" | sha256sum -c -
 
-      - name: Apply only to exact target head
+      - name: Apply source-only patch to exact target head
         shell: bash
         run: |
           set -euo pipefail
@@ -52,9 +52,10 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_OLD_SHA"
           git apply --check /tmp/order2.patch
           git apply /tmp/order2.patch
+          git checkout -- .github/workflows/oraculo-runtime-gate.yml
           rm -f .github/workflows/oraculo-production-deploy.yml
           git diff --check
-          test "$(git status --short | wc -l)" = "43"
+          test "$(git status --short | wc -l)" = "42"
           test -z "$(git status --short | grep -E '^.. \.order2-patch/' || true)"
 
       - name: Commit and fast-forward target
