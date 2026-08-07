@@ -17,11 +17,17 @@ Canonical macro provenance classifies each field as `OBSERVED`, `RECONSTRUCTED`,
 
 Unknown/no-history values remain `null`; a real numeric zero remains representable as zero. The canonical API and UI expose READY/PARTIAL/ERROR plus explicit warnings instead of fabricating missing scores.
 
-`src/lib/data-integrity.ts` is the typed validation boundary for external/macro payloads. It no longer relies on `any` casts or duplicate data-label unions, it applies a single source-quality penalty per state, and its failure probes fail safely without exposing caught internals. Its process-local audit log is bounded and is not presented as durable storage.
+`src/lib/data-integrity.ts` is the typed validation boundary for external/macro payloads. It no longer relies on `any` casts or duplicate data-label unions, applies one source-quality penalty per state, and its failure probes fail safely without exposing caught internals. Its process-local audit log is bounded and is not presented as durable storage.
 
-Public audit and temporal-validation query inputs are schema validated. Temporal validation is explicitly a `TRAINING_MEMORY_ESTIMATE` / reconstructed-synthetic fixture, not observed historical validation and not evidence of real returns. The temporal engine consumes `RebuiltMacroState` directly as the `MacroState` subtype it is and uses typed bucket/strategy adapters rather than evasive casts.
+Public audit, X10, backtest and temporal-validation request inputs are schema validated. Public 500 responses use stable codes/messages; detailed exceptions remain server-side. Rates diagnostics expose stable source-unavailable codes rather than provider exception strings.
 
-Public Oracle class routes do not echo caught internal exception messages. Mutating refresh endpoints fail closed when the required durable Cloudflare KV bindings are unavailable; read paths may degrade only where their contract does not claim durable persistence. PaperBroker and telemetry 500 responses expose stable public codes/messages while logging detailed exceptions only server-side.
+`/api/backtest` and temporal validation remain unconditionally `SIMULADO` / `TRAINING_MEMORY_ESTIMATE` because their historical fixtures are reconstructed/synthetic. Persisted real telemetry may be reported as auxiliary context but cannot relabel fixture history as observed or convert simulated results into real backtest evidence.
+
+The temporal engine consumes `RebuiltMacroState` directly as the `MacroState` subtype it is and uses typed bucket/strategy adapters rather than evasive casts.
+
+`/api/macro` top-level source follows canonical field provenance via `getOverallDataLabel`; successful proxy observations remain separately visible as auxiliary observed fields and cannot upgrade reconstructed canonical fields to REAL.
+
+Public Oracle class routes do not echo caught internal exception messages. Mutating refresh endpoints fail closed when the required durable Cloudflare KV bindings are unavailable; read paths may degrade only where their contract does not claim durable persistence.
 
 ## Lifecycle, learning and telemetry
 
@@ -30,6 +36,8 @@ Public Oracle class routes do not echo caught internal exception messages. Mutat
 Learning metrics are derived from canonical verification history. With no verified history: `sampleCount=0`, MAE/directional accuracy/Brier are `null`, status=`NO_HISTORY`. Active weights can be rebuilt deterministically from hydrated verified events.
 
 Telemetry and lifecycle report `durable`, degraded-memory, or unavailable states explicitly. `/api/oracle/single` becomes PARTIAL if lifecycle or telemetry durability is unavailable. PaperBroker state is explicitly `ephemeral-isolate`, `durable=false`, and `realBrokerConnected=false`.
+
+Legacy `/api/sync` computation may still return useful results when its Prisma/DB persistence is unavailable, but it now reports persistence as `durable` or `degraded` from actual write/read outcomes and no longer initializes update flags to false success. DB persistence is not a substitute for the canonical Cloudflare KV lifecycle/telemetry authorities.
 
 ## Cron and recovery
 

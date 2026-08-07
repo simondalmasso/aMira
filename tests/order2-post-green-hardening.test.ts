@@ -94,4 +94,40 @@ describe('Order #2 post-green persistence and API hardening', () => {
     expect(route).not.toContain("const dataLabel = readyForRealBacktest ? 'REAL' : 'SIMULADO'");
     expect(route).not.toContain('as StrategicMode');
   });
+
+  test('X10 GET/POST contracts are schema validated and errors are sanitized', () => {
+    const route = source('src/app/api/x10/route.ts');
+    expect(route).toContain('INVALID_X10_QUERY');
+    expect(route).toContain('INVALID_X10_BODY');
+    expect(route).toContain('X10_EXECUTION_FAILED');
+    expect(route).not.toContain('as StrategicMode');
+    expect(route).not.toContain('detail: error instanceof Error');
+    expect(route).not.toContain('body.mode ||');
+  });
+
+  test('macro top-level source follows canonical provenance and proxy observations remain auxiliary', () => {
+    const route = source('src/app/api/macro/route.ts');
+    expect(route).toContain('getOverallDataLabel(macro)');
+    expect(route).toContain("role: 'AUXILIARY_OBSERVED_FIELDS'");
+    expect(route).not.toContain("proxyRealCount >= 3\n          ? 'REAL'");
+  });
+
+  test('sync never claims durable persistence when DB writes fail', () => {
+    const route = source('src/app/api/sync/route.ts');
+    expect(route).toContain("state: persistenceDurable ? 'durable' : 'degraded'");
+    expect(route).toContain('marketSnapshotSaved = false');
+    expect(route).toContain('portfolioSnapshotSaved = false');
+    expect(route).toContain('SYNC_EXECUTION_FAILED');
+    expect(route).not.toContain('let macroUpdated = true');
+    expect(route).not.toContain('let portfolioUpdated = true');
+  });
+
+  test('rates diagnostics expose stable source codes rather than provider exception text', () => {
+    const route = source('src/app/api/rates/route.ts');
+    expect(route).toContain("errorCode: bcraData.isReal ? null : 'SOURCE_UNAVAILABLE'");
+    expect(route).toContain('dataClass: item.dataClass');
+    expect(route).not.toContain('error: bcraData.error');
+    expect(route).not.toContain('error: cerData.error');
+    expect(route).not.toContain('error: indecData.error');
+  });
 });

@@ -4,37 +4,23 @@ import { fetchINDECInflation } from '@/lib/indec-api';
 import { fetchBluelytics, getMacroState, applyStaleDegradation } from '@/lib/live-data';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 300; // 5 minutes
+export const revalidate = 300;
 
-// ============================================================================
-// DIAGNOSTIC ENDPOINT — Raw API data + real data percentage
-// GET /api/rates → Shows exactly what each API returned
-// ============================================================================
 export async function GET() {
   try {
     const timestamp = new Date().toISOString();
-
-    // Fetch all raw data sources in parallel
     const [bluelytics, bcraData, cerData, indecData, rawMacroState] = await Promise.all([
-      fetchBluelytics(),
-      fetchBCRAData(),
-      fetchCERData(),
-      fetchINDECInflation(),
-      getMacroState(),
+      fetchBluelytics(), fetchBCRAData(), fetchCERData(), fetchINDECInflation(), getMacroState(),
     ]);
     const macroState = applyStaleDegradation(rawMacroState);
-
-    // Compute real data stats
     const provenance = macroState.provenance;
     const totalSources = Object.keys(provenance).length;
-    const realSources = Object.values(provenance).filter(p => p.label === 'REAL').length;
+    const realSources = Object.values(provenance).filter((item) => item.dataClass === 'OBSERVED').length;
     const realPct = macroState.realDataPct;
 
     return NextResponse.json({
       success: true,
       timestamp,
-
-      // ─── Real data percentage ───
       realData: {
         percentage: realPct,
         realSources,
@@ -42,11 +28,10 @@ export async function GET() {
         target: 70,
         status: realPct >= 70 ? 'META ALCANZADA' : realPct >= 40 ? 'EN PROGRESO' : 'INSUFICIENTE',
       },
-
-      // ─── Raw API results ───
       sources: {
         bluelytics: {
           status: bluelytics ? 'OK' : 'FAILED',
+          errorCode: bluelytics ? null : 'SOURCE_UNAVAILABLE',
           url: 'https://api.bluelytics.com.ar/v2/latest',
           lastUpdate: bluelytics?.last_update ?? null,
           data: bluelytics ? {
@@ -58,14 +43,14 @@ export async function GET() {
         },
         bcra: {
           status: bcraData.isReal ? 'OK' : 'FAILED',
+          errorCode: bcraData.isReal ? null : 'SOURCE_UNAVAILABLE',
           url: bcraData.sourceUrl,
           dataDate: bcraData.dataDate,
-          error: bcraData.error ?? null,
           data: {
             policyRate: bcraData.bcraPolicyTNA,
-            leliqRate: bcraData.bcraPolicyTNA, // LELIQ tracks policy rate (not in BCRARates)
+            leliqRate: bcraData.bcraPolicyTNA,
             badlarRate: bcraData.badlarTNA,
-            tmlRate: bcraData.badlarTNA - 2, // TML typically 2pp below BADLAR
+            tmlRate: bcraData.badlarTNA - 2,
             lecapsRate: bcraData.lecapsTNA,
             officialRate: bcraData.officialRate,
             reservesUSD: bcraData.reservesUSD,
@@ -74,20 +59,16 @@ export async function GET() {
         },
         cer: {
           status: cerData.isReal ? 'OK' : 'FAILED',
+          errorCode: cerData.isReal ? null : 'SOURCE_UNAVAILABLE',
           url: cerData.sourceUrl,
           dataDate: cerData.dataDate,
-          error: cerData.error ?? null,
-          data: {
-            index: cerData.index,
-            monthlyChange: cerData.monthlyChange,
-            dailyChange: cerData.dailyChange,
-          },
+          data: { index: cerData.index, monthlyChange: cerData.monthlyChange, dailyChange: cerData.dailyChange },
         },
         indec: {
           status: indecData.isReal ? 'OK' : 'FAILED',
+          errorCode: indecData.isReal ? null : 'SOURCE_UNAVAILABLE',
           url: indecData.sourceUrl,
           dataDate: indecData.dataDate,
-          error: indecData.error ?? null,
           data: {
             lastMonthInflation: indecData.lastMonthInflation,
             lastMonthDate: indecData.lastMonthDate,
@@ -101,8 +82,6 @@ export async function GET() {
           },
         },
       },
-
-      // ─── Derived macro state ───
       macro: {
         mep: macroState.mep,
         inflation: macroState.inflation,
@@ -110,26 +89,18 @@ export async function GET() {
         cer: macroState.cer,
         crawlingPeg: macroState.crawlingPeg,
       },
-
-      // ─── Provenance per category ───
-      provenance: Object.fromEntries(
-        Object.entries(provenance).map(([key, prov]) => [
-          key,
-          {
-            label: prov.label,
-            source: prov.source,
-            url: prov.url,
-            dataDate: prov.dataDate,
-            stalenessHours: prov.stalenessHours,
-          },
-        ])
-      ),
+      provenance: Object.fromEntries(Object.entries(provenance).map(([key, item]) => [key, {
+        label: item.label,
+        dataClass: item.dataClass,
+        source: item.source,
+        url: item.url,
+        dataDate: item.dataDate,
+        stalenessHours: item.stalenessHours,
+        limitations: item.limitations ?? [],
+      }])),
     });
   } catch (error) {
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to fetch rates data',
-      timestamp: new Date().toISOString(),
-    }, { status: 500 });
+    console.error('[rates] endpoint failed', error);
+    return NextResponse.json({ success: false, code: 'RATES_FETCH_FAILED', error: 'Failed to fetch rates data', timestamp: new Date().toISOString() }, { status: 500 });
   }
 }
