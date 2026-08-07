@@ -1,0 +1,79 @@
+name: Order2 Patch Bootstrap
+
+on:
+  push:
+    branches:
+      - chore/order2-patch-bootstrap-20260807
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TARGET_BRANCH: feat/oraculo-santander-completion-sol
+      EXPECTED_OLD_SHA: 86b3464933f601cc86b06fc08ddd8be634660612
+      B64_SHA256: 365ed9f17f958ff6184fc8e3e7aea05fbebc68aa20331c34a4ed71c0cd4349d0
+      PATCH_SHA256: a1276d21ea1b4436706335f4cdca206cd19aaf4bffcec4d9232f9f7bd0926116
+      B64_LENGTH: "54860"
+    steps:
+      - name: Checkout staging evidence
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Assemble and verify exact patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            .order2-patch/chunk-01 \
+            .order2-patch/chunk-02 \
+            .order2-patch/chunk-03 \
+            .order2-patch/chunk-04 \
+            .order2-patch/chunk-05 \
+            .order2-patch/chunk-06a \
+            .order2-patch/chunk-06b \
+            .order2-patch/chunk-07a \
+            .order2-patch/chunk-07b > /tmp/order2.patch.gz.b64
+          test "$(wc -c < /tmp/order2.patch.gz.b64)" = "$B64_LENGTH"
+          echo "$B64_SHA256  /tmp/order2.patch.gz.b64" | sha256sum -c -
+          base64 -d /tmp/order2.patch.gz.b64 | gzip -dc > /tmp/order2.patch
+          echo "$PATCH_SHA256  /tmp/order2.patch" | sha256sum -c -
+
+      - name: Apply only to exact target head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$TARGET_BRANCH"
+          git checkout --detach "origin/$TARGET_BRANCH"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_OLD_SHA"
+          git apply --check /tmp/order2.patch
+          git apply /tmp/order2.patch
+          git diff --check
+          test "$(git status --short | wc -l)" = "44"
+          test -z "$(git status --short | grep -E '^.. \.order2-patch/' || true)"
+
+      - name: Commit and fast-forward target
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "aMira ARQ"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(order2): close end-to-end runtime and repository debt"
+          NEW_SHA="$(git rev-parse HEAD)"
+          git merge-base --is-ancestor "$EXPECTED_OLD_SHA" "$NEW_SHA"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          echo "SOURCE_SHA=$NEW_SHA" | tee /tmp/order2-bootstrap-result.txt
+
+      - name: Upload bootstrap evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: order2-patch-bootstrap-${{ github.sha }}
+          path: /tmp/order2-bootstrap-result.txt
+          if-no-files-found: warn
+          retention-days: 14
