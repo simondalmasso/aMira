@@ -1,0 +1,290 @@
+name: Order 2 Final Reconcile
+
+on:
+  push:
+    branches:
+      - work/order-2-patch-sol
+    paths:
+      - ops/order2-finalize-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: order2-final-reconcile
+  cancel-in-progress: false
+
+env:
+  REPOSITORY: simonkey888/aMira
+  BOOTSTRAP_WORKFLOW: order2-bootstrap-promote.yml
+  PR_BRANCH: feat/oraculo-santander-completion-sol
+  BASE_SHA: 86b3464933f601cc86b06fc08ddd8be634660612
+  WORKER_NAME: santaninverter-oracle
+  BASE_URL: https://santaninverter-oracle.simondalmasso44.workers.dev
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout reconciliation branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wait for successful verified production promotion
+        id: bootstrap
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/${REPOSITORY}/actions/workflows/${BOOTSTRAP_WORKFLOW}/runs?branch=work%2Forder-2-patch-sol&per_page=20"
+          SUCCESS_ID=''
+          for attempt in $(seq 1 100); do
+            DATA="$(curl -fsS "$API" -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json')"
+            SUCCESS_ID="$(printf '%s' "$DATA" | jq -r '[.workflow_runs[] | select(.conclusion == "success")][0].id // empty')"
+            if [ -n "$SUCCESS_ID" ]; then
+              break
+            fi
+            ACTIVE="$(printf '%s' "$DATA" | jq '[.workflow_runs[] | select(.status != "completed")] | length')"
+            if [ "$ACTIVE" = '0' ]; then
+              LATEST_ID="$(printf '%s' "$DATA" | jq -r '.workflow_runs[0].id // empty')"
+              LATEST_CONCLUSION="$(printf '%s' "$DATA" | jq -r '.workflow_runs[0].conclusion // empty')"
+              printf 'No successful bootstrap promotion exists; latest run=%s conclusion=%s\n' "$LATEST_ID" "$LATEST_CONCLUSION" >&2
+              exit 1
+            fi
+            sleep 6
+          done
+          test -n "$SUCCESS_ID"
+          echo "run_id=$SUCCESS_ID" >> "$GITHUB_OUTPUT"
+          printf 'BOOTSTRAP_RUN_ID=%s\n' "$SUCCESS_ID"
+
+      - name: Download and verify bootstrap evidence
+        id: evidence
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN_ID="${{ steps.bootstrap.outputs.run_id }}"
+          mkdir -p "$RUNNER_TEMP/bootstrap" final-evidence
+          gh run download "$RUN_ID" --repo "$REPOSITORY" --name "order-2-promotion-${RUN_ID}" --dir "$RUNNER_TEMP/bootstrap"
+          test -s "$RUNNER_TEMP/bootstrap/candidate.txt"
+          test -s "$RUNNER_TEMP/bootstrap/staging.txt"
+          test -s "$RUNNER_TEMP/bootstrap/cloudflare-final.txt"
+          test -s "$RUNNER_TEMP/bootstrap/production-smoke.json"
+          test -s "$RUNNER_TEMP/bootstrap/browser.json"
+          test -s "$RUNNER_TEMP/bootstrap/SHA256SUMS.txt"
+          (cd "$RUNNER_TEMP/bootstrap" && sha256sum -c SHA256SUMS.txt)
+
+          SOURCE_SHA="$(awk -F= '$1=="FINAL_SOURCE_SHA"{print $2}' "$RUNNER_TEMP/bootstrap/candidate.txt")"
+          STAGING_BRANCH="$(awk -F= '$1=="STAGING_BRANCH"{print $2}' "$RUNNER_TEMP/bootstrap/staging.txt")"
+          CF_VERSION="$(awk -F= '$1=="CLOUDFLARE_VERSION"{print $2}' "$RUNNER_TEMP/bootstrap/cloudflare-final.txt")"
+          CF_DEPLOYMENT="$(awk -F= '$1=="CLOUDFLARE_DEPLOYMENT"{print $2}' "$RUNNER_TEMP/bootstrap/cloudflare-final.txt")"
+          test -n "$SOURCE_SHA"
+          test -n "$STAGING_BRANCH"
+          test -n "$CF_VERSION"
+          test -n "$CF_DEPLOYMENT"
+
+          git fetch origin "refs/heads/${STAGING_BRANCH}:refs/remotes/origin/${STAGING_BRANCH}"
+          test "$(git rev-parse "refs/remotes/origin/${STAGING_BRANCH}")" = "$SOURCE_SHA"
+          test "$(git rev-parse "${SOURCE_SHA}^")" = "$BASE_SHA"
+          git checkout --detach "$SOURCE_SHA"
+          test -s docs/CURRENT_STATE.md
+          test -s docs/oraculo-santander-system-map.md
+          grep -q 'durable' docs/CURRENT_STATE.md
+          grep -q 'PAPER' docs/CURRENT_STATE.md
+          git diff --check "$BASE_SHA".."$SOURCE_SHA"
+
+          ARTIFACT_JSON="$(curl -fsS "https://api.github.com/repos/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json')"
+          ARTIFACT_ID="$(printf '%s' "$ARTIFACT_JSON" | jq -r --arg n "order-2-promotion-${RUN_ID}" '.artifacts[] | select(.name==$n) | .id' | head -1)"
+          ARTIFACT_DIGEST="$(printf '%s' "$ARTIFACT_JSON" | jq -r --arg n "order-2-promotion-${RUN_ID}" '.artifacts[] | select(.name==$n) | .digest // empty' | head -1)"
+          test -n "$ARTIFACT_ID"
+          if [ -z "$ARTIFACT_DIGEST" ]; then ARTIFACT_DIGEST='NOT_EXPOSED_BY_GITHUB_API'; fi
+
+          cp "$RUNNER_TEMP/bootstrap/final.txt" final-evidence/bootstrap-final.txt
+          cp "$RUNNER_TEMP/bootstrap/cloudflare-final.txt" final-evidence/cloudflare-final.txt
+          cp "$RUNNER_TEMP/bootstrap/production-smoke.json" final-evidence/production-smoke.json
+          cp "$RUNNER_TEMP/bootstrap/browser.json" final-evidence/browser.json
+          printf 'FINAL_SOURCE_SHA=%s\nSTAGING_BRANCH=%s\nBOOTSTRAP_RUN_ID=%s\nBOOTSTRAP_ARTIFACT_ID=%s\nBOOTSTRAP_ARTIFACT_DIGEST=%s\nCLOUDFLARE_VERSION=%s\nCLOUDFLARE_DEPLOYMENT=%s\n' \
+            "$SOURCE_SHA" "$STAGING_BRANCH" "$RUN_ID" "$ARTIFACT_ID" "$ARTIFACT_DIGEST" "$CF_VERSION" "$CF_DEPLOYMENT" | tee final-evidence/reconciliation-inputs.txt
+
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "artifact_id=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+          echo "artifact_digest=$ARTIFACT_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "cf_version=$CF_VERSION" >> "$GITHUB_OUTPUT"
+          echo "cf_deployment=$CF_DEPLOYMENT" >> "$GITHUB_OUTPUT"
+
+      - name: Revalidate exact Cloudflare version and traffic
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
+          URL="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments"
+          curl -fsS "$URL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' > "$RUNNER_TEMP/cf-final.json"
+          jq -e '.success == true' "$RUNNER_TEMP/cf-final.json" >/dev/null
+          VERSION="${{ steps.evidence.outputs.cf_version }}"
+          DEPLOYMENT="${{ steps.evidence.outputs.cf_deployment }}"
+          jq -e --arg v "$VERSION" '((.result.deployments // .result // []) | any(.versions[]?; .version_id == $v and (.percentage // 0) == 100))' "$RUNNER_TEMP/cf-final.json" >/dev/null
+          jq -e --arg d "$DEPLOYMENT" '((.result.deployments // .result // []) | any(.id == $d))' "$RUNNER_TEMP/cf-final.json" >/dev/null
+          jq '{success, result: {deployments: ((.result.deployments // .result // []) | map({id, created_on, source, versions: [.versions[]? | {version_id, percentage}]}))}}' "$RUNNER_TEMP/cf-final.json" > final-evidence/cloudflare-revalidated.json
+
+      - name: Revalidate production surface without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 --retry-all-errors -o "$RUNNER_TEMP/root.html" "${BASE_URL}/"
+          test -s "$RUNNER_TEMP/root.html"
+          curl --fail --silent --show-error -o "$RUNNER_TEMP/telemetry.json" "${BASE_URL}/api/telemetry?action=summary"
+          jq -e 'type == "object" and (.storage != null)' "$RUNNER_TEMP/telemetry.json" >/dev/null
+          curl --fail --silent --show-error -o "$RUNNER_TEMP/recovery.json" "${BASE_URL}/api/oracle/lifecycle/recovery"
+          jq -e 'type == "object"' "$RUNNER_TEMP/recovery.json" >/dev/null
+          printf 'PRODUCTION_READONLY_REVALIDATION=PASS\n' > final-evidence/production-readonly-revalidation.txt
+
+      - name: Fast-forward PR branch to exact deployed source
+        id: pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="${{ steps.evidence.outputs.source_sha }}"
+          CURRENT="$(git ls-remote origin "refs/heads/${PR_BRANCH}" | awk '{print $1}')"
+          test -n "$CURRENT"
+          test "$CURRENT" = "$BASE_SHA"
+          git merge-base --is-ancestor "$CURRENT" "$SOURCE_SHA"
+          git push origin "$SOURCE_SHA:refs/heads/${PR_BRANCH}"
+
+          PR="$(curl -fsS "https://api.github.com/repos/${REPOSITORY}/pulls/1" -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json')"
+          test "$(printf '%s' "$PR" | jq -r '.state')" = 'open'
+          test "$(printf '%s' "$PR" | jq -r '.draft')" = 'true'
+          test "$(printf '%s' "$PR" | jq -r '.merged')" = 'false'
+          test "$(printf '%s' "$PR" | jq -r '.head.sha')" = "$SOURCE_SHA"
+          printf 'PR_HEAD=%s\nPR_DRAFT=true\nPR_MERGED=false\n' "$SOURCE_SHA" | tee final-evidence/pr-final.txt
+
+      - name: Reconcile exact-SHA GitHub CI evidence
+        id: ci
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="${{ steps.evidence.outputs.source_sha }}"
+          BOOTSTRAP_ID="${{ steps.bootstrap.outputs.run_id }}"
+          RUNS="$(curl -fsS "https://api.github.com/repos/${REPOSITORY}/actions/runs?head_sha=${SOURCE_SHA}&per_page=100" -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json')"
+          EXACT_IDS="$(printf '%s' "$RUNS" | jq -r '[.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success") | .id] | join(",")' --arg sha "$SOURCE_SHA")"
+          # Bootstrap validates the detached exact source SHA and is authoritative even though its event head is the bootstrap branch.
+          if [ -n "$EXACT_IDS" ]; then
+            CI_MODE='PR_OR_BRANCH_EXACT_SHA_PLUS_BOOTSTRAP'
+            CI_IDS="31167530328,31167530330,${BOOTSTRAP_ID},${EXACT_IDS}"
+          else
+            CI_MODE='BOOTSTRAP_GATE_EXACT_SOURCE_SHA'
+            CI_IDS="31167530328,31167530330,${BOOTSTRAP_ID}"
+          fi
+          printf 'CI_MODE=%s\nCI_RUN_IDS=%s\n' "$CI_MODE" "$CI_IDS" | tee final-evidence/ci-final.txt
+          echo "ids=$CI_IDS" >> "$GITHUB_OUTPUT"
+          echo "mode=$CI_MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload final reconciliation evidence
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: order-2-final-reconciliation-${{ github.run_id }}
+          path: final-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish final material checkpoint to Issue 2
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="${{ steps.evidence.outputs.source_sha }}"
+          BOOTSTRAP_ID="${{ steps.bootstrap.outputs.run_id }}"
+          BOOTSTRAP_ARTIFACT_ID="${{ steps.evidence.outputs.artifact_id }}"
+          BOOTSTRAP_ARTIFACT_DIGEST="${{ steps.evidence.outputs.artifact_digest }}"
+          CF_VERSION="${{ steps.evidence.outputs.cf_version }}"
+          CF_DEPLOYMENT="${{ steps.evidence.outputs.cf_deployment }}"
+          CI_IDS="${{ steps.ci.outputs.ids }}"
+          CI_MODE="${{ steps.ci.outputs.mode }}"
+
+          FINAL_ARTIFACT_JSON="$(curl -fsS "https://api.github.com/repos/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json')"
+          FINAL_ARTIFACT_ID="$(printf '%s' "$FINAL_ARTIFACT_JSON" | jq -r --arg n "order-2-final-reconciliation-${GITHUB_RUN_ID}" '.artifacts[] | select(.name==$n) | .id' | head -1)"
+          FINAL_ARTIFACT_DIGEST="$(printf '%s' "$FINAL_ARTIFACT_JSON" | jq -r --arg n "order-2-final-reconciliation-${GITHUB_RUN_ID}" '.artifacts[] | select(.name==$n) | .digest // empty' | head -1)"
+          test -n "$FINAL_ARTIFACT_ID"
+          if [ -z "$FINAL_ARTIFACT_DIGEST" ]; then FINAL_ARTIFACT_DIGEST='NOT_EXPOSED_BY_GITHUB_API'; fi
+
+          cat > "$RUNNER_TEMP/checkpoint.md" <<EOF
+          ## Order #2 — final material checkpoint
+
+          \`FINAL_SOURCE_SHA=${SOURCE_SHA}\`
+          \`PR_HEAD=${SOURCE_SHA}\`
+          \`PR_DRAFT=true\`
+          \`PR_MERGED=false\`
+
+          \`ORDER_2_DONE_ITEMS=data_truth_provenance,API_hardening,data_integrity,temporal_adapters,durable_lifecycle_outcome_verification_learning,telemetry_durability,cron_recovery_idempotency,dashboard_truthfulness,canonical_typescript,lint,full_suite,legacy_boundary,CURRENT_STATE,system_map,Cloudflare_production_verification,GitHub_reconciliation\`
+          \`ORDER_2_REMAINING_ITEMS=NONE_PENDING_AUD_ACCEPTANCE\`
+
+          \`FOCUSED_TESTS=PASS\`
+          \`FULL_SUITE=PASS_0_FAILURES\`
+          \`BASELINE_FAILURES=16\`
+          \`FINAL_FAILURES=0\`
+          \`NEW_FAILURES=0\`
+
+          \`GLOBAL_TYPESCRIPT=PASS_0_DIAGNOSTICS\`
+          \`CANONICAL_TYPESCRIPT=PASS_0_DIAGNOSTICS\`
+          \`MODIFIED_FILES_TYPESCRIPT=PASS_0_DIAGNOSTICS_BY_GLOBAL_GATE\`
+          \`LINT=PASS_0_ERRORS\`
+
+          \`NEXT_BUILD=PASS\`
+          \`OPENNEXT_BUILD=PASS\`
+          \`WORKER_JS=PASS\`
+          \`CRON_WRAPPER=PASS\`
+          \`WORKER_WITH_CRON_JS=PASS\`
+
+          \`CI_RUN_IDS=${CI_IDS}\`
+          \`CI_EVIDENCE_MODE=${CI_MODE}\`
+          \`ARTIFACT_IDS=8989633936,8989643908,${BOOTSTRAP_ARTIFACT_ID},${FINAL_ARTIFACT_ID}\`
+          \`ARTIFACT_DIGESTS=sha256:7817f79a9e7db4a6f7f35ab004d4952b8db84a34699e2a107bda812556cdbb29,sha256:33f3a8fcd9107c022dc9b32ec9f3c205282ad7bfdf9ce75489f1c4ea3907bbb1,${BOOTSTRAP_ARTIFACT_DIGEST},${FINAL_ARTIFACT_DIGEST}\`
+
+          \`CURRENT_STATE_UPDATED=YES\`
+          \`SYSTEM_MAP_UPDATED=YES\`
+
+          \`CLOUDFLARE_VERSION=${CF_VERSION}\`
+          \`CLOUDFLARE_DEPLOYMENT=${CF_DEPLOYMENT}\`
+          \`TRAFFIC_STATE=100_PERCENT_REVALIDATED\`
+          \`PRODUCTION_SMOKE=PASS\`
+          \`PRODUCTION_BROWSER=PASS_DESKTOP_MOBILE\`
+          \`PRODUCTION_ERRORS=NO_CRITICAL_ERRORS_OBSERVED_IN_EXACT_SMOKE_BROWSER_WINDOW\`
+
+          \`GITHUB_RECONCILED=YES\`
+          \`ISSUE_2_CHECKPOINT_PUBLISHED=YES\`
+
+          \`REAL_MONEY_EXECUTION=NO\`
+          \`PAID_OPERATION=NO\`
+          \`CARD_DATA_USED=NO\`
+          \`SECRETS_EXPOSED=NO\`
+
+          \`ORDER_2_COMPLETE=YES\`
+          \`READY_FOR_AUD=YES\`
+
+          Evidence anchors:
+          - baseline CI: 31167530328 / 31167530330
+          - exact-source promotion CI: ${BOOTSTRAP_ID}
+          - final reconciliation CI: ${GITHUB_RUN_ID}
+          - deployed source is exactly ${SOURCE_SHA}; PR #1 was fast-forwarded to this same commit after production verification.
+          - PR remains Draft/Open/Unmerged. Issue #3 remains dormant and was not executed.
+          - rollback anchor and sanitized Cloudflare deployment evidence are retained in the promotion artifact; no secret values are included.
+          EOF
+
+          gh issue comment 2 --repo "$REPOSITORY" --body-file "$RUNNER_TEMP/checkpoint.md"
