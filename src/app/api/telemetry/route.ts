@@ -79,10 +79,11 @@ export async function GET(request: Request) {
     }
     return NextResponse.json({ success: true, timestamp: new Date().toISOString(), attributionSummary: getAttributionSummary(), storage: getTelemetryStorageStatus() });
   } catch (error) {
+    console.error('[telemetry] read failed', error);
     return NextResponse.json({
       success: false,
       code: 'TELEMETRY_READ_FAILED',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Telemetry read failed',
       storage: getTelemetryStorageStatus(),
       timestamp: new Date().toISOString(),
     }, { status: 500 });
