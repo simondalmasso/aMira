@@ -121,12 +121,12 @@ function makeHistoricalMacro(
     crawlingPeg: 0,
     realDataPct: 0, // FIX MR-03: era 50, pero no hubo fetch real. 0 hasta integrar BCRA/INDEC histórico via API.
     provenance: {
-      mepRate: { label: 'RECONSTRUIDO' as DataLabel, source: 'TRAINING_MEMORY_ESTIMATE — no API fetch', url: 'N/A', lastUpdate: now, dataDate: now.split('T')[0], stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: false },
-      inflation: { label: 'RECONSTRUIDO' as DataLabel, source: 'TRAINING_MEMORY_ESTIMATE — no API fetch', url: 'N/A', lastUpdate: now, dataDate: now.split('T')[0], stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: false },
-      rates: { label: 'RECONSTRUIDO' as DataLabel, source: 'TRAINING_MEMORY_ESTIMATE — no API fetch', url: 'N/A', lastUpdate: now, dataDate: now.split('T')[0], stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: false },
-      cer: { label: 'RECONSTRUIDO' as DataLabel, source: 'TRAINING_MEMORY_ESTIMATE — no API fetch', url: 'N/A', lastUpdate: now, dataDate: now.split('T')[0], stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: false },
-      crawlingPeg: { label: 'RECONSTRUIDO' as DataLabel, source: 'TRAINING_MEMORY_ESTIMATE — no API fetch', url: 'N/A', lastUpdate: now, dataDate: now.split('T')[0], stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: false },
-      reserves: { label: 'RECONSTRUIDO' as DataLabel, source: 'TRAINING_MEMORY_ESTIMATE — no API fetch', url: 'N/A', lastUpdate: now, dataDate: now.split('T')[0], stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: false },
+      mepRate: { label: 'RECONSTRUIDO' as DataLabel, dataClass: 'RECONSTRUCTED', source: 'TRAINING_MEMORY_ESTIMATE — no API fetch', url: 'N/A', lastUpdate: now, dataDate: now.split('T')[0], stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: false },
+      inflation: { label: 'RECONSTRUIDO' as DataLabel, dataClass: 'RECONSTRUCTED', source: 'TRAINING_MEMORY_ESTIMATE — no API fetch', url: 'N/A', lastUpdate: now, dataDate: now.split('T')[0], stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: false },
+      rates: { label: 'RECONSTRUIDO' as DataLabel, dataClass: 'RECONSTRUCTED', source: 'TRAINING_MEMORY_ESTIMATE — no API fetch', url: 'N/A', lastUpdate: now, dataDate: now.split('T')[0], stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: false },
+      cer: { label: 'RECONSTRUIDO' as DataLabel, dataClass: 'RECONSTRUCTED', source: 'TRAINING_MEMORY_ESTIMATE — no API fetch', url: 'N/A', lastUpdate: now, dataDate: now.split('T')[0], stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: false },
+      crawlingPeg: { label: 'RECONSTRUIDO' as DataLabel, dataClass: 'RECONSTRUCTED', source: 'TRAINING_MEMORY_ESTIMATE — no API fetch', url: 'N/A', lastUpdate: now, dataDate: now.split('T')[0], stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: false },
+      reserves: { label: 'RECONSTRUIDO' as DataLabel, dataClass: 'RECONSTRUCTED', source: 'TRAINING_MEMORY_ESTIMATE — no API fetch', url: 'N/A', lastUpdate: now, dataDate: now.split('T')[0], stalenessHours: 999, fetchedAt: now, ageMinutes: 0, fetchError: false },
     },
     ...overrides,
   };

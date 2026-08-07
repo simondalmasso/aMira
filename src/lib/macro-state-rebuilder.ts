@@ -74,6 +74,7 @@ function provenance(date: string, quality: RebuiltMacroState['dataQuality'], tra
   const now = new Date().toISOString();
   return {
     label: 'RECONSTRUIDO' as DataLabel,
+    dataClass: 'RECONSTRUCTED',
     source: `${REBUILDER_DATA_ORIGIN} — no API fetch`,
     url: 'N/A',
     lastUpdate: now,

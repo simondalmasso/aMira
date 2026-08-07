@@ -139,6 +139,7 @@ export function MainDashboard() {
             const tsDate = ts.split('T')[0];
             const buildProv = (label: 'REAL' | 'STALE', source: string, url: string) => ({
               label,
+              dataClass: 'OBSERVED' as const,
               source,
               url,
               lastUpdate: ts,

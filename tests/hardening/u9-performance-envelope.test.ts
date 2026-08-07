@@ -14,6 +14,7 @@
 import { test, describe, expect } from 'bun:test';
 import { statSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { GOLDEN_INPUTS, runEngine } from './_helpers';
 
@@ -209,7 +210,6 @@ describe('U9 — Performance Envelope', () => {
 
     test('Source code: total lib/ directory < 500KB', () => {
       const libDir = join(SRC_DIR, 'lib');
-      const { execSync } = require('node:child_process') as typeof import('node:child_process');
       try {
         const out = execSync(`du -sb ${libDir}`, { encoding: 'utf8' });
         const bytes = parseInt(out.split(/\s+/)[0]!);

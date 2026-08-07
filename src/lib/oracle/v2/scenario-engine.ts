@@ -48,6 +48,11 @@ export interface ScenarioDefinition {
 }
 
 export interface ScenarioResult {
+  data_class: 'SYNTHETIC';
+  purpose: 'SCENARIO_OR_COUNTERFACTUAL';
+  live_prediction: false;
+  lifecycle_persist_as_real: false;
+  learning_eligible: false;
   scenario: ScenarioDefinition;
   /** Score under this scenario */
   score: number;
@@ -66,14 +71,17 @@ export interface ScenarioResult {
 }
 
 export interface ScenarioReport {
-  base: ScenarioResult;
+  status: 'READY' | 'PARTIAL';
+  warnings: string[];
+  data_class: 'SYNTHETIC';
+  base: ScenarioResult | null;
   scenarios: ScenarioResult[];
   /** Worst-case scenario (lowest score_adjusted) */
-  worst_case: ScenarioResult;
+  worst_case: ScenarioResult | null;
   /** Best-case scenario (highest score_adjusted) */
-  best_case: ScenarioResult;
+  best_case: ScenarioResult | null;
   /** Range of score_adjusted across all scenarios */
-  range: { min: number; max: number; spread: number };
+  range: { min: number | null; max: number | null; spread: number | null };
   /** ISO-8601 */
   computed_at: string;
   /** Engine version */
@@ -181,48 +189,62 @@ function applyShock(input: MarketStateInput, scenario: ScenarioId): MarketStateI
 // ─── Main Entry Point ──────────────────────────────────────────────────────
 
 export function runScenarioSweep(baseInput: MarketStateInput): ScenarioReport {
-  const results: ScenarioResult[] = SCENARIO_DEFINITIONS.map((def) => {
+  const results: ScenarioResult[] = [];
+  const warnings: string[] = [];
+  for (const def of SCENARIO_DEFINITIONS) {
     const shockedInput = applyShock(baseInput, def.id);
     const vector = runSinglePass(shockedInput);
-    const sanScore = vector.scores[0]; // single-asset universe
-
-    return {
+    const sanScore = vector.scores.find((score) => score.asset === 'SAN') ?? null;
+    if (sanScore === null) {
+      warnings.push(`NO_PRIMARY_SCORE:${def.id}`);
+      continue;
+    }
+    results.push({
+      data_class: 'SYNTHETIC',
+      purpose: 'SCENARIO_OR_COUNTERFACTUAL',
+      live_prediction: false,
+      lifecycle_persist_as_real: false,
+      learning_eligible: false,
       scenario: def,
       score: sanScore.score,
       score_adjusted: sanScore.score_adjusted,
       expected_return: sanScore.prediction.expected_return,
       action: sanScore.action,
       regime: sanScore.regime.regime,
-      delta_vs_base: 0, // filled below
+      delta_vs_base: 0,
       vector,
-    };
-  });
-
-  // Compute delta vs base
-  const baseResult = results.find((r) => r.scenario.id === 'base')!;
-  for (const r of results) {
-    r.delta_vs_base = Math.round((r.score_adjusted - baseResult.score_adjusted) * 10) / 10;
+    });
   }
 
-  // Identify worst/best (excluding base)
-  const nonBase = results.filter((r) => r.scenario.id !== 'base');
-  const sorted = [...nonBase].sort((a, b) => a.score_adjusted - b.score_adjusted);
-  const worst_case = sorted[0];
-  const best_case = sorted[sorted.length - 1];
+  const baseResult = results.find((result) => result.scenario.id === 'base') ?? null;
+  if (baseResult !== null) {
+    for (const result of results) {
+      result.delta_vs_base = Math.round((result.score_adjusted - baseResult.score_adjusted) * 10) / 10;
+    }
+  } else {
+    warnings.push('NO_BASE_SCORE');
+  }
 
-  const allScores = results.map((r) => r.score_adjusted);
-  const min = Math.min(...allScores);
-  const max = Math.max(...allScores);
+  const nonBase = results.filter((result) => result.scenario.id !== 'base');
+  const sorted = [...nonBase].sort((a, b) => a.score_adjusted - b.score_adjusted);
+  const worst_case = sorted.at(0) ?? null;
+  const best_case = sorted.at(-1) ?? null;
+  const allScores = results.map((result) => result.score_adjusted);
+  const min = allScores.length > 0 ? Math.min(...allScores) : null;
+  const max = allScores.length > 0 ? Math.max(...allScores) : null;
 
   return {
+    status: warnings.length === 0 ? 'READY' : 'PARTIAL',
+    warnings,
+    data_class: 'SYNTHETIC',
     base: baseResult,
     scenarios: nonBase,
     worst_case,
     best_case,
     range: {
-      min: Math.round(min * 10) / 10,
-      max: Math.round(max * 10) / 10,
-      spread: Math.round((max - min) * 10) / 10,
+      min: min === null ? null : Math.round(min * 10) / 10,
+      max: max === null ? null : Math.round(max * 10) / 10,
+      spread: min === null || max === null ? null : Math.round((max - min) * 10) / 10,
     },
     computed_at: new Date().toISOString(),
     engine_version: SCENARIO_ENGINE_VERSION,

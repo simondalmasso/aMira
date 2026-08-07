@@ -28,7 +28,7 @@
 
 'use client';
 
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ReactNode, useEffect } from 'react';
 import {
   RENDER_SCOPES,
   type RenderScopeName,
@@ -168,27 +168,19 @@ function stableHashString(value: unknown): string {
 // Returns the current mounted count for the scope (1 = first instance).
 
 export function useUniqueScope(name: RenderScopeName): number {
-  const claimedRef = useRef<boolean>(false);
-  const [count, setCount] = useState<number>(0);
-
   useEffect(() => {
-    if (claimedRef.current) return;
-    claimedRef.current = true;
-    const c = (MOUNTED_SCOPES.get(name) ?? 0) + 1;
-    MOUNTED_SCOPES.set(name, c);
-    setCount(c);
+    const count = (MOUNTED_SCOPES.get(name) ?? 0) + 1;
+    MOUNTED_SCOPES.set(name, count);
     return () => {
-      const cur = MOUNTED_SCOPES.get(name) ?? 0;
-      if (cur <= 1) {
-        MOUNTED_SCOPES.delete(name);
-      } else {
-        MOUNTED_SCOPES.set(name, cur - 1);
-      }
-      claimedRef.current = false;
+      const current = MOUNTED_SCOPES.get(name) ?? 0;
+      if (current <= 1) MOUNTED_SCOPES.delete(name);
+      else MOUNTED_SCOPES.set(name, current - 1);
     };
   }, [name]);
 
-  return count;
+  // Registration is an audit side-effect, not render state. Callers must not
+  // branch product behavior on a mount counter that is inherently post-render.
+  return 1;
 }
 
 // ─── Scope Audit (for tests / deploy verification) ─────────────────────────

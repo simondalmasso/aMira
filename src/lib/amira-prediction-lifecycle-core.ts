@@ -297,7 +297,7 @@ export interface LifecycleSnapshot {
   latest_verification: VerificationEvent | null;
   counts: { total_predictions: number; pending: number; outcome_captured: number; verified: number; expired: number; rejected: number };
   pending_outcomes: number;
-  verification_score: { brier_like: number; mae: number; directional_accuracy_pct: number; sample_count: number; status: 'EXCELLENT' | 'GOOD' | 'POOR' | 'NO_HISTORY'; label: string };
+  verification_score: { brier_like: number | null; mae: number | null; directional_accuracy_pct: number | null; sample_count: number; status: 'EXCELLENT' | 'GOOD' | 'POOR' | 'NO_HISTORY'; label: string };
   drift_indicator: { signal: number; threshold: number; detected: boolean; label: string };
   audit_mode: true;
   all_predictions_have_id: boolean;
@@ -311,7 +311,7 @@ export function getLifecycleSnapshot(): LifecycleSnapshot {
   const recent = VERIFICATION_LOG.slice(-30);
   let verification_score: LifecycleSnapshot['verification_score'];
   if (recent.length < 5) {
-    verification_score = { brier_like: 1, mae: 0, directional_accuracy_pct: 0, sample_count: recent.length, status: 'NO_HISTORY', label: `Sin histórico suficiente (${recent.length}/5 verif.)` };
+    verification_score = { brier_like: null, mae: null, directional_accuracy_pct: null, sample_count: recent.length, status: 'NO_HISTORY', label: `Sin histórico suficiente (${recent.length}/5 verif.)` };
   } else {
     const brier = recent.reduce((sum, item) => sum + item.brier_like_score, 0) / recent.length;
     const mae = recent.reduce((sum, item) => sum + item.error_delta, 0) / recent.length;
@@ -357,6 +357,60 @@ export function getLifecycleSnapshot(): LifecycleSnapshot {
     log_size_outcomes: OUTCOMES_LOG.length,
     log_size_verifications: VERIFICATION_LOG.length,
   };
+}
+
+export interface LifecycleHydrationInput {
+  predictions?: PredictionEvent[];
+  outcomes?: OutcomeEvent[];
+  verifications?: VerificationEvent[];
+}
+
+/**
+ * Hydrate the canonical lifecycle store from durable storage.
+ * Idempotent by event id. Persisted prediction snapshots replace the in-memory
+ * copy so status/link transitions survive isolate restarts without creating a
+ * second lifecycle authority.
+ */
+export function hydrateLifecycleEvents(input: LifecycleHydrationInput): {
+  predictions_imported: number;
+  outcomes_imported: number;
+  verifications_imported: number;
+} {
+  let predictions_imported = 0;
+  let outcomes_imported = 0;
+  let verifications_imported = 0;
+
+  for (const incoming of input.predictions ?? []) {
+    const index = PREDICTIONS_LOG.findIndex((item) => item.prediction_id === incoming.prediction_id);
+    const copy: PredictionEvent = { ...incoming, data_sources: [...incoming.data_sources] };
+    if (index >= 0) PREDICTIONS_LOG[index] = copy;
+    else { PREDICTIONS_LOG.push(copy); predictions_imported += 1; }
+  }
+  for (const incoming of input.outcomes ?? []) {
+    if (OUTCOMES_LOG.some((item) => item.outcome_id === incoming.outcome_id)) continue;
+    OUTCOMES_LOG.push({ ...incoming, market_conditions_snapshot: { ...incoming.market_conditions_snapshot } });
+    outcomes_imported += 1;
+  }
+  for (const incoming of input.verifications ?? []) {
+    if (VERIFICATION_LOG.some((item) => item.verification_id === incoming.verification_id)) continue;
+    VERIFICATION_LOG.push({ ...incoming });
+    verifications_imported += 1;
+  }
+
+  PREDICTIONS_LOG.sort((a, b) => a.timestamp_ms - b.timestamp_ms);
+  OUTCOMES_LOG.sort((a, b) => a.timestamp_ms - b.timestamp_ms);
+  VERIFICATION_LOG.sort((a, b) => a.timestamp_ms - b.timestamp_ms);
+  enforceLogBounds();
+  if (predictions_imported || outcomes_imported || verifications_imported) bumpLifecycleVersion();
+  return { predictions_imported, outcomes_imported, verifications_imported };
+}
+
+export function resetLifecycleStateForReplay(): void {
+  PREDICTIONS_LOG.length = 0;
+  OUTCOMES_LOG.length = 0;
+  VERIFICATION_LOG.length = 0;
+  idCounter = 0;
+  bumpLifecycleVersion();
 }
 
 export function getPredictionsLog(): ReadonlyArray<PredictionEvent> { return PREDICTIONS_LOG.slice(); }

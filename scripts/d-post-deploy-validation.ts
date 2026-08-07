@@ -19,7 +19,7 @@ const DEPLOY_VERSION = 'fc647177-ce40-435e-8818-a82b06a60378';
 type GateResult = {
   gate: string;
   status: 'PASS' | 'FAIL' | 'BLOCKED' | 'WARN';
-  checks: { name: string; status: 'PASS' | 'FAIL'; detail?: string }[];
+  checks: { name: string; status: 'PASS' | 'FAIL' | 'WARN'; detail?: string }[];
   summary: string;
 };
 
@@ -199,7 +199,7 @@ async function d5_regression(): Promise<GateResult> {
   const checks: GateResult['checks'] = [];
   // Verify the hardening report artifact exists in the source tree
   const fs = await import('node:fs');
-  const hardeningPath = '/home/z/my-project/download/HARDENING_REPORT.json';
+  const hardeningPath = process.env.HARDENING_REPORT_PATH || `${process.env.RUNNER_TEMP || '/tmp'}/HARDENING_REPORT.json`;
   if (fs.existsSync(hardeningPath)) {
     try {
       const report = JSON.parse(fs.readFileSync(hardeningPath, 'utf-8'));
@@ -212,8 +212,9 @@ async function d5_regression(): Promise<GateResult> {
     }
   } else {
     // Fall back: just verify build artifact is fresh
-    const handlerStat = fs.statSync('/home/z/my-project/.open-next/server-functions/default/handler.mjs');
-    const sourceStat = fs.statSync('/home/z/my-project/src/app/api/telemetry/route.ts');
+    const root = process.env.GITHUB_WORKSPACE || process.cwd();
+    const handlerStat = fs.statSync(`${root}/.open-next/server-functions/default/handler.mjs`);
+    const sourceStat = fs.statSync(`${root}/src/app/api/telemetry/route.ts`);
     const fresh = handlerStat.mtimeMs > sourceStat.mtimeMs;
     checks.push({ name: 'handler.mjs newer than source', status: fresh ? 'PASS' : 'FAIL', detail: `handler=${handlerStat.mtime.toISOString()}, source=${sourceStat.mtime.toISOString()}` });
     checks.push({ name: 'H1-H10 hardening report', status: 'WARN', detail: 'HARDENING_REPORT.json not regenerated post-deploy (source U1-U10 + H1-H10 still GREEN from prior run)' });

@@ -22,7 +22,7 @@
 // existing outputs (decision, portfolio, breakdown) into a single typed
 // view model that UI components consume via `usePortfolioViewModel`.
 
-import { useMemo, useRef } from 'react';
+
 import type {
   DecisionEngineOutput,
   PortfolioResult,
@@ -777,23 +777,12 @@ export function usePortfolioViewModel(
     activeAssetIds?: Set<string>;
   },
 ): PortfolioViewModel {
-  const historyDays = options?.historyDays;
-  const sourceStatus = options?.sourceStatus;
-  const oracleResponse = options?.oracleResponse ?? null;
-  const activeAssetIds = options?.activeAssetIds;
-  // Serialize activeAssetIds to a stable string for memo deps
-  const activeKey = activeAssetIds ? Array.from(activeAssetIds).sort().join(',') : '';
-  return useMemo(
-    () => composePortfolioViewModel(decision, portfolio, breakdown, capital, risk, stress, {
-      historyDays,
-      sourceStatus,
-      oracleResponse,
-      activeAssetIds,
-    }),
-    // Re-compose when these change. We use referential identity for decision
-    // (memoized in the parent) plus primitives for capital/risk/stress.
-    [decision, portfolio, breakdown, capital, risk, stress, historyDays, sourceStatus, oracleResponse, activeKey],
-  );
+  return composePortfolioViewModel(decision, portfolio, breakdown, capital, risk, stress, {
+    historyDays: options?.historyDays,
+    sourceStatus: options?.sourceStatus,
+    oracleResponse: options?.oracleResponse ?? null,
+    activeAssetIds: options?.activeAssetIds,
+  });
 }
 
 // ─── Semantic Diff Guard ───────────────────────────────────────────────────
@@ -826,47 +815,10 @@ export function usePortfolioViewModel(
 //     <ProfitProjectionBlock ... />
 //   </SemanticDiffBlock>
 
-interface BlockRegistryEntry {
-  fingerprint: string;
-  instanceId: number; // monotonically increasing per blockId
-}
-
-const BLOCK_REGISTRY = new Map<string, BlockRegistryEntry[]>();
-
-export function useSemanticDiffGuard<T>(blockId: string, content: T): boolean {
-  const instanceRef = useRef<number>(-1);
-  const currentHash = stableHash(content);
-
-  // Assign a stable instance id on first mount.
-  if (instanceRef.current === -1) {
-    const instances = BLOCK_REGISTRY.get(blockId) ?? [];
-    instanceRef.current = instances.length;
-    instances.push({ fingerprint: currentHash, instanceId: instanceRef.current });
-    BLOCK_REGISTRY.set(blockId, instances);
-  } else {
-    // Update this instance's fingerprint in the registry.
-    const instances = BLOCK_REGISTRY.get(blockId);
-    if (instances && instances[instanceRef.current]) {
-      instances[instanceRef.current].fingerprint = currentHash;
-    }
-  }
-
-  // Cleanup on unmount: remove this instance from the registry.
-  // (Tracked via a separate useEffect in the calling component when needed —
-  //  for now we keep the registry simple and let it grow bounded by the
-  //  number of distinct blockIds used in the app, which is small.)
-
-  // Determine if this instance is the FIRST one with this fingerprint.
-  // If a previous instance already has the same fingerprint, we are a
-  // duplicate — suppress.
-  const instances = BLOCK_REGISTRY.get(blockId) ?? [];
-  const duplicates = instances.filter(
-    (entry, idx) => idx !== instanceRef.current && entry.fingerprint === currentHash,
-  );
-
-  // First render: never a duplicate. Subsequent renders: only suppress if
-  // ANOTHER instance with the same fingerprint exists in the tree.
-  return duplicates.length === 0;
+export function useSemanticDiffGuard<T>(_blockId: string, _content: T): boolean {
+  // Do not suppress a valid React subtree based on module-local render history.
+  // Duplicate ownership is enforced structurally by RenderScope/H8 instead.
+  return true;
 }
 
 function stableHash<T>(value: T): string {

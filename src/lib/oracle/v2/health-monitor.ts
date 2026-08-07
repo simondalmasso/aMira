@@ -34,7 +34,7 @@ export type HealthStatus = 'healthy' | 'watch' | 'degraded' | 'critical';
 
 export interface HealthMetric {
   name: string;
-  value: number;
+  value: number | null;
   unit: string;
   status: HealthStatus;
   thresholds: { watch: number; degraded: number; critical: number };
@@ -258,6 +258,16 @@ function computeForecastDegradation(): HealthMetric {
     const snap = getLifecycleSnapshot();
     const mae = snap.verification_score.mae;
     const thresholds = { watch: 0.005, degraded: 0.010, critical: 0.020 };
+    if (mae === null) {
+      return {
+        name: 'forecast_degradation',
+        value: null,
+        unit: 'MAE_fractional',
+        status: 'watch',
+        thresholds,
+        explanation: `NO_HISTORY: lifecycle MAE unavailable (verified samples=${snap.verification_score.sample_count})`,
+      };
+    }
     const status = classifyByThresholds(mae, thresholds, 'higher_is_bad');
     return {
       name: 'forecast_degradation',

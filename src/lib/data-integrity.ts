@@ -101,7 +101,8 @@ export const CERDataMacroSchema = z.object({
 });
 
 export const DataProvenanceSchema = z.object({
-  label: z.enum(['OBSERVADO', 'REAL', 'STALE', 'ERROR', 'PARTIAL_FALLBACK']),
+  label: z.enum(['OBSERVADO', 'REAL', 'STALE', 'ERROR', 'PARTIAL_FALLBACK', 'SIMULADO', 'RECONSTRUIDO']),
+  dataClass: z.enum(['OBSERVED', 'RECONSTRUCTED', 'SYNTHETIC']),
   source: z.string().min(1),
   url: z.string(),
   lastUpdate: z.string().min(1),

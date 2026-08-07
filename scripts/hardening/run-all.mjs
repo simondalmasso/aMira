@@ -8,7 +8,7 @@
 // Pure static verification that the invariants established in prior patches
 // still hold in the source code that gets bundled into the Worker.
 //
-// Output: /home/z/my-project/download/HARDENING_REPORT.json
+// Output: $HARDENING_REPORT_PATH or $RUNNER_TEMP/HARDENING_REPORT.json
 // Schema (consumed by scripts/d-post-deploy-validation.ts D5):
 //   {
 //     total_suites: number,
@@ -25,9 +25,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 
-const ROOT = '/home/z/my-project';
+const ROOT = process.env.GITHUB_WORKSPACE || process.cwd();
 const SRC = path.join(ROOT, 'src');
-const OUT = path.join(ROOT, 'download/HARDENING_REPORT.json');
+const OUT = process.env.HARDENING_REPORT_PATH || path.join(process.env.RUNNER_TEMP || '/tmp', 'HARDENING_REPORT.json');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function fileExists(p) {
@@ -249,18 +249,21 @@ function H7_cron_schedule_correct() {
 }
 
 function H8_worker_with_cron_built() {
-  // wrapper artifact exists and contains the cron persistence visibility instrumentation
+  // Wrapper must delegate exactly once to the canonical cron route; durable
+  // acknowledgement logic belongs to that route, not to key-count heuristics.
   const wrapper = path.join(ROOT, '.open-next/worker-with-cron.js');
   if (!fileExists(wrapper)) {
     return { status: 'FAIL', detail: '.open-next/worker-with-cron.js missing — run wrap-worker-with-cron.mjs', evidence: '' };
   }
   const src = readFile(wrapper) || '';
   const hasScheduled = /scheduled\s*\(/.test(src);
-  const hasCronVisibility = /silent_failure_detected|verifyEnvBindings|persistence_verified/.test(src);
-  if (hasScheduled && hasCronVisibility) {
-    return { status: 'PASS', detail: 'scheduled() + cron persistence visibility instrumentation present', evidence: `${path.relative(ROOT, wrapper)} (${src.length} bytes)` };
+  const canonicalCalls = (src.match(/\/api\/oracle\/cron/g) || []).length;
+  const checksDurableAck = /persistence_ack\?\.durable/.test(src) && /lifecycleDurable/.test(src);
+  const noKeyCountHeuristic = !/countKeys|kv_delta|totalDelta/.test(src);
+  if (hasScheduled && canonicalCalls === 1 && checksDurableAck && noKeyCountHeuristic) {
+    return { status: 'PASS', detail: 'scheduled() delegates once to canonical cron with durable acknowledgements', evidence: `${path.relative(ROOT, wrapper)} (${src.length} bytes)` };
   }
-  return { status: hasScheduled ? 'WARN' : 'FAIL', detail: `scheduled=${hasScheduled} cron_visibility=${hasCronVisibility}`, evidence: path.relative(ROOT, wrapper) };
+  return { status: 'FAIL', detail: `scheduled=${hasScheduled} canonical_calls=${canonicalCalls} durable_ack=${checksDurableAck} no_key_count_heuristic=${noKeyCountHeuristic}`, evidence: path.relative(ROOT, wrapper) };
 }
 
 function H9_handler_freshness() {
@@ -285,72 +288,24 @@ function H9_handler_freshness() {
 }
 
 function H10_source_no_type_errors() {
-  // Source tree TypeScript check. Pre-existing TS errors (baseline established
-  // 2026-06-22 during ORACLE_DEPLOY_RECOVERY_AND_STABILIZATION) are accepted —
-  // they predate this recovery operation and fixing them is outside
-  // CRITICAL_ENGINEERING_ONLY scope. The suite FAILs only if NEW errors appear
-  // above the documented baseline.
-  const BASELINE_TS_ERRORS = 21; // established 2026-06-22; pre-existing, not from recovery
+  // Final Order #2 invariant: the configured repository TypeScript graph must
+  // have zero diagnostics. Archived runtimes/examples are excluded explicitly
+  // by tsconfig.json and documented as non-authoritative evidence.
   try {
-    const out = execSync('npx tsc --noEmit -p tsconfig.json 2>&1', {
+    execSync('./node_modules/.bin/tsc --noEmit -p tsconfig.json --pretty false', {
       cwd: ROOT,
       encoding: 'utf-8',
       timeout: 120000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    // Filter out errors in legacy / non-deployed paths: santaninverter-oracle/,
-    // examples/, scripts/, node_modules/, skills/. Only src/ errors count.
-    const lines = out.split('\n').filter(l =>
-      l.trim() &&
-      !l.includes('santaninverter-oracle/') &&
-      !l.includes('examples/') &&
-      !l.includes('node_modules/') &&
-      !l.includes('scripts/') &&
-      !l.includes('skills/') &&
-      /error TS\d+/.test(l)
-    );
-    const realErrors = lines;
-    if (realErrors.length === 0) {
-      return { status: 'PASS', detail: '0 TypeScript errors in src/', evidence: `tsc --noEmit clean (baseline=${BASELINE_TS_ERRORS})` };
-    }
-    if (realErrors.length <= BASELINE_TS_ERRORS) {
-      return {
-        status: 'PASS',
-        detail: `${realErrors.length} TypeScript errors in src/ (≤ baseline ${BASELINE_TS_ERRORS}; pre-existing, not from recovery)`,
-        evidence: realErrors.slice(0, 3).join('\n'),
-      };
-    }
+    return { status: 'PASS', detail: '0 TypeScript diagnostics', evidence: 'tsc --noEmit -p tsconfig.json' };
+  } catch (error) {
+    const out = String(error?.stdout || '') + String(error?.stderr || '');
+    const diagnostics = out.split('\n').filter((line) => /error TS\d+:/.test(line));
     return {
       status: 'FAIL',
-      detail: `${realErrors.length} TypeScript errors in src/ (${realErrors.length - BASELINE_TS_ERRORS} NEW above baseline ${BASELINE_TS_ERRORS})`,
-      evidence: realErrors.slice(0, 5).join('\n'),
-    };
-  } catch (e) {
-    // tsc returns non-zero on errors — but stdout/stderr has the diagnostics
-    const out = (e.stdout || '') + (e.stderr || '');
-    const lines = out.split('\n').filter(l =>
-      l.trim() &&
-      !l.includes('santaninverter-oracle/') &&
-      !l.includes('examples/') &&
-      !l.includes('node_modules/') &&
-      !l.includes('scripts/') &&
-      !l.includes('skills/') &&
-      /error TS\d+/.test(l)
-    );
-    if (lines.length === 0) {
-      return { status: 'PASS', detail: '0 TypeScript errors in src/ (after filtering legacy dirs)', evidence: `tsc exit non-zero but no src/ errors (baseline=${BASELINE_TS_ERRORS})` };
-    }
-    if (lines.length <= BASELINE_TS_ERRORS) {
-      return {
-        status: 'PASS',
-        detail: `${lines.length} TypeScript errors in src/ (≤ baseline ${BASELINE_TS_ERRORS}; pre-existing, not from recovery)`,
-        evidence: lines.slice(0, 3).join('\n'),
-      };
-    }
-    return {
-      status: 'FAIL',
-      detail: `${lines.length} TypeScript errors in src/ (${lines.length - BASELINE_TS_ERRORS} NEW above baseline ${BASELINE_TS_ERRORS})`,
-      evidence: lines.slice(0, 5).join('\n'),
+      detail: `${diagnostics.length || 1} TypeScript diagnostics`,
+      evidence: diagnostics.slice(0, 5).join('\n') || 'tsc exited non-zero',
     };
   }
 }
@@ -418,6 +373,7 @@ const report = {
   suites: results,
 };
 
+fs.mkdirSync(path.dirname(OUT), { recursive: true });
 fs.writeFileSync(OUT, JSON.stringify(report, null, 2));
 console.log('\n' + '═'.repeat(80));
 console.log(`FINAL GATE: ${finalGate}  (${passed}/${total} PASS, ${warned} WARN, ${failed} FAIL)`);

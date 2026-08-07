@@ -104,6 +104,34 @@ export function createOracleSingleHandlers(
       }
 
       const { v1: enrichedV1, v2, v3 } = await dependencies.runV3IntelligenceEnrichment(adapter.input, v1);
+      if (v3 === null) {
+        dependencies.logEvent({
+          eventType: 'PIPELINE_EXECUTION',
+          source: '/api/oracle/single',
+          data: { modelVersion: enrichedV1.model_version, macroQuality: adapter.quality, warning: 'ENRICHMENT_UNAVAILABLE' },
+          durationMs: Date.now() - startedAt,
+          success: false,
+          error: 'ENRICHMENT_UNAVAILABLE',
+        });
+        const [lifecycle, telemetryStorage] = await Promise.all([
+          dependencies.getLifecycleLedgerSnapshot(),
+          dependencies.flushTelemetryWrites(),
+        ]);
+        return json({
+          success: true,
+          status: 'PARTIAL',
+          warnings: ['ENRICHMENT_UNAVAILABLE'],
+          timestamp: new Date().toISOString(),
+          vector: enrichedV1,
+          learning: dependencies.getLearningSummary(),
+          lifecycle,
+          lifecycleRecord: null,
+          v2,
+          v3: null,
+          macro: macroMetadata(macro, adapter),
+          telemetryStorage,
+        });
+      }
       const lifecycleRecord = await dependencies.recordLifecyclePrediction({
         horizon_days: primaryScore.prediction.horizon_days,
         asset_context: primaryScore.asset,
@@ -136,10 +164,13 @@ export function createOracleSingleHandlers(
         dependencies.getLifecycleLedgerSnapshot(),
         dependencies.flushTelemetryWrites(),
       ]);
+      const durabilityWarnings: OracleSingleSuccessResponse['warnings'] = [];
+      if (lifecycle.storage !== 'durable') durabilityWarnings.push('LIFECYCLE_NOT_DURABLE');
+      if (telemetryStorage.state !== 'durable') durabilityWarnings.push('TELEMETRY_NOT_DURABLE');
       return json({
         success: true,
-        status: 'READY',
-        warnings: [],
+        status: durabilityWarnings.length === 0 ? 'READY' : 'PARTIAL',
+        warnings: durabilityWarnings,
         timestamp: new Date().toISOString(),
         vector: enrichedV1,
         learning: dependencies.getLearningSummary(),

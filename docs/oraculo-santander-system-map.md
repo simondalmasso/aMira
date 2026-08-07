@@ -288,3 +288,79 @@ Every source observation must carry source identity/URL, data timestamp, fetch t
 ## Validation workflow
 
 `.github/workflows/oraculo-santander-validation.yml` is branch-scoped, read-only, uses no production secrets, performs no deploy, captures exact commands/exit codes, emits a source snapshot and machine-readable diagnostics, builds Next/OpenNext, and generates the cron wrapper. It is the evidence harness for this feature branch, not a production workflow.
+
+---
+
+# Order #2 canonicalization addendum — 2026-08-07
+
+This addendum supersedes conflicting historical architecture descriptions above without deleting them as evidence.
+
+## Canonical path
+
+```text
+GET/POST /api/oracle/single
+  -> getMacroState + field provenance
+  -> macroStateToMarketInput
+  -> runSinglePass exactly once (LIVE V1 authority)
+  -> checked SAN primary-score extraction
+  -> V2 enrichment using precomputed V1
+  -> V3 enrichment using precomputed V1/V2
+  -> canonical lifecycle core
+       <-> KV durability adapter (ORACLE_PREDICTIONS)
+  -> learning summary derived from verified lifecycle history
+  -> truthful response adapter + telemetry durability state
+```
+
+No canonical server path imports the React lifecycle facade. V2/V3 never substitute a second LIVE V1. Scenario/counterfactual reruns are `SYNTHETIC` and explicitly ineligible for lifecycle-as-real or learning.
+
+## Canonical lifecycle
+
+```text
+amira-prediction-lifecycle-core.ts        DOMAIN TRUTH
+amira-prediction-lifecycle-ledger.ts      CLOUDFLARE KV STORAGE ADAPTER
+amira-prediction-lifecycle.ts             CLIENT/REACT FACADE
+closed-loop-learning.ts                   DERIVED VERIFIED-OUTCOME LEARNING
+```
+
+Durable prefixes:
+
+```text
+lifecycle:prediction:<prediction_id>
+lifecycle:outcome:<outcome_id>
+lifecycle:verification:<verification_id>
+```
+
+Hydration is idempotent by event ID. Verification history is the basis of learning metrics; empty history means unknown metrics (`null`), not artificial zero performance.
+
+## Cron
+
+```text
+Cloudflare scheduled()
+  -> ONE internal POST /api/oracle/cron
+      -> binding check
+      -> daily idempotency read
+      -> bounded lock
+      -> refresh FCI / stocks / bonds / CEDEARs / prediction snapshots
+      -> read-after-write acknowledgement of exact snapshot keys
+      -> lifecycle recovery/expiration
+      -> completion marker read-after-write
+```
+
+The previous key-count-delta heuristic is not authoritative evidence and is no longer used by the scheduled wrapper. `GET /api/oracle/cron` is read-only health.
+
+## Deployment authority
+
+```text
+exact branch SHA
+  -> Oraculo Runtime Gate (strict)
+  -> workflow_run success
+  -> Oraculo Production Deploy
+      -> checkout same head SHA
+      -> rebuild same tree
+      -> capture rollback anchor
+      -> wrangler deploy
+      -> Cloudflare deployment/version/100% traffic evidence
+      -> production API + cron persistence smoke
+```
+
+`wrangler.jsonc` points only to `.open-next/worker-with-cron.js`. `src/worker.ts`, `santaninverter-oracle/`, and `examples/` are retained historical/legacy evidence, not deployed runtime authorities.

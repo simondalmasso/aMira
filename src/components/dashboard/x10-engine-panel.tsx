@@ -124,10 +124,9 @@ export function X10EnginePanel() {
   const [data, setData] = useState<X10Response | null>(null);
   const [selectedMode, setSelectedMode] = useState<StrategicMode>('MODERATE');
   const [autoMode, setAutoMode] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const fetchEngine = useCallback(() => {
-    setIsLoading(true);
     fetch(`/api/x10?mode=${selectedMode}&auto=${autoMode}`)
       .then(res => res.json())
       .then(d => { if (d.success) setData(d); })

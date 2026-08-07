@@ -14,9 +14,11 @@ export interface BluelyticsResponse {
 }
 
 export type DataLabel = 'OBSERVADO' | 'REAL' | 'PARTIAL_FALLBACK' | 'ERROR' | 'STALE' | 'SIMULADO' | 'RECONSTRUIDO';
+export type DataClass = 'OBSERVED' | 'RECONSTRUCTED' | 'SYNTHETIC';
 
 export interface DataProvenance {
   label: DataLabel;
+  dataClass: DataClass;
   source: string;
   url: string;
   lastUpdate: string;
@@ -155,6 +157,7 @@ function provenance(input: {
   const dataDate = input.dataDate || input.now.split('T')[0];
   return {
     label: input.observed ? 'REAL' : 'RECONSTRUIDO',
+    dataClass: input.observed ? 'OBSERVED' : 'RECONSTRUCTED',
     source: input.source,
     url: input.url ?? 'N/A',
     lastUpdate: input.now,
@@ -265,12 +268,13 @@ export interface SantanderProduct {
   category: 'liquidity' | 'inflation_hedge' | 'fx_hedge' | 'yield';
   dataSource: string;
   dataLabel: DataLabel;
+  dataClass: DataClass;
   dataDate: string;
   simulacionError90d: number;
   simulacionError180d: number;
 }
 
-type ProductSeed = Omit<SantanderProduct, 'dataDate' | 'simulacionError90d' | 'simulacionError180d'> & {
+type ProductSeed = Omit<SantanderProduct, 'dataClass' | 'dataDate' | 'simulacionError90d' | 'simulacionError180d'> & {
   simulacionError90d?: number;
   simulacionError180d?: number;
 };
@@ -298,7 +302,13 @@ export function getProductsFromMacro(macro: MacroState): SantanderProduct[] {
     { id:'lecaps', name:'Lecaps BCBA', shortName:'Lecaps', type:'lecaps', tna:rates.lecaps, realRate30d:usd30(rates.lecaps), realRate90d:usd90(rates.lecaps), liquidity:'T+1', riskScore:8, volatility30d:0.4, maxDrawdown30d:0.1, minInvestmentARS:5000, currency:'ARS', description:'Letras de corto plazo', category:'yield', dataSource:macro.provenance.rates.source, dataLabel:rateLabel, simulacionError90d:0.67, simulacionError180d:0.75 },
     { id:'fondo-corto-plazo', name:'Superfondo Corto Plazo', shortName:'Corto Plazo', type:'fondo_corto', tna:rates.moneyMarket+0.8, realRate30d:usd30(rates.moneyMarket+0.8), realRate90d:usd90(rates.moneyMarket+0.8), liquidity:'T+1', riskScore:5, volatility30d:0.5, maxDrawdown30d:0.1, minInvestmentARS:1000, currency:'ARS', description:'FCI de renta fija muy corta', category:'liquidity', dataSource:macro.provenance.rates.source, dataLabel:rateLabel, simulacionError90d:0.20, simulacionError180d:0.28 },
   ];
-  return seeds.map((seed) => ({ dataDate: now, simulacionError90d: 0.12, simulacionError180d: 0.18, ...seed }));
+  return seeds.map((seed) => ({
+    dataClass: seed.dataLabel === 'REAL' || seed.dataLabel === 'OBSERVADO' ? 'OBSERVED' as const : seed.dataLabel === 'SIMULADO' ? 'SYNTHETIC' as const : 'RECONSTRUCTED' as const,
+    dataDate: now,
+    simulacionError90d: 0.12,
+    simulacionError180d: 0.18,
+    ...seed,
+  }));
 }
 
 export interface MarketScenario {
@@ -319,6 +329,7 @@ export function getScenariosFromMacro(macro: MacroState): MarketScenario[] {
 }
 
 export interface SimulacionResult {
+  dataClass: 'SYNTHETIC';
   assetId: string; assetName: string; modelReturn30d: number; actualReturnAvg90d: number;
   actualReturnAvg180d: number; errorAbs90d: number; errorAbs180d: number;
   errorPct90d: number; errorPct180d: number; label: DataLabel;
@@ -337,6 +348,7 @@ export function computeSimulacion(products: SantanderProduct[]): SimulacionResul
     const error90 = Math.abs(product.realRate30d - actual.avg90d);
     const error180 = Math.abs(product.realRate30d - actual.avg180d);
     return {
+      dataClass: 'SYNTHETIC',
       assetId: product.id,
       assetName: product.shortName,
       modelReturn30d: product.realRate30d,

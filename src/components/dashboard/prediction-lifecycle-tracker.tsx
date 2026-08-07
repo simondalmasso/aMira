@@ -204,7 +204,9 @@ export function PredictionLifecycleTracker({ viewModel }: PredictionLifecycleTra
   }, [lifecycle.active_stage, setLastLifecycleStage]);
 
   useEffect(() => {
-    setLastVerificationScore(lifecycle.verification_score.brier_like);
+    if (lifecycle.verification_score.brier_like !== null) {
+      setLastVerificationScore(lifecycle.verification_score.brier_like);
+    }
   }, [lifecycle.verification_score.brier_like, setLastVerificationScore]);
 
   useEffect(() => {
@@ -300,7 +302,7 @@ export function PredictionLifecycleTracker({ viewModel }: PredictionLifecycleTra
           />
           <MetricCard
             label="Score Verificación"
-            value={lifecycle.verification_score.brier_like.toFixed(3)}
+            value={lifecycle.verification_score.brier_like === null ? '—' : lifecycle.verification_score.brier_like.toFixed(3)}
             sublabel={lifecycle.verification_score.label}
             color={verificationColor}
             testId="lifecycle-metric-score"
@@ -506,16 +508,16 @@ export function PredictionLifecycleTracker({ viewModel }: PredictionLifecycleTra
               <div>
                 <span className="text-[#999999]">brier_like:</span>{' '}
                 <span className="font-mono" style={{ color: verificationColor }}>
-                  {lifecycle.verification_score.brier_like.toFixed(3)}
+                  {lifecycle.verification_score.brier_like === null ? '—' : lifecycle.verification_score.brier_like.toFixed(3)}
                 </span>
               </div>
               <div>
                 <span className="text-[#999999]">mae:</span>{' '}
-                <span className="font-mono text-[#000000]">{(lifecycle.verification_score.mae * 100).toFixed(3)}%</span>
+                <span className="font-mono text-[#000000]">{lifecycle.verification_score.mae === null ? '—' : `${(lifecycle.verification_score.mae * 100).toFixed(3)}%`}</span>
               </div>
               <div>
                 <span className="text-[#999999]">directional_accuracy:</span>{' '}
-                <span className="font-mono text-[#000000]">{lifecycle.verification_score.directional_accuracy_pct.toFixed(1)}%</span>
+                <span className="font-mono text-[#000000]">{lifecycle.verification_score.directional_accuracy_pct === null ? '—' : `${lifecycle.verification_score.directional_accuracy_pct.toFixed(1)}%`}</span>
               </div>
               <div>
                 <span className="text-[#999999]">sample_count:</span>{' '}

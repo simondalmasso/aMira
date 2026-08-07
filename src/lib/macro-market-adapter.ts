@@ -9,6 +9,7 @@
 
 import {
   getOverallDataLabel,
+  type DataClass,
   type DataLabel,
   type DataProvenance,
   type MacroState,
@@ -36,6 +37,7 @@ export interface CanonicalMarketFieldProvenance {
     | 'market_breadth'
   >;
   label: DataLabel;
+  dataClass: DataClass;
   source: string;
   observedAt: string | null;
   fetchedAt: string;
@@ -76,6 +78,7 @@ function provenanceFor(
   return {
     field,
     label: provenance.label,
+    dataClass: provenance.dataClass,
     source: provenance.source,
     observedAt: provenance.observedAt ?? null,
     fetchedAt: provenance.fetchedAt,
@@ -106,6 +109,7 @@ export function macroStateToMarketInput(macro: MacroState): CanonicalMarketAdapt
     {
       field: 'reserves_usd',
       label: 'RECONSTRUIDO',
+      dataClass: 'RECONSTRUCTED',
       source: macro.provenance.reserves.source,
       observedAt: null,
       fetchedAt: macro.fetchedAt,
@@ -120,6 +124,7 @@ export function macroStateToMarketInput(macro: MacroState): CanonicalMarketAdapt
     {
       field: 'reserves_usd_prev',
       label: 'RECONSTRUIDO',
+      dataClass: 'RECONSTRUCTED',
       source: 'Misma estimación de reservas usada como lectura anterior',
       observedAt: null,
       fetchedAt: macro.fetchedAt,
@@ -129,6 +134,7 @@ export function macroStateToMarketInput(macro: MacroState): CanonicalMarketAdapt
     {
       field: 'market_breadth',
       label: 'RECONSTRUIDO',
+      dataClass: 'RECONSTRUCTED',
       source: 'Neutral market-breadth compatibility value',
       observedAt: null,
       fetchedAt: macro.fetchedAt,
@@ -137,7 +143,7 @@ export function macroStateToMarketInput(macro: MacroState): CanonicalMarketAdapt
     },
   ];
 
-  const sources = Array.from(new Set(fieldProvenance.map((item) => `${item.label}:${item.source}`)));
+  const sources = Array.from(new Set(fieldProvenance.map((item) => `${item.dataClass}:${item.label}:${item.source}`)));
   const limitations = fieldProvenance.flatMap((item) => item.limitations);
 
   return {

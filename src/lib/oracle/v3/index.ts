@@ -152,21 +152,23 @@ export async function runV3IntelligenceEnrichment(
 ): Promise<{
   v1: AssetScoreVector;
   v2: V2SystemicReport;
-  v3: V3IntelligenceReport;
+  v3: V3IntelligenceReport | null;
 }> {
   // 1. Run V1 + V2 enrichment (canonical pipeline)
   const { v1, v2 } = await runV2SystemicEnrichment(input, v1Vector);
 
-  // Get the primary asset (SAN)
-  const sanScore: AssetScore = v1.scores[0];
+  // Get the primary asset without assuming a non-empty score/enrichment array.
+  const sanScore: AssetScore | null = v1.scores.find((score) => score.asset === 'SAN') ?? null;
+  const v2Asset = v2.assets.find((asset) => asset.asset === 'SAN') ?? null;
+  if (sanScore === null || v2Asset === null) {
+    return { v1, v2, v3: null };
+  }
   const prediction: AssetPrediction = sanScore.prediction;
 
   // Re-build MarketState + features (V2 modules consumed them; we need them here too)
   const market_state: MarketState = buildMarketState(input);
   const features: NormalizedFeatures = normalizeFeatures(market_state);
 
-  // Pull V2 enrichments for the primary asset
-  const v2Asset = v2.assets[0];
   const v2_confidence = v2Asset.confidence;
   const v2_regime = v2Asset.regime_v2;
   const v2_explanation = v2Asset.explanation;

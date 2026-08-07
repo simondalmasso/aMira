@@ -416,24 +416,11 @@ function emptyScannerOutput(filterClass: AssetClass | null): ScannerOutput {
 
 // ─── React Hook (memoized) ─────────────────────────────────────────────────
 
-import { useMemo } from 'react';
-
 export function useAmiraScanner(
   response: MultiOracleResponse | null,
   options: ComposeScannerOptions = {},
 ): ScannerOutput {
-  const { filterClass, topN, activeAssetIds, sourceStatusOverride } = options;
-  // Serialize activeAssetIds to a stable string for memo deps
-  const activeKey = activeAssetIds ? Array.from(activeAssetIds).sort().join(',') : '';
-  return useMemo(
-    () => composeAmiraScanner(response, {
-      filterClass,
-      topN,
-      activeAssetIds,
-      sourceStatusOverride,
-    }),
-    [response, filterClass, topN, activeKey, sourceStatusOverride],
-  );
+  return composeAmiraScanner(response, options);
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────

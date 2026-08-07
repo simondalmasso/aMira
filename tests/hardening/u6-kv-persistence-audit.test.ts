@@ -100,44 +100,33 @@ describe('U6 — KV Persistence Audit', () => {
 
   // ─── 1. Static code path audit ─────────────────────────────────────────────
   describe('Static audit of src/lib/telemetry.ts', () => {
-    test('All KV writes use expirationTtl', () => {
-      // Find all .put(...) calls — allow nested ) (e.g. JSON.stringify(entry))
-      const putCalls = TELEMETRY_SRC.match(/\.put\s*\([^;]+expirationTtl[^;]+\);/g) ?? [];
-      expect(putCalls.length).toBeGreaterThan(0);
-      // Every put call must set expirationTtl
-      const putCount = (TELEMETRY_SRC.match(/\.put\s*\(/g) ?? []).length;
-      expect(putCalls.length).toBe(putCount);
+    test('Confirmed KV writes await put, set TTL, and surface failures', () => {
+      expect(TELEMETRY_SRC).toMatch(/async function writeConfirmed[\s\S]*await kv\.put\([\s\S]*expirationTtl/);
+      expect(TELEMETRY_SRC).toMatch(/async function writeConfirmed[\s\S]*catch \(error\)[\s\S]*markFailure\(error\)[\s\S]*throw new Error/);
     });
 
-    test('All KV writes have try/catch or .catch', () => {
-      // kvWrite function should have try { ... } catch block
-      expect(TELEMETRY_SRC).toMatch(/function kvWrite[\s\S]{0,500}try\s*\{/);
-      expect(TELEMETRY_SRC).toMatch(/function kvWrite[\s\S]{0,1500}catch/);
+    test('Scheduled writes are tracked until settled', () => {
+      expect(TELEMETRY_SRC).toContain('const pendingWrites = new Set<Promise<void>>()');
+      expect(TELEMETRY_SRC).toMatch(/function scheduleWrite[\s\S]*pendingWrites\.add\(operation\)/);
+      expect(TELEMETRY_SRC).toMatch(/finally\(\(\) => pendingWrites\.delete\(operation\)\)/);
+      expect(TELEMETRY_SRC).toContain('export async function flushTelemetryWrites');
     });
 
-    test('All KV reads have try/catch with JSON.parse', () => {
-      // kvRead should have try { ... } catch around JSON.parse
-      expect(TELEMETRY_SRC).toMatch(/function kvRead[\s\S]{0,500}try\s*\{/);
-      expect(TELEMETRY_SRC).toMatch(/function kvRead[\s\S]{0,1500}JSON\.parse/);
-      expect(TELEMETRY_SRC).toMatch(/function kvRead[\s\S]{0,2000}catch/);
+    test('Durable list/read path catches storage and parse failures', () => {
+      expect(TELEMETRY_SRC).toMatch(/async function listRead[\s\S]*try \{/);
+      expect(TELEMETRY_SRC).toMatch(/async function listRead[\s\S]*JSON\.parse/);
+      expect(TELEMETRY_SRC).toMatch(/async function listRead[\s\S]*catch \(error\)[\s\S]*markFailure\(error\)[\s\S]*return \[\]/);
     });
 
-    test('KV list has try/catch', () => {
-      expect(TELEMETRY_SRC).toMatch(/function kvList[\s\S]{0,500}try\s*\{/);
-      expect(TELEMETRY_SRC).toMatch(/function kvList[\s\S]{0,1000}catch/);
-    });
-
-    test('KV access gracefully degrades when env binding is missing', () => {
-      // kvWrite should return early if env?.ORACLE_PREDICTIONS is falsy
-      expect(TELEMETRY_SRC).toMatch(/function kvWrite[\s\S]{0,200}if\s*\(!env\?\.ORACLE_PREDICTIONS\)\s*return/);
-      expect(TELEMETRY_SRC).toMatch(/function kvRead[\s\S]{0,200}if\s*\(!env\?\.ORACLE_PREDICTIONS\)\s*return null/);
-      expect(TELEMETRY_SRC).toMatch(/function kvList[\s\S]{0,200}if\s*\(!env\?\.ORACLE_PREDICTIONS\)\s*return \[\]/);
+    test('Missing binding is explicitly degraded, never declared durable', () => {
+      expect(TELEMETRY_SRC).toContain("state: 'degraded-memory'");
+      expect(TELEMETRY_SRC).toMatch(/if \(!kv\) throw new Error\(`TELEMETRY_STORAGE_DEGRADED/);
+      expect(TELEMETRY_SRC).toMatch(/if \(!kv\) return \[\]/);
+      expect(TELEMETRY_SRC).toContain("export type TelemetryStorageState = 'durable' | 'degraded-memory' | 'unavailable'");
     });
 
     test('TTLs are configured per data type (decisions 90d, events 30d, metrics 90d)', () => {
-      expect(TELEMETRY_SRC).toContain('KV_TTL_DECISION_SECONDS = 60 * 60 * 24 * 90');
-      expect(TELEMETRY_SRC).toContain('KV_TTL_EVENT_SECONDS = 60 * 60 * 24 * 30');
-      expect(TELEMETRY_SRC).toContain('KV_TTL_METRICS_SECONDS = 60 * 60 * 24 * 90');
+      expect(TELEMETRY_SRC).toContain("const TTL = { decision: 90 * 86400, event: 30 * 86400, metric: 90 * 86400 } as const");
     });
 
     test('KV key prefixes are well-formed', () => {
@@ -165,7 +154,7 @@ describe('U6 — KV Persistence Audit', () => {
         summary: 'Test decision',
       });
       await kv.put(key, payload, { expirationTtl: 60 });
-      const read = await kv.get(key);
+      const read = await kv.get<string>(key);
       expect(read).toBe(payload);
       const parsed = JSON.parse(read!);
       expect(parsed.id).toBe('test-1');
@@ -173,14 +162,14 @@ describe('U6 — KV Persistence Audit', () => {
     });
 
     test('Missing key returns null (not throw)', async () => {
-      const result = await kv.get('telemetry:decision:does-not-exist');
+      const result = await kv.get<string>('telemetry:decision:does-not-exist');
       expect(result).toBeNull();
     });
 
     test('Corrupted JSON returns null when wrapped in safe parse', async () => {
       // Inject corrupted value
       kv.injectCorrupted('telemetry:decision:corrupt-1', '{ this is not valid JSON }}}');
-      const raw = await kv.get('telemetry:decision:corrupt-1');
+      const raw = await kv.get<string>('telemetry:decision:corrupt-1');
       expect(raw).toBe('{ this is not valid JSON }}}');
 
       // Simulate the safe-read pattern used in telemetry.ts:kvRead
@@ -224,19 +213,19 @@ describe('U6 — KV Persistence Audit', () => {
 
     test('TTL expiration removes keys', async () => {
       await kv.put('telemetry:decision:ttl-1', 'value', { expirationTtl: 60 });
-      expect(await kv.get('telemetry:decision:ttl-1')).toBe('value');
+      expect(await kv.get<string>('telemetry:decision:ttl-1')).toBe('value');
 
       // Advance time past TTL
       kv.advanceTime(61);
-      expect(await kv.get('telemetry:decision:ttl-1')).toBeNull();
+      expect(await kv.get<string>('telemetry:decision:ttl-1')).toBeNull();
     });
 
     test('Delete removes key', async () => {
       await kv.put('telemetry:decision:del-1', 'value', { expirationTtl: 60 });
-      expect(await kv.get('telemetry:decision:del-1')).toBe('value');
+      expect(await kv.get<string>('telemetry:decision:del-1')).toBe('value');
 
       await kv.delete('telemetry:decision:del-1');
-      expect(await kv.get('telemetry:decision:del-1')).toBeNull();
+      expect(await kv.get<string>('telemetry:decision:del-1')).toBeNull();
     });
 
     test('Rollback: delete on error leaves store in consistent state', async () => {
@@ -246,17 +235,17 @@ describe('U6 — KV Persistence Audit', () => {
       await kv.put('telemetry:decision:r-3', '{"v":3}', { expirationTtl: 60 });
 
       // Verify all 3 are readable
-      expect(await kv.get('telemetry:decision:r-1')).toBe('{"v":1}');
-      expect(await kv.get('telemetry:decision:r-2')).toBe('{"v":2}');
-      expect(await kv.get('telemetry:decision:r-3')).toBe('{"v":3}');
+      expect(await kv.get<string>('telemetry:decision:r-1')).toBe('{"v":1}');
+      expect(await kv.get<string>('telemetry:decision:r-2')).toBe('{"v":2}');
+      expect(await kv.get<string>('telemetry:decision:r-3')).toBe('{"v":3}');
 
       // Rollback the last write
       await kv.delete('telemetry:decision:r-3');
-      expect(await kv.get('telemetry:decision:r-3')).toBeNull();
+      expect(await kv.get<string>('telemetry:decision:r-3')).toBeNull();
 
       // Earlier writes survive
-      expect(await kv.get('telemetry:decision:r-1')).toBe('{"v":1}');
-      expect(await kv.get('telemetry:decision:r-2')).toBe('{"v":2}');
+      expect(await kv.get<string>('telemetry:decision:r-1')).toBe('{"v":1}');
+      expect(await kv.get<string>('telemetry:decision:r-2')).toBe('{"v":2}');
 
       // Total store size reflects the rollback
       expect(kv.size()).toBe(2);
@@ -268,11 +257,11 @@ describe('U6 — KV Persistence Audit', () => {
       await kv.put('telemetry:decision:good-2', '{"v":2}', { expirationTtl: 60 });
 
       // Good keys still readable
-      expect(await kv.get('telemetry:decision:good-1')).toBe('{"v":1}');
-      expect(await kv.get('telemetry:decision:good-2')).toBe('{"v":2}');
+      expect(await kv.get<string>('telemetry:decision:good-1')).toBe('{"v":1}');
+      expect(await kv.get<string>('telemetry:decision:good-2')).toBe('{"v":2}');
 
       // Bad key returns the raw string (consumer must handle parse error)
-      const badRaw = await kv.get('telemetry:decision:bad-1');
+      const badRaw = await kv.get<string>('telemetry:decision:bad-1');
       expect(badRaw).toBe('CORRUPT{notjson');
 
       // List still works
@@ -292,7 +281,7 @@ describe('U6 — KV Persistence Audit', () => {
       // Simulate the kvRead pattern: catch error, return null
       let result: unknown = null;
       try {
-        const raw = await failingKv.get('any-key');
+        const raw = await failingKv.get<string>('any-key');
         result = raw ? JSON.parse(raw) : null;
       } catch {
         result = null;  // graceful degradation

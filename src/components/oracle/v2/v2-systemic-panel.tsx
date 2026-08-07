@@ -128,8 +128,8 @@ export function V2SystemicPanel({ v2 }: { v2: V2SystemicReport }) {
 
         <Card title="R8 · Scenario Engine">
           <div className="grid grid-cols-2 gap-3">
-            <Metric label="Base" value={fixed(v2.scenarios.base.score_adjusted, 1)} />
-            <Metric label="Worst" value={fixed(v2.scenarios.worst_case.score_adjusted, 1)} />
+            <Metric label="Base" value={fixed(v2.scenarios.base?.score_adjusted ?? null, 1)} />
+            <Metric label="Worst" value={fixed(v2.scenarios.worst_case?.score_adjusted ?? null, 1)} />
             <Metric label="Spread" value={fixed(v2.scenarios.range.spread, 1)} />
           </div>
         </Card>

@@ -20,7 +20,7 @@ export interface OracleSingleMacroMetadata {
 export interface OracleSingleSuccessResponse {
   success: true;
   status: 'READY' | 'PARTIAL';
-  warnings: Array<'NO_PRIMARY_SCORE'>;
+  warnings: Array<'NO_PRIMARY_SCORE' | 'ENRICHMENT_UNAVAILABLE' | 'LIFECYCLE_NOT_DURABLE' | 'TELEMETRY_NOT_DURABLE'>;
   timestamp: string;
   vector: AssetScoreVector;
   learning: LearningSummary;

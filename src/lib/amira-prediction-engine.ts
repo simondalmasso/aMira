@@ -662,8 +662,6 @@ export function composeAmiraPrediction(
 // Memoized wrapper around composeAmiraPrediction. Re-computes only when
 // decision identity or option primitives change.
 
-import { useMemo } from 'react';
-
 export function useAmiraPrediction(
   decision: DecisionEngineOutput | null,
   options: {
@@ -674,19 +672,7 @@ export function useAmiraPrediction(
     sourceStatus?: string;
   },
 ): AmiraPredictionOutput {
-  return useMemo(
-    () => composeAmiraPrediction(decision, options),
-    // Re-compose only when these primitives change. Decision identity is
-    // memoized upstream so referential changes indicate real data changes.
-    [
-      decision,
-      options.capital,
-      options.risk,
-      options.stressMode,
-      options.historyDays,
-      options.sourceStatus,
-    ],
-  );
+  return composeAmiraPrediction(decision, options);
 }
 
 // ─── Quality Label Helper (per spec `prediction_engine_v2.scoring.quality_labels`) ───
