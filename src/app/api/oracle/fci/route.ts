@@ -1,6 +1,6 @@
 // src/app/api/oracle/fci/route.ts
 // ORACLE_FCI_AR_V3 endpoint — full pipeline: fetch → normalize → snapshot → rank → predict → search
-// Cache TTL: 1 hour (per spec). Storage: KV binding ORACLE_FCI_HISTORY (or memory fallback).
+// Cache TTL: 1 hour (per spec). Storage: KV binding ORACLE_FCI_HISTORY (or memory fallback for reads).
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
@@ -8,7 +8,7 @@ import { runOracleFci, KVStorageAdapter, MemoryStorageAdapter } from '@/lib/orac
 import type { OracleFciResponse } from '@/lib/oracle-fci';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 3600; // 1 hour cache
+export const revalidate = 3600;
 
 function getKV(): KVNamespace | undefined {
   try {
@@ -20,7 +20,7 @@ function getKV(): KVNamespace | undefined {
   }
 }
 
-export async function GET(req: NextRequest): Promise<NextResponse<OracleFciResponse | { success: false; error: string }>> {
+export async function GET(req: NextRequest): Promise<NextResponse<OracleFciResponse | { success: false; error: string; timestamp?: string }>> {
   try {
     const { searchParams } = new URL(req.url);
     const searchQuery = searchParams.get('q') ?? undefined;
@@ -29,12 +29,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<OracleFciRespo
 
     const kv = getKV();
     const storage = kv ? new KVStorageAdapter(kv) : new MemoryStorageAdapter();
-
-    const result = await runOracleFci({
-      storage,
-      topN,
-      searchQuery,
-    });
+    const result = await runOracleFci({ storage, topN, searchQuery });
 
     return NextResponse.json(result, {
       headers: {
@@ -45,12 +40,12 @@ export async function GET(req: NextRequest): Promise<NextResponse<OracleFciRespo
         'X-Oracle-Fci-Total': String(result.total_funds),
       },
     });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+  } catch (error: unknown) {
+    console.error('[oracle-fci] GET failed', error);
     return NextResponse.json(
       {
         success: false,
-        error: `ORACLE_FCI runtime error: ${msg}`,
+        error: 'ORACLE_FCI_UNAVAILABLE',
         timestamp: new Date().toISOString(),
       },
       { status: 500 },
@@ -58,7 +53,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<OracleFciRespo
   }
 }
 
-/** POST endpoint — trigger snapshot save (for cron or manual refresh) */
+/** POST endpoint — trigger a durable snapshot refresh. */
 export async function POST(): Promise<NextResponse<{
   success: boolean;
   snapshot_date?: string;
@@ -70,7 +65,7 @@ export async function POST(): Promise<NextResponse<{
   try {
     const kv = getKV();
     if (!kv) {
-      return NextResponse.json({ success: false, error: 'ORACLE_FCI_HISTORY binding unavailable' }, { status: 503 });
+      return NextResponse.json({ success: false, error: 'ORACLE_FCI_HISTORY_UNAVAILABLE' }, { status: 503 });
     }
     const result = await runOracleFci({ storage: new KVStorageAdapter(kv), topN: 1 });
     return NextResponse.json({
@@ -80,8 +75,8 @@ export async function POST(): Promise<NextResponse<{
       source_status: result.source_status,
       total_funds: result.total_funds,
     }, { status: result.source_status === 'ERROR' ? 503 : 200 });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('[oracle-fci] POST refresh failed', error);
+    return NextResponse.json({ success: false, error: 'ORACLE_FCI_REFRESH_FAILED' }, { status: 500 });
   }
 }

@@ -10,27 +10,31 @@ import type { ClassOracleResponse } from '@/lib/oracle-multi';
 export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
-function getEnv() {
-  // CRON_PERSISTENCE_WIRING_FIX — see /api/oracle/cron/route.ts for rationale.
+type OracleEnv = {
+  ORACLE_FCI_HISTORY?: KVNamespace;
+  ORACLE_ASSETS_HISTORY?: KVNamespace;
+  ORACLE_PREDICTIONS?: KVNamespace;
+};
+
+function getEnv(): OracleEnv {
   try {
-    const ctx = getCloudflareContext();
-    const env = ctx.env as {
-      ORACLE_FCI_HISTORY?: KVNamespace;
-      ORACLE_ASSETS_HISTORY?: KVNamespace;
-      ORACLE_PREDICTIONS?: KVNamespace;
-    };
+    const env = getCloudflareContext().env as OracleEnv;
     return {
       ORACLE_FCI_HISTORY: env.ORACLE_FCI_HISTORY,
       ORACLE_ASSETS_HISTORY: env.ORACLE_ASSETS_HISTORY,
       ORACLE_PREDICTIONS: env.ORACLE_PREDICTIONS,
     };
   } catch {
-    return {
-      ORACLE_FCI_HISTORY: undefined,
-      ORACLE_ASSETS_HISTORY: undefined,
-      ORACLE_PREDICTIONS: undefined,
-    };
+    return {};
   }
+}
+
+function hasDurableBindings(env: OracleEnv): boolean {
+  return Boolean(
+    env.ORACLE_FCI_HISTORY && typeof env.ORACLE_FCI_HISTORY.get === 'function'
+    && env.ORACLE_ASSETS_HISTORY && typeof env.ORACLE_ASSETS_HISTORY.get === 'function'
+    && env.ORACLE_PREDICTIONS && typeof env.ORACLE_PREDICTIONS.get === 'function',
+  );
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse<ClassOracleResponse | { success: false; error: string }>> {
@@ -52,22 +56,39 @@ export async function GET(req: NextRequest): Promise<NextResponse<ClassOracleRes
         'X-Oracle-Total': String(result.total_assets),
       },
     });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json(
-      { success: false, error: `ORACLE_STOCKS runtime error: ${msg}` },
-      { status: 500 },
-    );
+  } catch (error: unknown) {
+    console.error('[oracle-stocks] GET failed', error);
+    return NextResponse.json({ success: false, error: 'ORACLE_STOCKS_UNAVAILABLE' }, { status: 500 });
   }
 }
 
-export async function POST(): Promise<NextResponse<{ success: boolean; snapshot_date?: string; error?: string }>> {
+export async function POST(): Promise<NextResponse<{
+  success: boolean;
+  snapshot_date?: string;
+  persistence_expected?: boolean;
+  source_status?: ClassOracleResponse['source_status'];
+  total_assets?: number;
+  reason?: string;
+  error?: string;
+}>> {
   try {
-    const storage = resolveMultiStorage(getEnv());
+    const env = getEnv();
+    if (!hasDurableBindings(env)) {
+      return NextResponse.json({ success: false, error: 'ORACLE_STORAGE_BINDINGS_UNAVAILABLE' }, { status: 503 });
+    }
+    const storage = resolveMultiStorage(env);
     const result = await runClassOracle('ACCIONES', { storage, topN: 1 });
-    return NextResponse.json({ success: true, snapshot_date: result.snapshot_date });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    const persistenceExpected = result.total_assets > 0;
+    return NextResponse.json({
+      success: true,
+      snapshot_date: result.snapshot_date,
+      persistence_expected: persistenceExpected,
+      source_status: result.source_status,
+      total_assets: result.total_assets,
+      reason: persistenceExpected ? undefined : 'NO_OBSERVED_STOCK_DATA_AVAILABLE',
+    });
+  } catch (error: unknown) {
+    console.error('[oracle-stocks] POST refresh failed', error);
+    return NextResponse.json({ success: false, error: 'ORACLE_STOCKS_REFRESH_FAILED' }, { status: 500 });
   }
 }

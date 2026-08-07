@@ -10,46 +10,48 @@ import type { ClassOracleResponse, AssetClass } from '@/lib/oracle-multi';
 export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
-function getEnv() {
-  // CRON_PERSISTENCE_WIRING_FIX — see /api/oracle/cron/route.ts for rationale.
-  // `process.env.ORACLE_*` is NOT populated inside OpenNext Route Handlers
-  // when invoked from the scheduled() cron context → KV bindings silently
-  // resolve to `undefined` → MemoryStorageAdapter fallback → ghost writes.
+type OracleEnv = {
+  ORACLE_FCI_HISTORY?: KVNamespace;
+  ORACLE_ASSETS_HISTORY?: KVNamespace;
+  ORACLE_PREDICTIONS?: KVNamespace;
+};
+
+function getEnv(): OracleEnv {
   try {
-    const ctx = getCloudflareContext();
-    const env = ctx.env as {
-      ORACLE_FCI_HISTORY?: KVNamespace;
-      ORACLE_ASSETS_HISTORY?: KVNamespace;
-      ORACLE_PREDICTIONS?: KVNamespace;
-    };
+    const env = getCloudflareContext().env as OracleEnv;
     return {
       ORACLE_FCI_HISTORY: env.ORACLE_FCI_HISTORY,
       ORACLE_ASSETS_HISTORY: env.ORACLE_ASSETS_HISTORY,
       ORACLE_PREDICTIONS: env.ORACLE_PREDICTIONS,
     };
   } catch {
-    return {
-      ORACLE_FCI_HISTORY: undefined,
-      ORACLE_ASSETS_HISTORY: undefined,
-      ORACLE_PREDICTIONS: undefined,
-    };
+    return {};
   }
+}
+
+function hasDurableBindings(env: OracleEnv): boolean {
+  return Boolean(
+    env.ORACLE_FCI_HISTORY && typeof env.ORACLE_FCI_HISTORY.get === 'function'
+    && env.ORACLE_ASSETS_HISTORY && typeof env.ORACLE_ASSETS_HISTORY.get === 'function'
+    && env.ORACLE_PREDICTIONS && typeof env.ORACLE_PREDICTIONS.get === 'function',
+  );
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse<ClassOracleResponse | { success: false; error: string }>> {
   try {
     const { searchParams } = new URL(req.url);
     const searchQuery = searchParams.get('q') ?? undefined;
-    const type = searchParams.get('type') ?? 'all'; // 'single' | 'etf' | 'all'
+    const type = searchParams.get('type') ?? 'all';
+    if (type !== 'single' && type !== 'etf' && type !== 'all') {
+      return NextResponse.json({ success: false, error: 'INVALID_CEDEAR_TYPE' }, { status: 400 });
+    }
     const topNParam = searchParams.get('topN');
     const topN = topNParam ? Math.min(Math.max(parseInt(topNParam, 10) || 25, 5), 100) : 25;
 
     const classes: AssetClass[] = type === 'single' ? ['CEDEARS'] : type === 'etf' ? ['ETF_CEDEARS'] : ['CEDEARS', 'ETF_CEDEARS'];
-
     const storage = resolveMultiStorage(getEnv());
     const full = await runMultiOracle({ storage, classes, searchQuery, topN });
 
-    // Combine CEDEARS + ETF_CEDEARS into one ClassOracleResponse-shaped payload
     const allAssets = [
       ...(full.by_class['CEDEARS'] ?? []),
       ...(full.by_class['ETF_CEDEARS'] ?? []),
@@ -106,22 +108,39 @@ export async function GET(req: NextRequest): Promise<NextResponse<ClassOracleRes
         'X-Oracle-Total': String(response.total_assets),
       },
     });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json(
-      { success: false, error: `ORACLE_CEDEARS runtime error: ${msg}` },
-      { status: 500 },
-    );
+  } catch (error: unknown) {
+    console.error('[oracle-cedears] GET failed', error);
+    return NextResponse.json({ success: false, error: 'ORACLE_CEDEARS_UNAVAILABLE' }, { status: 500 });
   }
 }
 
-export async function POST(): Promise<NextResponse<{ success: boolean; snapshot_date?: string; error?: string }>> {
+export async function POST(): Promise<NextResponse<{
+  success: boolean;
+  snapshot_date?: string;
+  persistence_expected?: boolean;
+  source_status?: ClassOracleResponse['source_status'];
+  total_assets?: number;
+  reason?: string;
+  error?: string;
+}>> {
   try {
-    const storage = resolveMultiStorage(getEnv());
+    const env = getEnv();
+    if (!hasDurableBindings(env)) {
+      return NextResponse.json({ success: false, error: 'ORACLE_STORAGE_BINDINGS_UNAVAILABLE' }, { status: 503 });
+    }
+    const storage = resolveMultiStorage(env);
     const result = await runMultiOracle({ storage, classes: ['CEDEARS', 'ETF_CEDEARS'], topN: 1 });
-    return NextResponse.json({ success: true, snapshot_date: result.snapshot_date });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    const persistenceExpected = result.total_assets > 0;
+    return NextResponse.json({
+      success: true,
+      snapshot_date: result.snapshot_date,
+      persistence_expected: persistenceExpected,
+      source_status: result.source_status,
+      total_assets: result.total_assets,
+      reason: persistenceExpected ? undefined : 'NO_OBSERVED_CEDEAR_DATA_AVAILABLE',
+    });
+  } catch (error: unknown) {
+    console.error('[oracle-cedears] POST refresh failed', error);
+    return NextResponse.json({ success: false, error: 'ORACLE_CEDEARS_REFRESH_FAILED' }, { status: 500 });
   }
 }

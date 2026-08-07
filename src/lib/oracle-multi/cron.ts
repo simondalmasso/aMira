@@ -20,6 +20,9 @@ export const CRON_JOBS: CronJobName[] = [
   'refresh_predictions',
 ];
 
+const NO_DATA_STATUS_PREFIX = 'snap:status';
+const NO_DATA_STATUS_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 export type PersistenceAckStatus = 'DURABLE' | 'DURABLE_NO_DATA' | 'FAILED';
 
 export interface CronPersistenceAck {
@@ -41,6 +44,22 @@ export interface CronJobResult {
   persistence_ack?: CronPersistenceAck;
 }
 
+type NoDataStatusSnapshot = {
+  date: string;
+  fetched_at: string;
+  source: 'OBSERVED_UNAVAILABLE';
+  asset_class: AssetClass;
+  total_assets: 0;
+  source_status: 'ERROR';
+  data_class: 'OBSERVED_UNAVAILABLE';
+  no_data: true;
+  reason: 'NO_OBSERVED_SOURCE_DATA';
+};
+
+function storageForClass(storage: MultiStorage, cls: AssetClass) {
+  return cls === 'FCI' ? storage.fci : storage.assets;
+}
+
 async function verifySnapshotWrites(
   storage: MultiStorage,
   classes: AssetClass[],
@@ -52,13 +71,23 @@ async function verifySnapshotWrites(
   for (let index = 0; index < classes.length; index += 1) {
     const cls = classes[index];
     const key = keys[index];
-    const target = cls === 'FCI' ? storage.fci : storage.assets;
-    const raw = await target.get(key);
-    if (!raw) { missing_keys.push(key); continue; }
+    const raw = await storageForClass(storage, cls).get(key);
+    if (!raw) {
+      missing_keys.push(key);
+      continue;
+    }
     try {
-      const parsed = JSON.parse(raw) as { asset_class?: string; date?: string; fetched_at?: string };
-      if (parsed.asset_class === cls && parsed.date === snapshotDate && typeof parsed.fetched_at === 'string') verified_keys.push(key);
-      else missing_keys.push(key);
+      const parsed = JSON.parse(raw) as { asset_class?: string; date?: string; fetched_at?: string; total_assets?: number };
+      if (
+        parsed.asset_class === cls
+        && parsed.date === snapshotDate
+        && typeof parsed.fetched_at === 'string'
+        && typeof parsed.total_assets === 'number'
+      ) {
+        verified_keys.push(key);
+      } else {
+        missing_keys.push(key);
+      }
     } catch {
       missing_keys.push(key);
     }
@@ -67,31 +96,109 @@ async function verifySnapshotWrites(
   return { durable, status: durable ? 'DURABLE' : 'FAILED', snapshot_date: snapshotDate, keys, verified_keys, missing_keys };
 }
 
-async function persistNoDataSnapshots(
+async function verifyNoDataStatusWrites(
+  storage: MultiStorage,
+  classes: AssetClass[],
+  snapshotDate: string,
+): Promise<CronPersistenceAck> {
+  const keys = classes.map((cls) => `${NO_DATA_STATUS_PREFIX}:${cls}:${snapshotDate}`);
+  const verified_keys: string[] = [];
+  const missing_keys: string[] = [];
+
+  for (let index = 0; index < classes.length; index += 1) {
+    const cls = classes[index];
+    const key = keys[index];
+    const raw = await storageForClass(storage, cls).get(key);
+    if (!raw) {
+      missing_keys.push(key);
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(raw) as Partial<NoDataStatusSnapshot>;
+      if (
+        parsed.asset_class === cls
+        && parsed.date === snapshotDate
+        && typeof parsed.fetched_at === 'string'
+        && parsed.source === 'OBSERVED_UNAVAILABLE'
+        && parsed.data_class === 'OBSERVED_UNAVAILABLE'
+        && parsed.no_data === true
+        && parsed.total_assets === 0
+        && parsed.reason === 'NO_OBSERVED_SOURCE_DATA'
+      ) {
+        verified_keys.push(key);
+      } else {
+        missing_keys.push(key);
+      }
+    } catch {
+      missing_keys.push(key);
+    }
+  }
+
+  const durable = missing_keys.length === 0 && keys.length > 0;
+  return {
+    durable,
+    status: durable ? 'DURABLE_NO_DATA' : 'FAILED',
+    snapshot_date: snapshotDate,
+    keys,
+    verified_keys,
+    missing_keys,
+    ...(durable ? { reason: 'NO_OBSERVED_SOURCE_DATA' as const } : {}),
+  };
+}
+
+async function persistNoDataStatusSnapshots(
   storage: MultiStorage,
   classes: AssetClass[],
   snapshotDate: string,
 ): Promise<CronPersistenceAck> {
   const fetchedAt = new Date().toISOString();
   for (const cls of classes) {
-    const key = `snap:${cls}:${snapshotDate}`;
-    const target = cls === 'FCI' ? storage.fci : storage.assets;
-    await target.put(key, JSON.stringify({
-      asset_class: cls,
+    const key = `${NO_DATA_STATUS_PREFIX}:${cls}:${snapshotDate}`;
+    const record: NoDataStatusSnapshot = {
       date: snapshotDate,
       fetched_at: fetchedAt,
-      assets: [],
+      source: 'OBSERVED_UNAVAILABLE',
+      asset_class: cls,
       total_assets: 0,
       source_status: 'ERROR',
       data_class: 'OBSERVED_UNAVAILABLE',
       no_data: true,
       reason: 'NO_OBSERVED_SOURCE_DATA',
-    }), 7 * 24 * 60 * 60);
+    };
+    await storageForClass(storage, cls).put(
+      key,
+      JSON.stringify(record),
+      { expirationTtl: NO_DATA_STATUS_TTL_SECONDS },
+    );
   }
-  const ack = await verifySnapshotWrites(storage, classes, snapshotDate);
-  return ack.durable
-    ? { ...ack, status: 'DURABLE_NO_DATA', reason: 'NO_OBSERVED_SOURCE_DATA' }
-    : ack;
+  return verifyNoDataStatusWrites(storage, classes, snapshotDate);
+}
+
+function combinePersistenceAcks(
+  snapshotDate: string,
+  acks: CronPersistenceAck[],
+): CronPersistenceAck {
+  if (acks.length === 0) {
+    return {
+      durable: false,
+      status: 'FAILED',
+      snapshot_date: snapshotDate,
+      keys: [],
+      verified_keys: [],
+      missing_keys: [],
+    };
+  }
+  const durable = acks.every((ack) => ack.durable);
+  const hasNoData = acks.some((ack) => ack.status === 'DURABLE_NO_DATA');
+  return {
+    durable,
+    status: durable ? (hasNoData ? 'DURABLE_NO_DATA' : 'DURABLE') : 'FAILED',
+    snapshot_date: snapshotDate,
+    keys: acks.flatMap((ack) => ack.keys),
+    verified_keys: acks.flatMap((ack) => ack.verified_keys),
+    missing_keys: acks.flatMap((ack) => ack.missing_keys),
+    ...(durable && hasNoData ? { reason: 'NO_OBSERVED_SOURCE_DATA' as const } : {}),
+  };
 }
 
 function sourceMeta(result: MultiOracleResponse): Record<string, unknown> {
@@ -101,8 +208,29 @@ function sourceMeta(result: MultiOracleResponse): Record<string, unknown> {
     classes_fetched: result.metadata.classes_fetched,
     classes_failed: result.metadata.classes_failed,
     snapshot_date: result.snapshot_date,
-    errors: result.errors,
+    error_count: result.errors.length,
   };
+}
+
+async function persistenceForResult(
+  storage: MultiStorage,
+  requestedClasses: AssetClass[],
+  result: MultiOracleResponse,
+): Promise<CronPersistenceAck> {
+  const fetchedClasses = requestedClasses.filter((cls) => result.metadata.classes_fetched.includes(cls));
+  const unavailableClasses = requestedClasses.filter((cls) => !fetchedClasses.includes(cls));
+  const acks: CronPersistenceAck[] = [];
+
+  if (fetchedClasses.length > 0) {
+    acks.push(await verifySnapshotWrites(storage, fetchedClasses, result.snapshot_date));
+  }
+  if (unavailableClasses.length > 0) {
+    // A no-data observation is persisted under a distinct status key. It must never
+    // overwrite `snap:<class>:<date>`, which may contain the last valid observation.
+    acks.push(await persistNoDataStatusSnapshots(storage, unavailableClasses, result.snapshot_date));
+  }
+
+  return combinePersistenceAcks(result.snapshot_date, acks);
 }
 
 async function classResult(
@@ -112,28 +240,18 @@ async function classResult(
   start: number,
 ): Promise<CronJobResult> {
   const result = await runMultiOracle({ storage, classes, topN: 5 });
-  if (result.total_assets === 0 || result.metadata.classes_fetched.length === 0) {
-    const persistence_ack = await persistNoDataSnapshots(storage, classes, result.snapshot_date);
-    return {
-      job,
-      ok: persistence_ack.durable,
-      duration_ms: Date.now() - start,
-      meta: { ...sourceMeta(result), degraded_no_data: true },
-      persistence_ack,
-    };
-  }
-  const persistedClasses = result.metadata.classes_fetched.filter((cls) => classes.includes(cls));
-  const persistence_ack = await verifySnapshotWrites(storage, persistedClasses, result.snapshot_date);
+  const persistence_ack = await persistenceForResult(storage, classes, result);
+  const degradedNoData = persistence_ack.status === 'DURABLE_NO_DATA';
   return {
     job,
-    ok: result.source_status !== 'ERROR' && persistence_ack.durable,
+    ok: persistence_ack.durable && (result.source_status !== 'ERROR' || degradedNoData),
     duration_ms: Date.now() - start,
-    meta: sourceMeta(result),
+    meta: { ...sourceMeta(result), degraded_no_data: degradedNoData },
     persistence_ack,
   };
 }
 
-/** Run a single cron job. No-source states persist a truthful empty status snapshot; assets are never fabricated. */
+/** Run a single cron job. No-source states persist truthful status snapshots without replacing valid history. */
 async function runJob(job: CronJobName, storage: MultiStorage): Promise<CronJobResult> {
   const start = Date.now();
   try {
@@ -147,25 +265,17 @@ async function runJob(job: CronJobName, storage: MultiStorage): Promise<CronJobR
       case 'refresh_cedears':
         return classResult(job, storage, ['CEDEARS', 'ETF_CEDEARS'], start);
       case 'refresh_predictions': {
-        const result = await runMultiOracle({ storage, topN: 5 });
-        if (result.total_assets === 0 || result.metadata.classes_fetched.length === 0) {
-          const classes: AssetClass[] = ['FCI', 'PLAZO_FIJO', 'ACCIONES', 'BONOS', 'CEDEARS', 'ETF_CEDEARS'];
-          const persistence_ack = await persistNoDataSnapshots(storage, classes, result.snapshot_date);
-          return {
-            job,
-            ok: persistence_ack.durable,
-            duration_ms: Date.now() - start,
-            meta: { ...sourceMeta(result), degraded_no_data: true },
-            persistence_ack,
-          };
-        }
-        const persistence_ack = await verifySnapshotWrites(storage, result.metadata.classes_fetched, result.snapshot_date);
+        const classes: AssetClass[] = ['FCI', 'PLAZO_FIJO', 'ACCIONES', 'BONOS', 'CEDEARS', 'ETF_CEDEARS'];
+        const result = await runMultiOracle({ storage, classes, topN: 5 });
+        const persistence_ack = await persistenceForResult(storage, classes, result);
+        const degradedNoData = persistence_ack.status === 'DURABLE_NO_DATA';
         return {
           job,
-          ok: result.source_status !== 'ERROR' && persistence_ack.durable,
+          ok: persistence_ack.durable && (result.source_status !== 'ERROR' || degradedNoData),
           duration_ms: Date.now() - start,
           meta: {
             ...sourceMeta(result),
+            degraded_no_data: degradedNoData,
             predictions_active: result.predictions_summary.active,
             assets_with_predictions: result.predictions_summary.assets_with_predictions,
             high_conviction: result.predictions_summary.high_conviction_count,

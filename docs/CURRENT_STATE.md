@@ -17,6 +17,8 @@ Canonical macro provenance classifies each field as `OBSERVED`, `RECONSTRUCTED`,
 
 Unknown/no-history values remain `null`; a real numeric zero remains representable as zero. The canonical API and UI expose READY/PARTIAL/ERROR plus explicit warnings instead of fabricating missing scores.
 
+Public Oracle class routes do not echo caught internal exception messages. Mutating refresh endpoints fail closed when the required durable Cloudflare KV bindings are unavailable; read paths may degrade only where their contract does not claim durable persistence.
+
 ## Lifecycle, learning and telemetry
 
 `src/lib/amira-prediction-lifecycle-core.ts` is the single server-side lifecycle truth for Prediction → Outcome → Verification. `amira-prediction-lifecycle.ts` is only the React facade. `amira-prediction-lifecycle-ledger.ts` is only the Cloudflare KV durability adapter: it hydrates the canonical core and persists prediction/outcome/verification events under distinct prefixes.
@@ -31,8 +33,10 @@ Cloudflare has one schedule: `0 23 * * 1-5` UTC (= 20:00 Argentina). The generat
 
 - daily idempotency marker;
 - bounded re-entrancy lock that fails closed on storage errors;
-- five legacy data-refresh jobs;
-- exact snapshot read-after-write acknowledgements (key-count deltas are not proof);
+- five data-refresh jobs;
+- exact read-after-write acknowledgements (key-count deltas are not proof);
+- truthful no-source status snapshots under `snap:status:<class>:<date>` with bounded TTL; these never overwrite a valid `snap:<class>:<date>` observation;
+- partial-class reconciliation: observed classes verify their real snapshots while unavailable classes persist distinct `OBSERVED_UNAVAILABLE` status evidence;
 - canonical lifecycle hydration/expiration recovery;
 - sanitized public errors.
 
@@ -47,6 +51,8 @@ Order #2 final gates are strict for the configured authoritative repository grap
 ## CI and production reconciliation
 
 `.github/workflows/oraculo-runtime-gate.yml` is the single authoritative Order #2 gate for the exact branch SHA. Its `production-deploy` job is dependency-bound to the strict source gate (`needs: runtime-gate`), checks out that same green SHA, rebuilds it, captures the Cloudflare rollback anchor, deploys with existing repository secrets, then verifies production `/`, `/api/oracle/single`, cron binding health and one idempotent cron persistence run. There is no second production workflow authority.
+
+The last executable production verification exposed the no-source persistence gap that led to the distinct `snap:status:*` design above. The post-fix exact-head GitHub Actions attempts are currently prevented from starting by GitHub's account payment/spending-limit gate. Order #2 forbids resolving that blocker through payment, card entry, or incremental spend. Therefore the post-fix source must not be represented as exact-head CI- or production-verified until runners execute again at `$0`.
 
 Exact CI run IDs, artifact IDs/digests, Cloudflare version/deployment IDs, traffic, smoke results and final source SHA are deliberately recorded in the final Issue #2 checkpoint rather than hard-coded here, so this document never treats stale deployment identifiers as current truth.
 
