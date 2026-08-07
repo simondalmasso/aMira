@@ -81,7 +81,7 @@ function publicJobs(results: CronJobResult[]): PublicCronJob[] {
 }
 
 function jobWarnings(jobs: PublicCronJob[]): string[] {
-  return jobs.flatMap((job) => job.persistence_ack?.status === 'NOT_APPLICABLE_NO_DATA'
+  return jobs.flatMap((job) => job.persistence_ack?.status === 'DURABLE_NO_DATA'
     ? [`${job.job}:NO_OBSERVED_SOURCE_DATA`]
     : []);
 }
@@ -126,7 +126,7 @@ export async function POST(): Promise<NextResponse<CronExecutionResponse>> {
     const lifecycle = await recoverLifecycle();
     const jobs = publicJobs(result.results);
     const noInternalJobFailure = jobs.every((job) => job.ok && !job.error_code && job.persistence_ack?.status !== 'FAILED');
-    const hasDurablePersistence = jobs.some((job) => job.persistence_ack?.status === 'DURABLE');
+    const hasDurablePersistence = jobs.some((job) => job.persistence_ack?.durable === true);
     const lifecycleDurable = lifecycle.storage === 'durable';
     const success = noInternalJobFailure && hasDurablePersistence && lifecycleDurable;
     const warnings = jobWarnings(jobs);
