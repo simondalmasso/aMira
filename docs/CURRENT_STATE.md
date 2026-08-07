@@ -37,7 +37,7 @@ Learning metrics are derived from canonical verification history. With no verifi
 
 Telemetry and lifecycle report `durable`, degraded-memory, or unavailable states explicitly. `/api/oracle/single` becomes PARTIAL if lifecycle or telemetry durability is unavailable. PaperBroker state is explicitly `ephemeral-isolate`, `durable=false`, and `realBrokerConnected=false`.
 
-Legacy `/api/sync` computation may still return useful results when its Prisma/DB persistence is unavailable, but it now reports persistence as `durable` or `degraded` from actual write/read outcomes and no longer initializes update flags to false success. DB persistence is not a substitute for the canonical Cloudflare KV lifecycle/telemetry authorities.
+Legacy `/api/sync` computation may still return useful results when its Prisma/DB persistence is unavailable, but it reports persistence as `durable` or `degraded` from actual write/read outcomes and no longer initializes update flags to false success. Legacy `/api/rebalance` now performs allocation replacement plus its rebalance log in a single Prisma transaction and independently reports `durable` or `degraded`; a failed DB transaction cannot be represented as persisted success. DB persistence is not a substitute for the canonical Cloudflare KV lifecycle/telemetry authorities.
 
 ## Cron and recovery
 

@@ -130,4 +130,13 @@ describe('Order #2 post-green persistence and API hardening', () => {
     expect(route).not.toContain('error: cerData.error');
     expect(route).not.toContain('error: indecData.error');
   });
+
+  test('legacy rebalance persistence is atomic and truthfully degradable', () => {
+    const route = source('src/app/api/rebalance/route.ts');
+    expect(route).toContain('db.$transaction');
+    expect(route).toContain("state: persistenceDurable ? 'durable' : 'degraded'");
+    expect(route).toContain("warning: persistenceWarning");
+    expect(route).toContain('REBALANCE_PERSISTENCE_FAILED');
+    expect(route).toContain('REBALANCE_FAILED');
+  });
 });
