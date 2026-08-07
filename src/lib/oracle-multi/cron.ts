@@ -20,7 +20,7 @@ export const CRON_JOBS: CronJobName[] = [
   'refresh_predictions',
 ];
 
-export type PersistenceAckStatus = 'DURABLE' | 'NOT_APPLICABLE_NO_DATA' | 'FAILED';
+export type PersistenceAckStatus = 'DURABLE' | 'DURABLE_NO_DATA' | 'FAILED';
 
 export interface CronPersistenceAck {
   durable: boolean;
@@ -67,16 +67,31 @@ async function verifySnapshotWrites(
   return { durable, status: durable ? 'DURABLE' : 'FAILED', snapshot_date: snapshotDate, keys, verified_keys, missing_keys };
 }
 
-function noDataAck(snapshotDate: string): CronPersistenceAck {
-  return {
-    durable: false,
-    status: 'NOT_APPLICABLE_NO_DATA',
-    snapshot_date: snapshotDate,
-    keys: [],
-    verified_keys: [],
-    missing_keys: [],
-    reason: 'NO_OBSERVED_SOURCE_DATA',
-  };
+async function persistNoDataSnapshots(
+  storage: MultiStorage,
+  classes: AssetClass[],
+  snapshotDate: string,
+): Promise<CronPersistenceAck> {
+  const fetchedAt = new Date().toISOString();
+  for (const cls of classes) {
+    const key = `snap:${cls}:${snapshotDate}`;
+    const target = cls === 'FCI' ? storage.fci : storage.assets;
+    await target.put(key, JSON.stringify({
+      asset_class: cls,
+      date: snapshotDate,
+      fetched_at: fetchedAt,
+      assets: [],
+      total_assets: 0,
+      source_status: 'ERROR',
+      data_class: 'OBSERVED_UNAVAILABLE',
+      no_data: true,
+      reason: 'NO_OBSERVED_SOURCE_DATA',
+    }), 7 * 24 * 60 * 60);
+  }
+  const ack = await verifySnapshotWrites(storage, classes, snapshotDate);
+  return ack.durable
+    ? { ...ack, status: 'DURABLE_NO_DATA', reason: 'NO_OBSERVED_SOURCE_DATA' }
+    : ack;
 }
 
 function sourceMeta(result: MultiOracleResponse): Record<string, unknown> {
@@ -98,12 +113,13 @@ async function classResult(
 ): Promise<CronJobResult> {
   const result = await runMultiOracle({ storage, classes, topN: 5 });
   if (result.total_assets === 0 || result.metadata.classes_fetched.length === 0) {
+    const persistence_ack = await persistNoDataSnapshots(storage, classes, result.snapshot_date);
     return {
       job,
-      ok: true,
+      ok: persistence_ack.durable,
       duration_ms: Date.now() - start,
       meta: { ...sourceMeta(result), degraded_no_data: true },
-      persistence_ack: noDataAck(result.snapshot_date),
+      persistence_ack,
     };
   }
   const persistedClasses = result.metadata.classes_fetched.filter((cls) => classes.includes(cls));
@@ -117,7 +133,7 @@ async function classResult(
   };
 }
 
-/** Run a single cron job. Source unavailability is explicit PARTIAL state, never fabricated persistence. */
+/** Run a single cron job. No-source states persist a truthful empty status snapshot; assets are never fabricated. */
 async function runJob(job: CronJobName, storage: MultiStorage): Promise<CronJobResult> {
   const start = Date.now();
   try {
@@ -133,12 +149,14 @@ async function runJob(job: CronJobName, storage: MultiStorage): Promise<CronJobR
       case 'refresh_predictions': {
         const result = await runMultiOracle({ storage, topN: 5 });
         if (result.total_assets === 0 || result.metadata.classes_fetched.length === 0) {
+          const classes: AssetClass[] = ['FCI', 'PLAZO_FIJO', 'ACCIONES', 'BONOS', 'CEDEARS', 'ETF_CEDEARS'];
+          const persistence_ack = await persistNoDataSnapshots(storage, classes, result.snapshot_date);
           return {
             job,
-            ok: true,
+            ok: persistence_ack.durable,
             duration_ms: Date.now() - start,
             meta: { ...sourceMeta(result), degraded_no_data: true },
-            persistence_ack: noDataAck(result.snapshot_date),
+            persistence_ack,
           };
         }
         const persistence_ack = await verifySnapshotWrites(storage, result.metadata.classes_fetched, result.snapshot_date);
@@ -164,7 +182,6 @@ async function runJob(job: CronJobName, storage: MultiStorage): Promise<CronJobR
   }
 }
 
-/** Run all cron jobs sequentially (to avoid KV write contention). */
 export async function runAllCronJobs(env?: {
   ORACLE_FCI_HISTORY?: KVNamespace;
   ORACLE_ASSETS_HISTORY?: KVNamespace;
