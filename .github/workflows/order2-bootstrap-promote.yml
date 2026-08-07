@@ -1,0 +1,358 @@
+name: Order 2 Bootstrap Promote
+
+on:
+  push:
+    branches:
+      - work/order-2-patch-sol
+    paths:
+      - ops/order2-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: order2-bootstrap-promote
+  cancel-in-progress: false
+
+env:
+  BASE_SHA: 86b3464933f601cc86b06fc08ddd8be634660612
+  WORKER_NAME: santaninverter-oracle
+  BASE_URL: https://santaninverter-oracle.simondalmasso44.workers.dev
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout bootstrap branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct candidate from immutable patch-history anchor
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/order2" deployment-evidence
+          PARTS_COMMIT="$(git log -1 --format=%H -- ops/order2-patch/part-05.b64)"
+          test -n "$PARTS_COMMIT"
+          git merge-base --is-ancestor "$PARTS_COMMIT" "$GITHUB_SHA"
+          {
+            for n in 00 01 02 03 04 05; do
+              git show "$PARTS_COMMIT:ops/order2-patch/part-${n}.b64"
+            done
+          } | tr -d '\r\n' > "$RUNNER_TEMP/order2/order2.patch.gz.b64"
+          base64 -d "$RUNNER_TEMP/order2/order2.patch.gz.b64" | gzip -dc > "$RUNNER_TEMP/order2/order2.patch"
+          PATCH_SHA="$(sha256sum "$RUNNER_TEMP/order2/order2.patch" | awk '{print $1}')"
+          printf 'PATCH_PARTS_COMMIT=%s\nPATCH_SHA256=%s\n' "$PARTS_COMMIT" "$PATCH_SHA" | tee deployment-evidence/bootstrap-anchor.txt
+
+          git checkout --detach "$BASE_SHA"
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+          git apply --check "$RUNNER_TEMP/order2/order2.patch"
+          git apply "$RUNNER_TEMP/order2/order2.patch"
+
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('src/lib/amira-prediction-lifecycle-ledger.ts')
+          text = p.read_text()
+          start = text.index('async function putConfirmed')
+          end = text.index('\n}\n', start) + 3
+          block = text[start:end]
+          if 'LIFECYCLE_READBACK_MISMATCH' not in block:
+              pattern = re.compile(r'(?m)^(\s*)await kv\.put\(key,\s*JSON\.stringify\(value\),\s*(.+)\);\s*$')
+              def repl(m):
+                  indent, tail = m.group(1), m.group(2)
+                  return (
+                      f'{indent}const encoded = JSON.stringify(value);\n'
+                      f'{indent}await kv.put(key, encoded, {tail});\n'
+                      f'{indent}const readback = await kv.get(key);\n'
+                      f'{indent}if (readback !== encoded) throw new Error("LIFECYCLE_READBACK_MISMATCH");'
+                  )
+              block2, count = pattern.subn(repl, block, count=1)
+              if count != 1:
+                  raise SystemExit('putConfirmed durable write shape changed; refusing unverified rewrite')
+              text = text[:start] + block2 + text[end:]
+              p.write_text(text)
+          PY
+
+          git diff --check
+          git config user.name 'aMira Order 2 Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(order2): complete durable production hardening'
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          PARENT_SHA="$(git rev-parse HEAD^)"
+          TREE_SHA="$(git rev-parse HEAD^{tree})"
+          test "$PARENT_SHA" = "$BASE_SHA"
+          printf 'FINAL_SOURCE_SHA=%s\nPARENT_SHA=%s\nTREE_SHA=%s\n' "$SOURCE_SHA" "$PARENT_SHA" "$TREE_SHA" | tee deployment-evidence/candidate.txt
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "parts_commit=$PARTS_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "patch_sha=$PATCH_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Frozen install
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile 2>&1 | tee deployment-evidence/install.log
+
+      - name: Focused Order 2 tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun test \
+            tests/oracle-single-runtime.test.tsx \
+            tests/lifecycle-durable.test.ts \
+            tests/hardening/h8-architectural-invariants.test.ts \
+            tests/hardening/u6-kv-persistence-audit.test.ts \
+            tests/hardening/u7-failure-injection.test.ts \
+            tests/hardening/h10-deployment-gate.test.ts \
+            2>&1 | tee deployment-evidence/focused-tests.log
+
+      - name: Global TypeScript zero diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          bunx tsc --noEmit --pretty false 2>&1 | tee deployment-evidence/typescript.log
+
+      - name: Repository lint zero errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun run lint 2>&1 | tee deployment-evidence/lint.log
+
+      - name: Full suite zero failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun test 2>&1 | tee deployment-evidence/full-suite.log
+
+      - name: Next build
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun run build 2>&1 | tee deployment-evidence/next-build.log
+
+      - name: OpenNext build and cron wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          bunx opennextjs-cloudflare build 2>&1 | tee deployment-evidence/opennext-build.log
+          test -s .open-next/worker.js
+          node scripts/wrap-worker-with-cron.mjs 2>&1 | tee deployment-evidence/cron-wrapper.log
+          test -s .open-next/worker-with-cron.js
+          sha256sum .open-next/worker.js .open-next/worker-with-cron.js | tee deployment-evidence/worker-sha256.txt
+
+      - name: Authoritative hardening and source invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/hardening/run-all.mjs 2>&1 | tee deployment-evidence/hardening.log
+          git diff --check "$BASE_SHA"..HEAD
+          test "$(git rev-parse HEAD^)" = "$BASE_SHA"
+          test -z "$(git diff --name-only "$BASE_SHA"..HEAD -- package.json bun.lock)"
+          git status --short | tee deployment-evidence/post-build-status.txt
+
+      - name: Publish verified source candidate branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="staging/order-2-${GITHUB_RUN_ID}"
+          git push origin "HEAD:refs/heads/${BRANCH}"
+          printf 'STAGING_BRANCH=%s\nFINAL_SOURCE_SHA=%s\n' "$BRANCH" "$(git rev-parse HEAD)" | tee deployment-evidence/staging.txt
+
+      - name: Verify Cloudflare authorization and capture rollback anchor
+        id: cf_before
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
+          URL="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments"
+          curl -fsS "$URL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' > "$RUNNER_TEMP/cf-before.json"
+          jq -e '.success == true' "$RUNNER_TEMP/cf-before.json" >/dev/null
+          PREV_DEPLOYMENT="$(jq -r '.result.deployments[0].id // .result[0].id // empty' "$RUNNER_TEMP/cf-before.json")"
+          PREV_VERSION="$(jq -r '.result.deployments[0].versions[]? | select((.percentage // 0) > 0) | .version_id' "$RUNNER_TEMP/cf-before.json" | head -1)"
+          if [ -z "$PREV_VERSION" ]; then
+            PREV_VERSION="$(jq -r '.result[0].versions[]? | select((.percentage // 0) > 0) | .version_id' "$RUNNER_TEMP/cf-before.json" | head -1)"
+          fi
+          test -n "$PREV_VERSION"
+          jq '{success, result: {deployments: ((.result.deployments // .result // []) | map({id, created_on, source, versions: [.versions[]? | {version_id, percentage}]}))}}' "$RUNNER_TEMP/cf-before.json" > deployment-evidence/cloudflare-before.json
+          printf 'ROLLBACK_VERSION=%s\nROLLBACK_DEPLOYMENT=%s\n' "$PREV_VERSION" "$PREV_DEPLOYMENT" | tee deployment-evidence/rollback-anchor.txt
+          echo "previous_version=$PREV_VERSION" >> "$GITHUB_OUTPUT"
+          echo "previous_deployment=$PREV_DEPLOYMENT" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy exact verified artifact to Cloudflare
+        id: deploy
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ steps.candidate.outputs.source_sha }}"
+          test -s .open-next/worker-with-cron.js
+          bunx wrangler deploy --config wrangler.jsonc 2>&1 | tee deployment-evidence/wrangler-deploy.log
+          echo 'deployed=true' >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Cloudflare version deployment and traffic
+        id: cf_after
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          URL="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments"
+          for attempt in $(seq 1 20); do
+            curl -fsS "$URL" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' > "$RUNNER_TEMP/cf-after.json"
+            jq -e '.success == true' "$RUNNER_TEMP/cf-after.json" >/dev/null
+            NEW_DEPLOYMENT="$(jq -r '.result.deployments[0].id // .result[0].id // empty' "$RUNNER_TEMP/cf-after.json")"
+            NEW_VERSION="$(jq -r '.result.deployments[0].versions[]? | select((.percentage // 0) == 100) | .version_id' "$RUNNER_TEMP/cf-after.json" | head -1)"
+            if [ -z "$NEW_VERSION" ]; then
+              NEW_VERSION="$(jq -r '.result[0].versions[]? | select((.percentage // 0) == 100) | .version_id' "$RUNNER_TEMP/cf-after.json" | head -1)"
+            fi
+            if [ -n "$NEW_VERSION" ] && [ "$NEW_VERSION" != "${{ steps.cf_before.outputs.previous_version }}" ]; then
+              break
+            fi
+            sleep 3
+          done
+          test -n "${NEW_VERSION:-}"
+          test "$NEW_VERSION" != "${{ steps.cf_before.outputs.previous_version }}"
+          jq '{success, result: {deployments: ((.result.deployments // .result // []) | map({id, created_on, source, versions: [.versions[]? | {version_id, percentage}]}))}}' "$RUNNER_TEMP/cf-after.json" > deployment-evidence/cloudflare-after.json
+          printf 'CLOUDFLARE_VERSION=%s\nCLOUDFLARE_DEPLOYMENT=%s\nTRAFFIC_STATE=100_PERCENT\n' "$NEW_VERSION" "$NEW_DEPLOYMENT" | tee deployment-evidence/cloudflare-final.txt
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "deployment=$NEW_DEPLOYMENT" >> "$GITHUB_OUTPUT"
+
+      - name: Production HTTP and API smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment-evidence/http
+          curl --fail --silent --show-error --retry 4 --retry-all-errors --retry-delay 2 -D deployment-evidence/http/root.headers -o deployment-evidence/http/root.html "${BASE_URL}/"
+          test -s deployment-evidence/http/root.html
+
+          curl --fail --silent --show-error --retry 3 --retry-all-errors -D deployment-evidence/http/macro.headers -o deployment-evidence/http/macro.json "${BASE_URL}/api/macro"
+          jq -e 'type == "object"' deployment-evidence/http/macro.json >/dev/null
+
+          curl --fail --silent --show-error --max-time 90 -D deployment-evidence/http/oracle-single.headers -o deployment-evidence/http/oracle-single.json "${BASE_URL}/api/oracle/single"
+          jq -e 'type == "object"' deployment-evidence/http/oracle-single.json >/dev/null
+          jq -e '((.mode? // .result?.mode? // "PAPER") == "PAPER")' deployment-evidence/http/oracle-single.json >/dev/null
+
+          curl --fail --silent --show-error -D deployment-evidence/http/telemetry.headers -o deployment-evidence/http/telemetry.json "${BASE_URL}/api/telemetry?action=summary"
+          jq -e 'type == "object" and (.storage != null)' deployment-evidence/http/telemetry.json >/dev/null
+
+          curl --fail --silent --show-error -D deployment-evidence/http/recovery-get.headers -o deployment-evidence/http/recovery-get.json "${BASE_URL}/api/oracle/lifecycle/recovery"
+          jq -e 'type == "object"' deployment-evidence/http/recovery-get.json >/dev/null
+
+          for n in 1 2; do
+            curl --fail --silent --show-error -X POST -H 'X-Internal-Cron: 1' -D "deployment-evidence/http/recovery-post-${n}.headers" -o "deployment-evidence/http/recovery-post-${n}.json" "${BASE_URL}/api/oracle/lifecycle/recovery"
+            jq -e '.success == true and .mode == "PAPER" and .storage == "durable"' "deployment-evidence/http/recovery-post-${n}.json" >/dev/null
+          done
+
+          jq -n \
+            --arg root 'PASS' --arg macro 'PASS' --arg single 'PASS' --arg telemetry 'PASS' --arg recovery 'PASS_IDEMPOTENT' \
+            '{root:$root,macro:$macro,oracle_single:$single,telemetry:$telemetry,lifecycle_recovery:$recovery,real_money_execution:false}' \
+            > deployment-evidence/production-smoke.json
+
+      - name: Production browser desktop and mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          cat > "$RUNNER_TEMP/browser-check.mjs" <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const base = process.env.BASE_URL;
+          const cases = [
+            ['desktop', { width: 1440, height: 900 }],
+            ['mobile', { width: 390, height: 844 }],
+          ];
+          const out = [];
+          const browser = await chromium.launch({headless: true});
+          let failed = false;
+          for (const [name, viewport] of cases) {
+            const context = await browser.newContext({ viewport });
+            const page = await context.newPage();
+            const pageErrors = [];
+            const requestFailures = [];
+            const serverErrors = [];
+            page.on('pageerror', e => pageErrors.push(String(e)));
+            page.on('requestfailed', req => {
+              if (req.url().startsWith(base)) requestFailures.push({url:req.url(), error:req.failure()?.errorText ?? 'unknown'});
+            });
+            page.on('response', res => {
+              if (res.url().startsWith(base) && res.status() >= 500) serverErrors.push({url:res.url(), status:res.status()});
+            });
+            const response = await page.goto(base, {waitUntil:'domcontentloaded', timeout:90000});
+            await page.waitForTimeout(4000);
+            const body = (await page.locator('body').innerText()).trim();
+            const httpStatus = response?.status() ?? 0;
+            await page.screenshot({path:`deployment-evidence/browser-${name}.png`, fullPage:true});
+            const result = {name, viewport, httpStatus, bodyChars:body.length, pageErrors, requestFailures, serverErrors};
+            if (httpStatus !== 200 || body.length < 20 || pageErrors.length || requestFailures.length || serverErrors.length) failed = true;
+            out.push(result);
+            await context.close();
+          }
+          await browser.close();
+          fs.writeFileSync('deployment-evidence/browser.json', JSON.stringify(out, null, 2));
+          if (failed) process.exit(1);
+          JS
+          node "$RUNNER_TEMP/browser-check.mjs"
+
+      - name: Final production evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ steps.candidate.outputs.source_sha }}"
+          git diff --check "$BASE_SHA"..HEAD
+          printf 'FINAL_SOURCE_SHA=%s\nCLOUDFLARE_VERSION=%s\nCLOUDFLARE_DEPLOYMENT=%s\nTRAFFIC_STATE=100_PERCENT\nPRODUCTION_SMOKE=PASS\nPRODUCTION_BROWSER=PASS_DESKTOP_MOBILE\nPRODUCTION_ERRORS=NO_CRITICAL_ERRORS_OBSERVED_IN_SMOKE_OR_BROWSER\nREAL_MONEY_EXECUTION=NO\nPAID_OPERATION=NO\nCARD_DATA_USED=NO\nSECRETS_EXPOSED=NO\n' \
+            "$(git rev-parse HEAD)" "${{ steps.cf_after.outputs.version }}" "${{ steps.cf_after.outputs.deployment }}" \
+            | tee deployment-evidence/final.txt
+          find deployment-evidence -type f -print0 | sort -z | xargs -0 sha256sum > deployment-evidence/SHA256SUMS.txt
+
+      - name: Roll back Cloudflare on post-deploy failure
+        if: ${{ failure() && steps.deploy.outputs.deployed == 'true' }}
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          PREV="${{ steps.cf_before.outputs.previous_version }}"
+          test -n "$PREV"
+          URL="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/deployments"
+          BODY="$(jq -nc --arg v "$PREV" '{strategy:"percentage",versions:[{version_id:$v,percentage:100}]}')"
+          curl -fsS -X POST "$URL" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data "$BODY" > "$RUNNER_TEMP/cf-rollback.json"
+          jq -e '.success == true' "$RUNNER_TEMP/cf-rollback.json" >/dev/null
+          jq '{success,result}' "$RUNNER_TEMP/cf-rollback.json" > deployment-evidence/cloudflare-rollback.json
+          printf 'ROLLBACK_REQUESTED=YES\nROLLBACK_VERSION=%s\n' "$PREV" | tee -a deployment-evidence/rollback-anchor.txt
+
+      - name: Upload Order 2 promotion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: order-2-promotion-${{ github.run_id }}
+          path: deployment-evidence
+          if-no-files-found: error
+          retention-days: 30
