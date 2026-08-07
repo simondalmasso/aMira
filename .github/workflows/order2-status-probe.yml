@@ -1,0 +1,65 @@
+name: Order 2 Status Probe
+
+on:
+  push:
+    branches: [work/order-2-patch-sol]
+    paths: [ops/order2-status-trigger.txt]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wait and verify final reconciled state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          REPO='simonkey888/aMira'
+          BASE='86b3464933f601cc86b06fc08ddd8be634660612'
+          FINAL=''
+          FINALIZER=''
+          for attempt in $(seq 1 100); do
+            PR="$(curl -fsS "https://api.github.com/repos/${REPO}/pulls/1" -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json')"
+            COMMENTS="$(curl -fsS "https://api.github.com/repos/${REPO}/issues/2/comments?per_page=100" -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json')"
+            FINAL="$(printf '%s' "$PR" | jq -r '.head.sha')"
+            MARK="$(printf '%s' "$COMMENTS" | jq -r '[.[] | select(.body | contains("ORDER_2_COMPLETE=YES"))] | length')"
+            if [ "$(printf '%s' "$PR" | jq -r '.state')" = 'open' ] && \
+               [ "$(printf '%s' "$PR" | jq -r '.draft')" = 'true' ] && \
+               [ "$(printf '%s' "$PR" | jq -r '.merged')" = 'false' ] && \
+               [ "$FINAL" != "$BASE" ] && [ "$MARK" -gt 0 ]; then
+              break
+            fi
+            sleep 6
+          done
+          test -n "$FINAL"
+          test "$FINAL" != "$BASE"
+          git fetch origin "$FINAL"
+          test "$(git rev-parse FETCH_HEAD)" = "$FINAL"
+          test "$(git rev-parse FETCH_HEAD^)" = "$BASE"
+          test -s docs/CURRENT_STATE.md || git show "$FINAL:docs/CURRENT_STATE.md" >/dev/null
+          git show "$FINAL:docs/CURRENT_STATE.md" | grep -q 'PAPER'
+          git show "$FINAL:docs/oraculo-santander-system-map.md" >/dev/null
+
+          RUNS="$(curl -fsS "https://api.github.com/repos/${REPO}/actions/workflows/order2-final-reconcile.yml/runs?branch=work%2Forder-2-patch-sol&per_page=20" -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json')"
+          FINALIZER="$(printf '%s' "$RUNS" | jq -r '[.workflow_runs[] | select(.conclusion=="success")][0].id // empty')"
+          test -n "$FINALIZER"
+
+          git checkout work/order-2-patch-sol
+          printf 'ORDER_2_FINAL_STATUS=PASS\nFINAL_SOURCE_SHA=%s\nFINALIZER_RUN_ID=%s\nVERIFIED_AT=%s\n' "$FINAL" "$FINALIZER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ops/order2-final-status.txt
+          git config user.name 'aMira Order 2 Probe'
+          git config user.email 'actions@users.noreply.github.com'
+          git add ops/order2-final-status.txt
+          git commit -m 'chore(order2): record final reconciled status'
+          git push origin HEAD:work/order-2-patch-sol
