@@ -17,18 +17,18 @@ const INPUT: MarketStateInput = {
 };
 
 const TELEMETRY = {
-  state: 'degraded-memory',
+  state: 'durable',
   binding: 'ORACLE_PREDICTIONS',
-  bindingAvailable: false,
+  bindingAvailable: true,
   pendingWrites: 0,
-  lastSuccessfulReadAt: null,
-  lastSuccessfulWriteAt: null,
+  lastSuccessfulReadAt: new Date(0).toISOString(),
+  lastSuccessfulWriteAt: new Date(0).toISOString(),
   lastErrorAt: null,
   lastError: null,
 };
 
 const LIFECYCLE = {
-  storage: 'degraded-memory',
+  storage: 'durable',
   binding: 'ORACLE_PREDICTIONS',
   total_predictions: 0,
   pending: 0,
@@ -88,7 +88,7 @@ beforeEach(() => {
 });
 
 describe('/api/oracle/single runtime contract', () => {
-  test('READY executes the canonical V1 engine exactly once and reuses its vector for V3', async () => {
+  test('READY executes the canonical V1 engine exactly once and reuses its vector for V3 when durability is confirmed', async () => {
     const vector = runSinglePass(INPUT);
     const counters = { v1: 0, v3: 0, lifecycle: 0 };
     const { GET } = createOracleSingleHandlers(dependenciesFor(vector, counters));
@@ -99,12 +99,32 @@ describe('/api/oracle/single runtime contract', () => {
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
     expect(body.status).toBe('READY');
+    expect(body.warnings).toEqual([]);
     expect(counters).toEqual({ v1: 1, v3: 1, lifecycle: 1 });
     expect(body.learning.status).toBe('NO_HISTORY');
     expect(body.learning.sampleCount).toBe(0);
     expect(body.learning.mean_absolute_error).toBeNull();
     expect(body.learning.directional_accuracy_rate).toBeNull();
     expect(body.learning.mean_brier_score).toBeNull();
+  });
+
+  test('durability degradation is visible as PARTIAL without discarding the canonical prediction', async () => {
+    const vector = runSinglePass(INPUT);
+    const counters = { v1: 0, v3: 0, lifecycle: 0 };
+    const dependencies = dependenciesFor(vector, counters);
+    dependencies.getLifecycleLedgerSnapshot = (async () => ({ ...LIFECYCLE, storage: 'degraded-memory' })) as OracleSingleDependencies['getLifecycleLedgerSnapshot'];
+    dependencies.flushTelemetryWrites = (async () => ({ ...TELEMETRY, state: 'degraded-memory', bindingAvailable: false })) as OracleSingleDependencies['flushTelemetryWrites'];
+    const { GET } = createOracleSingleHandlers(dependencies);
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.status).toBe('PARTIAL');
+    expect(body.warnings).toEqual(['LIFECYCLE_NOT_DURABLE', 'TELEMETRY_NOT_DURABLE']);
+    expect(body.vector.scores.length).toBeGreaterThan(0);
+    expect(counters).toEqual({ v1: 1, v3: 1, lifecycle: 1 });
   });
 
   test('missing primary score returns controlled PARTIAL without V2/V3 or lifecycle mutation', async () => {
