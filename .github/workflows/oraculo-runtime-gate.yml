@@ -201,6 +201,8 @@ jobs:
           grep -q '"main": ".open-next/worker-with-cron.js"' wrangler.jsonc
           test "$(python3 -c 'import json; print(json.load(open("wrangler.jsonc"))["name"])')" = "santaninverter-oracle"
           git diff --quiet "$ORDER_2_BASE_SHA...HEAD" -- src/lib/paper-broker.ts src/app/api/paper-broker/route.ts tests/paper-broker-risk.test.ts
+          grep -q "X-aMira-Contract" src/app/api/oracle/single/route.ts
+          grep -q "order2-canonical-v2" src/app/api/oracle/single/route.ts
           mkdir -p deployment-evidence
           {
             echo "source_sha=$(git rev-parse HEAD)"
@@ -208,6 +210,7 @@ jobs:
             echo "incremental_cost_usd=0"
             echo "paper_only=true"
             echo "card_data_used=false"
+            echo "expected_contract=order2-canonical-v2"
           } > deployment-evidence/manifest.txt
 
       - name: Setup Node 22.23.1
@@ -270,17 +273,51 @@ jobs:
           WORKER_NAME="$(python3 -c 'import json; print(json.load(open("wrangler.jsonc"))["name"])')"
           API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER_NAME/deployments"
           curl --fail-with-body --silent --show-error -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" "$API" > deployment-evidence/deployments-after.json
-          python3 -c 'import json; d=json.load(open("deployment-evidence/deployments-after.json")); assert d.get("success") is True'
+          python3 - <<'PY'
+          import json
+          d=json.load(open('deployment-evidence/deployments-after.json'))
+          assert d.get('success') is True
+          deployments=d.get('result',{}).get('deployments',[])
+          assert deployments
+          latest=deployments[0]
+          versions=latest.get('versions',[])
+          assert len(versions) == 1 and versions[0].get('percentage') == 100
+          with open('deployment-evidence/deployment-summary.txt','w') as f:
+              f.write(f"deployment_id={latest.get('id')}\n")
+              f.write(f"version_id={versions[0].get('version_id')}\n")
+              f.write(f"traffic_percentage={versions[0].get('percentage')}\n")
+              f.write(f"created_on={latest.get('created_on')}\n")
+          PY
+
+      - name: Verify propagated canonical Oracle contract
+        run: |
+          set -euo pipefail
+          rm -f deployment-evidence/oracle-single.json deployment-evidence/oracle-single.headers
+          for attempt in $(seq 1 12); do
+            curl --fail-with-body --silent --show-error \
+              -H 'Cache-Control: no-cache, no-store' \
+              -D deployment-evidence/oracle-single.headers \
+              "$BASE_URL/api/oracle/single?contract=order2-canonical-v2&source=$EXPECTED_SHA&attempt=$attempt" \
+              -o deployment-evidence/oracle-single.json || true
+            if grep -qi '^x-amira-contract: order2-canonical-v2' deployment-evidence/oracle-single.headers \
+              && python3 -c 'import json; d=json.load(open("deployment-evidence/oracle-single.json")); assert d.get("success") is True and d.get("status") in ("READY","PARTIAL"); assert isinstance(d.get("macro",{}).get("fieldProvenance"), list)' 2>/dev/null; then
+              echo "canonical_contract_propagated_attempt=$attempt" > deployment-evidence/propagation.txt
+              break
+            fi
+            if [ "$attempt" -eq 12 ]; then
+              echo "canonical_contract_propagation=FAILED" > deployment-evidence/propagation.txt
+              exit 1
+            fi
+            sleep 5
+          done
 
       - name: Production smoke and canonical cron persistence verification
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error "$BASE_URL/" -o deployment-evidence/home.html
-          curl --fail-with-body --silent --show-error "$BASE_URL/api/oracle/single" -o deployment-evidence/oracle-single.json
-          python3 -c 'import json; d=json.load(open("deployment-evidence/oracle-single.json")); assert d.get("success") is True and d.get("status") in ("READY","PARTIAL"); assert isinstance(d.get("macro",{}).get("fieldProvenance"), list)'
-          curl --fail-with-body --silent --show-error "$BASE_URL/api/oracle/cron" -o deployment-evidence/cron-health.json
+          curl --fail-with-body --silent --show-error -H 'Cache-Control: no-cache, no-store' "$BASE_URL/" -o deployment-evidence/home.html
+          curl --fail-with-body --silent --show-error -H 'Cache-Control: no-cache, no-store' "$BASE_URL/api/oracle/cron?source=$EXPECTED_SHA" -o deployment-evidence/cron-health.json
           python3 -c 'import json; d=json.load(open("deployment-evidence/cron-health.json")); assert d.get("success") is True and d.get("mode") == "READ_ONLY_HEALTH"; b=d.get("bindings",{}); assert b.get("fci") and b.get("assets") and b.get("predictions")'
-          curl --fail-with-body --silent --show-error -X POST "$BASE_URL/api/oracle/cron" -o deployment-evidence/cron-execution.json
+          curl --fail-with-body --silent --show-error -H 'Cache-Control: no-cache, no-store' -X POST "$BASE_URL/api/oracle/cron?source=$EXPECTED_SHA" -o deployment-evidence/cron-execution.json
           python3 -c 'import json; d=json.load(open("deployment-evidence/cron-execution.json")); assert d.get("success") is True; assert d.get("lifecycle",{}).get("storage") == "durable"; jobs=d.get("jobs",[]); assert jobs and all(j.get("ok") is True and j.get("persistence_ack",{}).get("durable") is True for j in jobs)'
 
       - name: Production contract assertions
@@ -300,7 +337,7 @@ jobs:
           assert d.get('telemetryStorage',{}).get('state') == 'durable'
           PY
           ! grep -Eqi 'SECRET_INTERNAL_DETAIL|stack trace|/home/runner/' deployment-evidence/oracle-single.json
-          printf '%s\n' "traffic_state=production" "production_smoke=PASS" "production_cron=PASS" "production_errors=0_observed" > deployment-evidence/production-summary.txt
+          printf '%s\n' "traffic_state=100_percent_latest_version" "production_smoke=PASS" "production_contract=order2-canonical-v2" "production_cron=PASS" "production_errors=0_observed" > deployment-evidence/production-summary.txt
 
       - name: Evidence checksums
         if: always()
