@@ -233,6 +233,9 @@ function mulberry32(seed: number): () => number {
 // ============================================================================
 
 export class PaperBroker {
+  private static readonly LEVERAGE_LIMIT = 1;
+  private static readonly INVARIANT_TOLERANCE = 1e-8;
+
   private portfolio: PaperPortfolio;
   private fillParams: FillSimulationParams;
   private orderCounter: number = 0;
@@ -245,26 +248,30 @@ export class PaperBroker {
     mepRate: number = 1445,
     fillParams: Partial<FillSimulationParams> = {},
   ) {
+    if (!Number.isFinite(initialCapitalUSD) || initialCapitalUSD < 0) {
+      throw new RangeError('Initial capital must be a finite non-negative USD amount');
+    }
+    this.assertValidMEP(mepRate);
+
     this.fillParams = { ...DEFAULT_FILL_PARAMS, ...fillParams };
+    this.validateFillParams(this.fillParams);
     this.rng = this.fillParams.seed !== null ? mulberry32(this.fillParams.seed) : null;
 
-    // BUG-009 FIX: Portfolio starts with ONLY USD cash.
-    // cashARS = 0 — ARS is obtained by selling USD at MEP rate when buying ARS products.
-    // At t0: totalValueUSD = cashUSD + cashARS/mepRate = initialCapitalUSD + 0 = initialCapitalUSD ✅
+    const now = new Date().toISOString();
     this.portfolio = {
       id: `PAPER-${Date.now()}`,
       totalValueUSD: initialCapitalUSD,
-      totalValueARS: 0, // No ARS cash until FX conversion
+      totalValueARS: initialCapitalUSD * mepRate,
       cashUSD: initialCapitalUSD,
-      cashARS: 0, // BUG-009 FIX: was initialCapitalUSD * mepRate (double capital)
+      cashARS: 0,
       currentMEPRate: mepRate,
       positions: new Map(),
       orders: [],
       realizedPnL: 0,
       unrealizedPnL: 0,
       totalCommissions: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
       currentRegime: 'NORMAL',
       rebalanceCount: 0,
     };
@@ -294,13 +301,29 @@ export class PaperBroker {
     const orderId = `ORD-${++this.orderCounter}-${Date.now()}`;
     const now = new Date().toISOString();
     const currency = params.currency ?? 'ARS';
+    const orderType = params.orderType ?? 'MARKET';
 
-    // Calculate quantity from target weight and portfolio value
-    const portfolioValue = currency === 'USD'
-      ? this.portfolio.totalValueUSD
-      : this.portfolio.totalValueARS;
-    const targetValue = portfolioValue * params.targetWeight;
-    const quantity = params.currentPrice > 0 ? targetValue / params.currentPrice : 0;
+    const validationPriceResult = this.resolveValidationPrice(
+      orderType,
+      params.currentPrice,
+      params.limitPrice,
+    );
+    const validationPrice = validationPriceResult.price;
+    const totalValueARS = this.computePortfolioMetrics(
+      this.clonePositions(this.portfolio.positions),
+      this.portfolio.cashARS,
+      this.portfolio.cashUSD,
+      this.portfolio.currentMEPRate,
+    ).totalValueARS;
+    const targetValueARS = Number.isFinite(params.targetWeight)
+      ? totalValueARS * params.targetWeight
+      : Number.NaN;
+    const targetValueNative = currency === 'USD'
+      ? targetValueARS / this.portfolio.currentMEPRate
+      : targetValueARS;
+    const quantity = validationPrice !== null && validationPrice > 0
+      ? targetValueNative / validationPrice
+      : 0;
 
     const order: PaperOrder = {
       id: orderId,
@@ -309,7 +332,7 @@ export class PaperBroker {
       productId: params.productId,
       productName: params.productName,
       side: params.side,
-      orderType: params.orderType ?? 'MARKET',
+      orderType,
       quantity: Math.round(quantity * 100) / 100,
       targetWeight: params.targetWeight,
       limitPrice: params.limitPrice ?? null,
@@ -328,304 +351,499 @@ export class PaperBroker {
       executionLatencyMs: 0,
     };
 
-    // Validate order
-    const validation = this.validateOrder(order);
-    if (!validation.valid) {
-      order.status = 'REJECTED';
-      order.rejectionReason = validation.reason ?? 'Order validation failed';
-      this.portfolio.orders.push(order);
-      this.logAudit(order, 'REJECTED', validation.reason ?? 'Order validation failed');
-      return order;
+    const requestValidation = this.validateRequest(order, params.currentPrice, validationPriceResult.reason);
+    if (!requestValidation.valid || validationPrice === null) {
+      return this.rejectOrder(order, requestValidation.reason ?? validationPriceResult.reason ?? 'INVALID_ORDER');
     }
 
-    // Submit for execution
-    order.status = 'SUBMITTED';
-    this.portfolio.orders.push(order);
+    const snapshot = this.createFinancialSnapshot(params.currentPrice, order.productId);
+    const preflight = this.validatePreflight(order, validationPrice, params.currentPrice, snapshot);
+    if (!preflight.valid) {
+      return this.rejectOrder(order, preflight.reason ?? 'PREFLIGHT_REJECTED');
+    }
 
-    // Simulate execution
-    return this.simulateFill(order, params.currentPrice);
+    order.status = 'SUBMITTED';
+    return this.simulateFillAtomically(order, validationPrice, params.currentPrice, snapshot, preflight);
   }
 
-  // ─── Validate an order before execution ───
-
-  private validateOrder(order: PaperOrder): { valid: boolean; reason?: string } {
-    // Check: quantity must be positive
-    if (order.quantity <= 0) {
-      return { valid: false, reason: 'Order quantity must be positive' };
+  private resolveValidationPrice(
+    orderType: OrderType,
+    currentPrice: number,
+    limitPrice: number | undefined,
+  ): { price: number | null; reason?: string } {
+    if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
+      return { price: null, reason: 'INVALID_CURRENT_PRICE' };
     }
-
-    // Check: target weight must be [0, 1]
-    if (order.targetWeight < 0 || order.targetWeight > 1) {
-      return { valid: false, reason: `Target weight ${order.targetWeight} out of bounds [0,1]` };
+    if (orderType === 'MARKET') {
+      return { price: currentPrice };
     }
+    if (orderType !== 'LIMIT') {
+      return { price: null, reason: 'INVALID_ORDER_TYPE' };
+    }
+    if (limitPrice === undefined || !Number.isFinite(limitPrice) || limitPrice <= 0) {
+      return { price: null, reason: 'INVALID_LIMIT_PRICE' };
+    }
+    return { price: limitPrice };
+  }
 
-    // Check: sufficient cash for BUY orders
-    if (order.side === 'BUY') {
-      const estimatedCost = order.quantity * (order.limitPrice ?? 0);
-      if (order.fillCurrency === 'USD') {
-        if (estimatedCost > this.portfolio.cashUSD * 1.05) {
-          return { valid: false, reason: `Insufficient USD cash: need ~${estimatedCost.toFixed(0)}, have ${this.portfolio.cashUSD.toFixed(0)}` };
-        }
-      } else {
-        // ARS purchase: check if we have enough ARS, or can convert from USD
-        const arsAvailable = this.portfolio.cashARS + this.portfolio.cashUSD * this.portfolio.currentMEPRate;
-        if (estimatedCost > arsAvailable * 1.05) {
-          return { valid: false, reason: `Insufficient cash (USD+ARS): need ~${estimatedCost.toFixed(0)} ARS, have ${arsAvailable.toFixed(0)} ARS equivalent` };
-        }
+  private validateRequest(
+    order: PaperOrder,
+    currentPrice: number,
+    priceError?: string,
+  ): { valid: boolean; reason?: string } {
+    if (priceError) return { valid: false, reason: priceError };
+    if (!order.productId.trim()) return { valid: false, reason: 'INVALID_PRODUCT_ID' };
+    if (!order.productName.trim()) return { valid: false, reason: 'INVALID_PRODUCT_NAME' };
+    if (order.side !== 'BUY' && order.side !== 'SELL') return { valid: false, reason: 'INVALID_SIDE' };
+    if (order.fillCurrency !== 'ARS' && order.fillCurrency !== 'USD') return { valid: false, reason: 'INVALID_CURRENCY' };
+    if (!Number.isFinite(order.targetWeight) || order.targetWeight <= 0 || order.targetWeight > 1) {
+      return { valid: false, reason: 'INVALID_TARGET_WEIGHT' };
+    }
+    if (!Number.isFinite(order.quantity) || order.quantity <= 0) {
+      return { valid: false, reason: 'INVALID_QUANTITY' };
+    }
+    if (!Number.isFinite(order.confidenceAtCreation) || order.confidenceAtCreation < 0 || order.confidenceAtCreation > 1) {
+      return { valid: false, reason: 'INVALID_CONFIDENCE' };
+    }
+    if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
+      return { valid: false, reason: 'INVALID_CURRENT_PRICE' };
+    }
+    if (!this.isValidMEP(this.portfolio.currentMEPRate)) {
+      return { valid: false, reason: 'INVALID_MEP_RATE' };
+    }
+    if (order.orderType === 'LIMIT') {
+      const limitPrice = order.limitPrice;
+      if (limitPrice === null || !Number.isFinite(limitPrice) || limitPrice <= 0) {
+        return { valid: false, reason: 'INVALID_LIMIT_PRICE' };
+      }
+      if (order.side === 'BUY' && currentPrice > limitPrice) {
+        return { valid: false, reason: 'BUY_LIMIT_NOT_MARKETABLE' };
+      }
+      if (order.side === 'SELL' && currentPrice < limitPrice) {
+        return { valid: false, reason: 'SELL_LIMIT_NOT_MARKETABLE' };
       }
     }
-
-    // Check: sufficient position for SELL orders
-    if (order.side === 'SELL') {
-      const position = this.portfolio.positions.get(order.productId);
-      if (!position || position.quantity < order.quantity * 0.99) {
-        return { valid: false, reason: `Insufficient position: trying to sell ${order.quantity}, have ${position?.quantity ?? 0}` };
-      }
-    }
-
-    // Check: leverage constraint — total position value must not exceed portfolio value
-    // (NO leverage = 1.0x hard cap)
-    if (order.side === 'BUY') {
-      const totalAfterBuy = this.getTotalPositionValue() + order.quantity * (order.limitPrice ?? 0);
-      const maxAllowed = this.portfolio.totalValueARS * 1.0; // 1.0x leverage cap
-      if (totalAfterBuy > maxAllowed) {
-        return { valid: false, reason: `Leverage constraint: would exceed 1.0x cap` };
-      }
-    }
-
     return { valid: true };
   }
 
-  // ─── Simulate fill with slippage, latency, and probability ───
+  private validatePreflight(
+    order: PaperOrder,
+    validationPrice: number,
+    currentPrice: number,
+    snapshot: FinancialSnapshot,
+  ): FillPreflight {
+    const slippageBps = this.calculateSlippageBps();
+    const conservativeFillPrice = this.calculateFillPrice(order, validationPrice, currentPrice, slippageBps);
+    const fillValueNative = order.quantity * conservativeFillPrice;
+    const fillValueARS = this.toARS(fillValueNative, order.fillCurrency, snapshot.mepRate);
+    const commissionARS = Math.max(
+      this.fillParams.minCommissionARS,
+      fillValueARS * this.fillParams.commissionRate,
+    );
 
-  private simulateFill(order: PaperOrder, marketPrice: number): PaperOrder {
+    if (![conservativeFillPrice, fillValueNative, fillValueARS, commissionARS].every(Number.isFinite)) {
+      return { valid: false, reason: 'NON_FINITE_PREFLIGHT', slippageBps, conservativeFillPrice, maxFillValueNative: 0, maxCommissionARS: 0 };
+    }
+
+    if (order.side === 'SELL') {
+      const position = snapshot.positions.get(order.productId);
+      if (!position || position.currency !== order.fillCurrency || position.quantity + PaperBroker.INVARIANT_TOLERANCE < order.quantity) {
+        return { valid: false, reason: 'INSUFFICIENT_POSITION', slippageBps, conservativeFillPrice, maxFillValueNative: fillValueNative, maxCommissionARS: commissionARS };
+      }
+      if (order.fillCurrency === 'USD' && snapshot.cashARS + PaperBroker.INVARIANT_TOLERANCE < commissionARS) {
+        return { valid: false, reason: 'INSUFFICIENT_ARS_FOR_COMMISSION', slippageBps, conservativeFillPrice, maxFillValueNative: fillValueNative, maxCommissionARS: commissionARS };
+      }
+    } else if (order.fillCurrency === 'USD') {
+      if (snapshot.cashUSD + PaperBroker.INVARIANT_TOLERANCE < fillValueNative) {
+        return { valid: false, reason: 'INSUFFICIENT_USD_CASH', slippageBps, conservativeFillPrice, maxFillValueNative: fillValueNative, maxCommissionARS: commissionARS };
+      }
+      if (snapshot.cashARS + PaperBroker.INVARIANT_TOLERANCE < commissionARS) {
+        return { valid: false, reason: 'INSUFFICIENT_ARS_FOR_COMMISSION', slippageBps, conservativeFillPrice, maxFillValueNative: fillValueNative, maxCommissionARS: commissionARS };
+      }
+    } else {
+      const availableARS = snapshot.cashARS + snapshot.cashUSD * snapshot.mepRate;
+      if (availableARS + PaperBroker.INVARIANT_TOLERANCE < fillValueNative + commissionARS) {
+        return { valid: false, reason: 'INSUFFICIENT_ARS_EQUIVALENT_CASH', slippageBps, conservativeFillPrice, maxFillValueNative: fillValueNative, maxCommissionARS: commissionARS };
+      }
+    }
+
+    if (order.side === 'BUY') {
+      const projectedExposureARS = snapshot.grossExposureARS + fillValueARS;
+      const projectedEquityARS = snapshot.totalValueARS - commissionARS +
+        this.toARS(order.quantity * (currentPrice - conservativeFillPrice), order.fillCurrency, snapshot.mepRate);
+      if (!Number.isFinite(projectedEquityARS) || projectedEquityARS <= 0 ||
+          projectedExposureARS / projectedEquityARS > PaperBroker.LEVERAGE_LIMIT + PaperBroker.INVARIANT_TOLERANCE) {
+        return { valid: false, reason: 'LEVERAGE_LIMIT_EXCEEDED', slippageBps, conservativeFillPrice, maxFillValueNative: fillValueNative, maxCommissionARS: commissionARS };
+      }
+    }
+
+    return {
+      valid: true,
+      slippageBps,
+      conservativeFillPrice,
+      maxFillValueNative: fillValueNative,
+      maxCommissionARS: commissionARS,
+    };
+  }
+
+  private simulateFillAtomically(
+    order: PaperOrder,
+    validationPrice: number,
+    currentPrice: number,
+    snapshot: FinancialSnapshot,
+    preflight: FillPreflight,
+  ): PaperOrder {
     const now = new Date().toISOString();
-    const regimeMultiplier = this.getRegimeSlippageMultiplier();
-
-    // BUG-010 FIX: Use seeded PRNG for deterministic backtests
-    // Simulate fill probability
-    const fillRoll = this.random();
-    if (fillRoll > this.fillParams.fillProbability) {
+    if (this.random() > this.fillParams.fillProbability) {
       order.status = 'CANCELLED';
       order.updatedAt = now;
-      order.rejectionReason = 'Simulated: order not filled (low liquidity)';
-      this.logAudit(order, 'CANCELLED', 'Fill probability check failed');
+      order.rejectionReason = 'SIMULATED_LOW_LIQUIDITY';
+      this.portfolio.orders.push(order);
+      this.logAudit(order, 'CANCELLED', order.rejectionReason);
       return order;
     }
 
-    // Calculate slippage
-    const slippageBps = this.fillParams.baseSlippageBps +
-      regimeMultiplier * this.fillParams.volatilitySlippageBps;
-    order.slippageBps = slippageBps;
-
-    // Apply slippage to fill price
-    const slippageFactor = slippageBps / 10000;
-    const slipDirection = order.side === 'BUY' ? 1 : -1; // Buy: price goes up, Sell: price goes down
-    order.fillPrice = Math.round(marketPrice * (1 + slipDirection * slippageFactor) * 100) / 100;
-
-    // BUG-010 FIX: Use seeded PRNG for partial fill simulation
     const partialRoll = this.random();
-    if (partialRoll < this.fillParams.partialFillProbability) {
-      const fillRatio = 0.5 + this.random() * this.fillParams.maxPartialFillRatio;
-      order.filledQuantity = Math.round(order.quantity * fillRatio * 100) / 100;
-      order.status = 'PARTIALLY_FILLED';
-    } else {
-      order.filledQuantity = order.quantity;
-      order.status = 'FILLED';
-    }
-
-    // Calculate commission
-    const tradeValue = order.filledQuantity * order.fillPrice;
-    order.commissionARS = Math.max(
+    const fillRatio = partialRoll < this.fillParams.partialFillProbability
+      ? 0.5 + this.random() * this.fillParams.maxPartialFillRatio
+      : 1;
+    const filledQuantity = Math.round(order.quantity * Math.min(fillRatio, 1) * 100) / 100;
+    const fillPrice = this.calculateFillPrice(order, validationPrice, currentPrice, preflight.slippageBps);
+    const fillValueNative = filledQuantity * fillPrice;
+    const fillValueARS = this.toARS(fillValueNative, order.fillCurrency, snapshot.mepRate);
+    const commissionARS = Math.max(
       this.fillParams.minCommissionARS,
-      tradeValue * this.fillParams.commissionRate
+      fillValueARS * this.fillParams.commissionRate,
     );
 
-    // BUG-010 FIX: Use seeded PRNG for latency simulation
-    order.executionLatencyMs = this.fillParams.baseLatencyMs +
-      Math.round(this.random() * 200 * regimeMultiplier);
+    if (fillValueNative > preflight.maxFillValueNative + PaperBroker.INVARIANT_TOLERANCE ||
+        commissionARS > preflight.maxCommissionARS + PaperBroker.INVARIANT_TOLERANCE) {
+      return this.rejectOrder(order, 'FILL_EXCEEDS_PREFLIGHT');
+    }
 
-    // Settlement date
-    const settlementDate = new Date();
-    settlementDate.setDate(settlementDate.getDate() + this.fillParams.settlementDays);
-    order.settlementDate = settlementDate.toISOString();
+    const prepared: PreparedFill = {
+      fillPrice,
+      filledQuantity,
+      fillValueNative,
+      fillValueARS,
+      commissionARS,
+      slippageBps: preflight.slippageBps,
+      executionLatencyMs: this.fillParams.baseLatencyMs +
+        Math.round(this.random() * 200 * this.getRegimeSlippageMultiplier()),
+      settlementDate: this.calculateSettlementDate(),
+    };
 
+    const proposal = this.buildPostFillState(order, prepared, currentPrice, snapshot);
+    if (!proposal.valid || !proposal.state) {
+      return this.rejectOrder(order, proposal.reason ?? 'POST_FILL_BUILD_FAILED');
+    }
+
+    const invariantError = this.validatePostFillState(order, prepared, currentPrice, snapshot, proposal.state);
+    if (invariantError) {
+      return this.rejectOrder(order, invariantError);
+    }
+
+    order.fillPrice = prepared.fillPrice;
+    order.filledQuantity = prepared.filledQuantity;
+    order.slippageBps = prepared.slippageBps;
+    order.commissionARS = prepared.commissionARS;
+    order.executionLatencyMs = prepared.executionLatencyMs;
+    order.settlementDate = prepared.settlementDate;
+    order.status = prepared.filledQuantity < order.quantity ? 'PARTIALLY_FILLED' : 'FILLED';
     order.updatedAt = now;
 
-    // Update portfolio
-    this.applyFill(order);
+    this.applyFinancialState(proposal.state);
+    this.portfolio.orders.push(order);
+    this.portfolio.updatedAt = now;
+
+    if (proposal.attribution) {
+      try {
+        recordSignalReturn('regime', proposal.attribution.regimeSignal, proposal.attribution.returnPct);
+        recordSignalReturn('carry', proposal.attribution.carrySignal, proposal.attribution.returnPct);
+      } catch {
+        this.logAudit(order, 'ATTRIBUTION_DEGRADED', 'Fill committed; attribution recorder unavailable');
+      }
+    }
 
     this.logAudit(order, order.status, `Filled ${order.filledQuantity}/${order.quantity} @ ${order.fillPrice}`);
-
     return order;
   }
 
-  // ─── Apply a fill to the portfolio ───
-
-  private applyFill(order: PaperOrder): void {
-    const fillValue = order.filledQuantity * (order.fillPrice ?? 0);
+  private buildPostFillState(
+    order: PaperOrder,
+    fill: PreparedFill,
+    currentPrice: number,
+    snapshot: FinancialSnapshot,
+  ): ProposedStateResult {
+    let cashARS = snapshot.cashARS;
+    let cashUSD = snapshot.cashUSD;
+    let realizedPnL = snapshot.realizedPnL;
+    const positions = this.clonePositions(snapshot.positions);
+    let attribution: ProposedStateResult['attribution'];
 
     if (order.side === 'BUY') {
-      // BUG-009 FIX: Auto-convert USD→ARS when buying ARS products with insufficient ARS cash
-      if (order.fillCurrency !== 'USD') {
-        const arsNeeded = fillValue + order.commissionARS;
-        if (this.portfolio.cashARS < arsNeeded) {
-          const deficit = arsNeeded - this.portfolio.cashARS;
-          const usdToConvert = Math.ceil(deficit / this.portfolio.currentMEPRate * 100) / 100;
-          if (usdToConvert <= this.portfolio.cashUSD) {
-            this.portfolio.cashUSD -= usdToConvert;
-            this.portfolio.cashARS += usdToConvert * this.portfolio.currentMEPRate;
-          }
-        }
-      }
-
-      // Deduct cash
       if (order.fillCurrency === 'USD') {
-        this.portfolio.cashUSD -= fillValue + order.commissionARS / this.portfolio.currentMEPRate;
+        cashUSD -= fill.fillValueNative;
+        cashARS -= fill.commissionARS;
       } else {
-        this.portfolio.cashARS -= fillValue + order.commissionARS;
+        const requiredARS = fill.fillValueNative + fill.commissionARS;
+        if (cashARS < requiredARS) {
+          const deficitARS = requiredARS - cashARS;
+          const usdToConvert = deficitARS / snapshot.mepRate;
+          cashUSD -= usdToConvert;
+          cashARS += usdToConvert * snapshot.mepRate;
+        }
+        cashARS -= requiredARS;
       }
 
-      // Add to position
-      const existing = this.portfolio.positions.get(order.productId);
+      const existing = positions.get(order.productId);
+      if (existing && existing.currency !== order.fillCurrency) {
+        return { valid: false, reason: 'POSITION_CURRENCY_MISMATCH' };
+      }
       if (existing) {
-        const newQuantity = existing.quantity + order.filledQuantity;
-        const newCostBasis = existing.totalCostBasis + fillValue;
+        const newQuantity = existing.quantity + fill.filledQuantity;
+        const newCostBasis = existing.totalCostBasis + fill.fillValueNative;
         existing.quantity = newQuantity;
         existing.totalCostBasis = newCostBasis;
         existing.avgCostBasis = newQuantity > 0 ? newCostBasis / newQuantity : 0;
+        existing.currentPrice = currentPrice;
         existing.strategySource = order.strategySource;
         existing.bucketId = order.bucketId;
-        existing.updatedAt = new Date().toISOString();
+        existing.updatedAt = order.updatedAt;
       } else {
-        this.portfolio.positions.set(order.productId, {
+        positions.set(order.productId, {
           productId: order.productId,
           productName: order.productName,
           currency: order.fillCurrency,
-          quantity: order.filledQuantity,
-          avgCostBasis: order.fillPrice ?? 0,
-          totalCostBasis: fillValue,
-          currentPrice: order.fillPrice ?? 0,
-          marketValue: fillValue,
-          unrealizedPnL: 0,
-          unrealizedPnLPct: 0,
+          quantity: fill.filledQuantity,
+          avgCostBasis: fill.fillPrice,
+          totalCostBasis: fill.fillValueNative,
+          currentPrice,
+          marketValue: fill.filledQuantity * currentPrice,
+          unrealizedPnL: fill.filledQuantity * (currentPrice - fill.fillPrice),
+          unrealizedPnLPct: fill.fillPrice > 0 ? ((currentPrice - fill.fillPrice) / fill.fillPrice) * 100 : 0,
           weight: 0,
           bucketId: order.bucketId,
           strategySource: order.strategySource,
-          updatedAt: new Date().toISOString(),
+          updatedAt: order.updatedAt,
           history: [{
-            timestamp: new Date().toISOString(),
-            quantity: order.filledQuantity,
-            marketValue: fillValue,
-            unrealizedPnL: 0,
-            price: order.fillPrice ?? 0,
+            timestamp: order.updatedAt,
+            quantity: fill.filledQuantity,
+            marketValue: fill.filledQuantity * currentPrice,
+            unrealizedPnL: fill.filledQuantity * (currentPrice - fill.fillPrice),
+            price: currentPrice,
           }],
         });
       }
     } else {
-      // SELL: add cash, reduce position
-      if (order.fillCurrency === 'USD') {
-        this.portfolio.cashUSD += fillValue - order.commissionARS / this.portfolio.currentMEPRate;
-      } else {
-        this.portfolio.cashARS += fillValue - order.commissionARS;
+      const existing = positions.get(order.productId);
+      if (!existing || existing.currency !== order.fillCurrency || existing.quantity < fill.filledQuantity) {
+        return { valid: false, reason: 'INSUFFICIENT_POSITION_AT_FILL' };
       }
 
-      // Realize PnL
-      const existing = this.portfolio.positions.get(order.productId);
-      if (existing) {
-        const costOfSold = order.filledQuantity * existing.avgCostBasis;
-        const realizedPnL = fillValue - costOfSold - order.commissionARS;
-        this.portfolio.realizedPnL += realizedPnL;
+      if (order.fillCurrency === 'USD') {
+        cashUSD += fill.fillValueNative;
+        cashARS -= fill.commissionARS;
+      } else {
+        cashARS += fill.fillValueNative - fill.commissionARS;
+      }
 
-        // ATTRIBUTION PIPELINE: Record signal-return pair for PnL attribution
-        const returnPct = costOfSold > 0 ? (realizedPnL / costOfSold) * 100 : 0;
-        recordSignalReturn('regime', this.portfolio.currentRegime === 'CRISIS' ? 0.9 : this.portfolio.currentRegime === 'HIGH_VOL' ? 0.6 : 0.2, returnPct);
-        recordSignalReturn('carry', (this.portfolio.totalValueUSD > 0 ? 1 : 0), returnPct);
+      const costOfSoldNative = fill.filledQuantity * existing.avgCostBasis;
+      const realizedPnLARS = this.toARS(fill.fillValueNative - costOfSoldNative, order.fillCurrency, snapshot.mepRate) - fill.commissionARS;
+      realizedPnL += realizedPnLARS;
+      const returnPct = costOfSoldNative > 0
+        ? (realizedPnLARS / this.toARS(costOfSoldNative, order.fillCurrency, snapshot.mepRate)) * 100
+        : 0;
+      attribution = {
+        regimeSignal: snapshot.currentRegime === 'CRISIS' ? 0.9 : snapshot.currentRegime === 'HIGH_VOL' ? 0.6 : 0.2,
+        carrySignal: snapshot.totalValueUSD > 0 ? 1 : 0,
+        returnPct,
+      };
 
-        existing.quantity -= order.filledQuantity;
-        existing.totalCostBasis = existing.quantity * existing.avgCostBasis;
-
-        if (existing.quantity <= 0.001) {
-          // Position fully closed
-          this.portfolio.positions.delete(order.productId);
-        } else {
-          existing.updatedAt = new Date().toISOString();
-        }
+      existing.quantity -= fill.filledQuantity;
+      existing.totalCostBasis = existing.quantity * existing.avgCostBasis;
+      existing.currentPrice = currentPrice;
+      if (existing.quantity <= 0.001) {
+        positions.delete(order.productId);
+      } else {
+        existing.updatedAt = order.updatedAt;
       }
     }
 
-    // Track commissions
-    this.portfolio.totalCommissions += order.commissionARS;
+    const metrics = this.computePortfolioMetrics(positions, cashARS, cashUSD, snapshot.mepRate);
+    return {
+      valid: true,
+      attribution,
+      state: {
+        cashARS,
+        cashUSD,
+        positions,
+        realizedPnL,
+        unrealizedPnL: metrics.unrealizedPnLARS,
+        totalCommissions: snapshot.totalCommissions + fill.commissionARS,
+        totalValueARS: metrics.totalValueARS,
+        totalValueUSD: metrics.totalValueUSD,
+        grossExposureARS: metrics.grossExposureARS,
+        weightSum: metrics.weightSum,
+      },
+    };
+  }
 
-    // Recalculate portfolio value
-    this.recalculatePortfolio();
+  private validatePostFillState(
+    order: PaperOrder,
+    fill: PreparedFill,
+    currentPrice: number,
+    snapshot: FinancialSnapshot,
+    state: ProposedFinancialState,
+  ): string | null {
+    const finiteScalars = [
+      state.cashARS,
+      state.cashUSD,
+      state.realizedPnL,
+      state.unrealizedPnL,
+      state.totalCommissions,
+      state.totalValueARS,
+      state.totalValueUSD,
+      state.grossExposureARS,
+      state.weightSum,
+    ];
+    if (!finiteScalars.every(Number.isFinite)) return 'NON_FINITE_POST_FILL_STATE';
+    if (state.cashARS < -PaperBroker.INVARIANT_TOLERANCE) return 'NEGATIVE_ARS_CASH';
+    if (state.cashUSD < -PaperBroker.INVARIANT_TOLERANCE) return 'NEGATIVE_USD_CASH';
+    if (state.totalValueARS <= 0 || state.totalValueUSD <= 0) return 'NON_POSITIVE_PORTFOLIO_VALUE';
 
-    this.portfolio.updatedAt = new Date().toISOString();
+    for (const position of state.positions.values()) {
+      const fields = [
+        position.quantity,
+        position.avgCostBasis,
+        position.totalCostBasis,
+        position.currentPrice,
+        position.marketValue,
+        position.unrealizedPnL,
+        position.unrealizedPnLPct,
+        position.weight,
+      ];
+      if (!fields.every(Number.isFinite)) return 'NON_FINITE_POSITION_STATE';
+      if (position.quantity < -PaperBroker.INVARIANT_TOLERANCE) return 'NEGATIVE_POSITION_QUANTITY';
+      if (position.weight < -PaperBroker.INVARIANT_TOLERANCE) return 'NEGATIVE_POSITION_WEIGHT';
+    }
+
+    if (state.weightSum > 1 + PaperBroker.INVARIANT_TOLERANCE) return 'POSITION_WEIGHTS_EXCEED_ONE';
+    const leverage = state.grossExposureARS / state.totalValueARS;
+    if (!Number.isFinite(leverage) || leverage > PaperBroker.LEVERAGE_LIMIT + PaperBroker.INVARIANT_TOLERANCE) {
+      return 'LEVERAGE_LIMIT_EXCEEDED_POST_FILL';
+    }
+
+    const independentlyComputed = this.computePortfolioMetrics(
+      this.clonePositions(state.positions),
+      state.cashARS,
+      state.cashUSD,
+      snapshot.mepRate,
+    );
+    if (Math.abs(independentlyComputed.totalValueARS - state.totalValueARS) > 0.01) {
+      return 'INCOHERENT_ARS_EQUITY';
+    }
+    if (Math.abs(independentlyComputed.weightSum - state.weightSum) > PaperBroker.INVARIANT_TOLERANCE) {
+      return 'INCOHERENT_POSITION_WEIGHTS';
+    }
+
+    if (order.fillCurrency === 'USD' && snapshot.cashARS + PaperBroker.INVARIANT_TOLERANCE < fill.commissionARS) {
+      return 'INSUFFICIENT_ARS_FOR_COMMISSION';
+    }
+
+    const marketVsFillARS = this.toARS(
+      fill.filledQuantity * (currentPrice - fill.fillPrice),
+      order.fillCurrency,
+      snapshot.mepRate,
+    );
+    const expectedEquityDeltaARS = order.side === 'BUY'
+      ? marketVsFillARS - fill.commissionARS
+      : -marketVsFillARS - fill.commissionARS;
+    const actualEquityDeltaARS = state.totalValueARS - snapshot.totalValueARS;
+    if (Math.abs(actualEquityDeltaARS - expectedEquityDeltaARS) > 0.05) {
+      return 'INCOHERENT_EQUITY_DELTA';
+    }
+
+    return null;
+  }
+
+  private applyFinancialState(state: ProposedFinancialState): void {
+    this.portfolio.cashARS = Math.max(0, state.cashARS);
+    this.portfolio.cashUSD = Math.max(0, state.cashUSD);
+    this.portfolio.positions = state.positions;
+    this.portfolio.realizedPnL = state.realizedPnL;
+    this.portfolio.unrealizedPnL = state.unrealizedPnL;
+    this.portfolio.totalCommissions = state.totalCommissions;
+    this.portfolio.totalValueARS = state.totalValueARS;
+    this.portfolio.totalValueUSD = state.totalValueUSD;
+  }
+
+  private rejectOrder(order: PaperOrder, reason: string): PaperOrder {
+    order.status = 'REJECTED';
+    order.rejectionReason = reason;
+    order.fillPrice = null;
+    order.filledQuantity = 0;
+    order.commissionARS = 0;
+    order.updatedAt = new Date().toISOString();
+    this.portfolio.orders.push(order);
+    this.logAudit(order, 'REJECTED', reason);
+    return order;
   }
 
   // ─── Recalculate portfolio values ───
 
   recalculatePortfolio(): void {
-    let totalARS = this.portfolio.cashARS;
-    let totalUSD = this.portfolio.cashUSD;
-    let totalUnrealizedPnL = 0;
-
-    for (const [_, position] of this.portfolio.positions) {
-      const mv = position.quantity * position.currentPrice;
-      position.marketValue = mv;
-      position.unrealizedPnL = mv - position.totalCostBasis;
-      position.unrealizedPnLPct = position.totalCostBasis > 0
-        ? (position.unrealizedPnL / position.totalCostBasis) * 100
-        : 0;
-
-      if (position.currency === 'USD') {
-        totalUSD += mv;
-      } else {
-        totalARS += mv;
-      }
-      totalUnrealizedPnL += position.unrealizedPnL;
-    }
-
-    this.portfolio.totalValueARS = totalARS;
-    this.portfolio.totalValueUSD = totalUSD + totalARS / this.portfolio.currentMEPRate;
-    this.portfolio.unrealizedPnL = totalUnrealizedPnL;
-
-    // Recalculate position weights
-    const totalPortfolioValue = this.portfolio.totalValueARS;
-    for (const [_, position] of this.portfolio.positions) {
-      position.weight = totalPortfolioValue > 0
-        ? position.marketValue / totalPortfolioValue
-        : 0;
-    }
+    this.assertValidMEP(this.portfolio.currentMEPRate);
+    const metrics = this.computePortfolioMetrics(
+      this.portfolio.positions,
+      this.portfolio.cashARS,
+      this.portfolio.cashUSD,
+      this.portfolio.currentMEPRate,
+    );
+    this.portfolio.totalValueARS = metrics.totalValueARS;
+    this.portfolio.totalValueUSD = metrics.totalValueUSD;
+    this.portfolio.unrealizedPnL = metrics.unrealizedPnLARS;
   }
 
   // ─── Update market prices for all positions ───
 
   updatePrices(priceMap: Record<string, number>, mepRate: number): void {
-    this.portfolio.currentMEPRate = mepRate;
-
-    for (const [productId, position] of this.portfolio.positions) {
-      if (priceMap[productId] !== undefined) {
-        position.currentPrice = priceMap[productId];
-        position.updatedAt = new Date().toISOString();
-
-        // Add history snapshot
-        position.history.push({
-          timestamp: new Date().toISOString(),
-          quantity: position.quantity,
-          marketValue: position.quantity * position.currentPrice,
-          unrealizedPnL: position.quantity * position.currentPrice - position.totalCostBasis,
-          price: position.currentPrice,
-        });
-
-        // Keep history bounded
-        if (position.history.length > 365) {
-          position.history = position.history.slice(-365);
-        }
+    this.assertValidMEP(mepRate);
+    for (const [productId, price] of Object.entries(priceMap)) {
+      if (!Number.isFinite(price) || price <= 0) {
+        throw new RangeError(`Invalid market price for ${productId}`);
       }
     }
 
-    this.recalculatePortfolio();
+    const positions = this.clonePositions(this.portfolio.positions);
+    const now = new Date().toISOString();
+    for (const [productId, position] of positions) {
+      const nextPrice = priceMap[productId];
+      if (nextPrice !== undefined) {
+        position.currentPrice = nextPrice;
+        position.updatedAt = now;
+        position.history.push({
+          timestamp: now,
+          quantity: position.quantity,
+          marketValue: position.quantity * nextPrice,
+          unrealizedPnL: position.quantity * nextPrice - position.totalCostBasis,
+          price: nextPrice,
+        });
+        if (position.history.length > 365) position.history = position.history.slice(-365);
+      }
+    }
+
+    const metrics = this.computePortfolioMetrics(positions, this.portfolio.cashARS, this.portfolio.cashUSD, mepRate);
+    if (![metrics.totalValueARS, metrics.totalValueUSD, metrics.weightSum].every(Number.isFinite)) {
+      throw new RangeError('Price update produced non-finite portfolio metrics');
+    }
+
+    this.portfolio.currentMEPRate = mepRate;
+    this.portfolio.positions = positions;
+    this.portfolio.totalValueARS = metrics.totalValueARS;
+    this.portfolio.totalValueUSD = metrics.totalValueUSD;
+    this.portfolio.unrealizedPnL = metrics.unrealizedPnLARS;
+    this.portfolio.updatedAt = now;
   }
 
   // ─── Execute a rebalance: generate orders to match target allocations ───
@@ -642,18 +860,13 @@ export class PaperBroker {
       const currentPos = this.portfolio.positions.get(target.productId);
       const currentWeight = currentPos?.weight ?? 0;
       const weightDiff = target.weight - currentWeight;
-
-      // Skip trivial rebalances (< 0.5% weight change)
       if (Math.abs(weightDiff) < 0.005) continue;
-
-      const side: OrderSide = weightDiff > 0 ? 'BUY' : 'SELL';
-      const absWeight = Math.abs(weightDiff);
 
       const order = this.submitOrder({
         productId: target.productId,
         productName: target.productName,
-        side,
-        targetWeight: absWeight,
+        side: weightDiff > 0 ? 'BUY' : 'SELL',
+        targetWeight: Math.abs(weightDiff),
         strategySource: target.strategySource,
         bucketId: target.bucketId ?? null,
         regime,
@@ -661,7 +874,6 @@ export class PaperBroker {
         currentPrice: target.currentPrice,
         currency: target.currency,
       });
-
       orders.push(order);
     }
 
@@ -680,10 +892,7 @@ export class PaperBroker {
   }
 
   getOrders(status?: OrderStatus): PaperOrder[] {
-    if (status) {
-      return this.portfolio.orders.filter(o => o.status === status);
-    }
-    return [...this.portfolio.orders];
+    return status ? this.portfolio.orders.filter(order => order.status === status) : [...this.portfolio.orders];
   }
 
   getPortfolioSummary(): {
@@ -703,10 +912,10 @@ export class PaperBroker {
     const topPositions = positions
       .sort((a, b) => b.weight - a.weight)
       .slice(0, 5)
-      .map(p => ({
-        productId: p.productId,
-        weight: Math.round(p.weight * 1000) / 1000,
-        unrealizedPnLPct: Math.round(p.unrealizedPnLPct * 100) / 100,
+      .map(position => ({
+        productId: position.productId,
+        weight: Math.round(position.weight * 1000) / 1000,
+        unrealizedPnLPct: Math.round(position.unrealizedPnLPct * 100) / 100,
       }));
 
     return {
@@ -724,7 +933,130 @@ export class PaperBroker {
     };
   }
 
-  // ─── Helper: regime slippage multiplier ───
+  private calculateSlippageBps(): number {
+    return this.fillParams.baseSlippageBps +
+      this.getRegimeSlippageMultiplier() * this.fillParams.volatilitySlippageBps;
+  }
+
+  private calculateFillPrice(
+    order: PaperOrder,
+    validationPrice: number,
+    currentPrice: number,
+    slippageBps: number,
+  ): number {
+    const direction = order.side === 'BUY' ? 1 : -1;
+    const slippedMarketPrice = currentPrice * (1 + direction * slippageBps / 10000);
+    const boundedPrice = order.orderType === 'LIMIT'
+      ? order.side === 'BUY'
+        ? Math.min(slippedMarketPrice, validationPrice)
+        : Math.max(slippedMarketPrice, validationPrice)
+      : slippedMarketPrice;
+    return Math.round(boundedPrice * 100) / 100;
+  }
+
+  private calculateSettlementDate(): string {
+    const date = new Date();
+    date.setDate(date.getDate() + this.fillParams.settlementDays);
+    return date.toISOString();
+  }
+
+  private createFinancialSnapshot(currentPrice: number, productId: string): FinancialSnapshot {
+    const positions = this.clonePositions(this.portfolio.positions);
+    const tradedPosition = positions.get(productId);
+    if (tradedPosition) tradedPosition.currentPrice = currentPrice;
+    const metrics = this.computePortfolioMetrics(
+      positions,
+      this.portfolio.cashARS,
+      this.portfolio.cashUSD,
+      this.portfolio.currentMEPRate,
+    );
+    return Object.freeze({
+      cashARS: this.portfolio.cashARS,
+      cashUSD: this.portfolio.cashUSD,
+      mepRate: this.portfolio.currentMEPRate,
+      positions,
+      realizedPnL: this.portfolio.realizedPnL,
+      unrealizedPnL: metrics.unrealizedPnLARS,
+      totalCommissions: this.portfolio.totalCommissions,
+      totalValueARS: metrics.totalValueARS,
+      totalValueUSD: metrics.totalValueUSD,
+      grossExposureARS: metrics.grossExposureARS,
+      currentRegime: this.portfolio.currentRegime,
+    });
+  }
+
+  private clonePositions(source: ReadonlyMap<string, PaperPosition>): Map<string, PaperPosition> {
+    return new Map(Array.from(source.entries(), ([productId, position]) => [
+      productId,
+      { ...position, history: position.history.map(snapshot => ({ ...snapshot })) },
+    ]));
+  }
+
+  private computePortfolioMetrics(
+    positions: Map<string, PaperPosition>,
+    cashARS: number,
+    cashUSD: number,
+    mepRate: number,
+  ): PortfolioMetrics {
+    this.assertValidMEP(mepRate);
+    let grossExposureARS = 0;
+    let unrealizedPnLARS = 0;
+
+    for (const position of positions.values()) {
+      position.marketValue = position.quantity * position.currentPrice;
+      position.unrealizedPnL = position.marketValue - position.totalCostBasis;
+      position.unrealizedPnLPct = position.totalCostBasis > 0
+        ? (position.unrealizedPnL / position.totalCostBasis) * 100
+        : 0;
+      grossExposureARS += this.toARS(position.marketValue, position.currency, mepRate);
+      unrealizedPnLARS += this.toARS(position.unrealizedPnL, position.currency, mepRate);
+    }
+
+    const totalValueARS = cashARS + cashUSD * mepRate + grossExposureARS;
+    const totalValueUSD = totalValueARS / mepRate;
+    let weightSum = 0;
+    for (const position of positions.values()) {
+      position.weight = totalValueARS > 0
+        ? this.toARS(position.marketValue, position.currency, mepRate) / totalValueARS
+        : 0;
+      weightSum += position.weight;
+    }
+
+    return { totalValueARS, totalValueUSD, grossExposureARS, unrealizedPnLARS, weightSum };
+  }
+
+  private toARS(value: number, currency: 'ARS' | 'USD', mepRate: number): number {
+    return currency === 'USD' ? value * mepRate : value;
+  }
+
+  private isValidMEP(mepRate: number): boolean {
+    return Number.isFinite(mepRate) && mepRate > 0;
+  }
+
+  private assertValidMEP(mepRate: number): void {
+    if (!this.isValidMEP(mepRate)) throw new RangeError('MEP rate must be finite and positive');
+  }
+
+  private validateFillParams(params: FillSimulationParams): void {
+    const nonNegative = [
+      params.baseSlippageBps,
+      params.volatilitySlippageBps,
+      params.commissionRate,
+      params.minCommissionARS,
+      params.settlementDays,
+      params.baseLatencyMs,
+      params.maxPartialFillRatio,
+    ];
+    if (!nonNegative.every(value => Number.isFinite(value) && value >= 0)) {
+      throw new RangeError('Fill simulation parameters must be finite and non-negative');
+    }
+    if (![params.fillProbability, params.partialFillProbability].every(value => Number.isFinite(value) && value >= 0 && value <= 1)) {
+      throw new RangeError('Fill probabilities must be finite values in [0,1]');
+    }
+    if (params.maxPartialFillRatio > 0.5) {
+      throw new RangeError('Max partial fill ratio must not exceed 0.5');
+    }
+  }
 
   private getRegimeSlippageMultiplier(): number {
     switch (this.portfolio.currentRegime) {
@@ -736,18 +1068,6 @@ export class PaperBroker {
     }
   }
 
-  // ─── Helper: total position value ───
-
-  private getTotalPositionValue(): number {
-    let total = 0;
-    for (const [_, pos] of this.portfolio.positions) {
-      total += pos.marketValue;
-    }
-    return total;
-  }
-
-  // ─── Audit logging ───
-
   private logAudit(order: PaperOrder, event: string, details: string): void {
     this.auditLog.push({
       timestamp: new Date().toISOString(),
@@ -758,16 +1078,78 @@ export class PaperBroker {
       portfolioValueUSD: this.portfolio.totalValueUSD,
       regime: this.portfolio.currentRegime,
     });
-
-    // Keep audit log bounded
-    if (this.auditLog.length > 5000) {
-      this.auditLog = this.auditLog.slice(-3000);
-    }
+    if (this.auditLog.length > 5000) this.auditLog = this.auditLog.slice(-3000);
   }
 
   getAuditLog(count: number = 100): BrokerAuditEntry[] {
     return this.auditLog.slice(-count);
   }
+}
+
+interface FinancialSnapshot {
+  readonly cashARS: number;
+  readonly cashUSD: number;
+  readonly mepRate: number;
+  readonly positions: Map<string, PaperPosition>;
+  readonly realizedPnL: number;
+  readonly unrealizedPnL: number;
+  readonly totalCommissions: number;
+  readonly totalValueARS: number;
+  readonly totalValueUSD: number;
+  readonly grossExposureARS: number;
+  readonly currentRegime: CapitalRegime;
+}
+
+interface FillPreflight {
+  valid: boolean;
+  reason?: string;
+  slippageBps: number;
+  conservativeFillPrice: number;
+  maxFillValueNative: number;
+  maxCommissionARS: number;
+}
+
+interface PreparedFill {
+  fillPrice: number;
+  filledQuantity: number;
+  fillValueNative: number;
+  fillValueARS: number;
+  commissionARS: number;
+  slippageBps: number;
+  executionLatencyMs: number;
+  settlementDate: string;
+}
+
+interface ProposedFinancialState {
+  cashARS: number;
+  cashUSD: number;
+  positions: Map<string, PaperPosition>;
+  realizedPnL: number;
+  unrealizedPnL: number;
+  totalCommissions: number;
+  totalValueARS: number;
+  totalValueUSD: number;
+  grossExposureARS: number;
+  weightSum: number;
+}
+
+interface ProposedStateResult {
+  valid: boolean;
+  reason?: string;
+  state?: ProposedFinancialState;
+  attribution?: {
+    regimeSignal: number;
+    carrySignal: number;
+    returnPct: number;
+  };
+}
+
+interface PortfolioMetrics {
+  totalValueARS: number;
+  totalValueUSD: number;
+  grossExposureARS: number;
+  unrealizedPnLARS: number;
+  weightSum: number;
 }
 
 export interface BrokerAuditEntry {

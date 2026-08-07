@@ -113,42 +113,105 @@ describe('H8 — Architectural Invariant Tests', () => {
   });
 
   // ─── ONE Prediction Pipeline ────────────────────────────────────────────
-  test('ONE Prediction Pipeline — no parallel prediction models in canonical route', () => {
+  test('ONE Prediction Pipeline — route executes V1 once and delegates enrichment through V3', () => {
     const canonicalRoute = readFileSync(join(API_DIR, 'oracle', 'single', 'route.ts'), 'utf8');
-    // Should NOT import parallel prediction models
     expect(canonicalRoute).not.toContain("amira-prediction-engine");
     expect(canonicalRoute).not.toContain("oracle-fci/predict");
     expect(canonicalRoute).not.toContain("oracle-multi/predict");
-    // V2 + V3 orchestrators are OK — they wrap the single engine, don't replace it
-    expect(canonicalRoute).toContain("oracle/v2");
+    expect(canonicalRoute).toContain("runSinglePass");
     expect(canonicalRoute).toContain("oracle/v3");
+    expect(canonicalRoute).not.toContain("from '@/lib/oracle/v2'");
   });
 
-  test('ONE Prediction Pipeline — V2/V3 orchestrators wrap runSinglePass, not replace it', () => {
+  test('ONE Prediction Pipeline — V2/V3 reuse a precomputed canonical V1 vector', () => {
     const v2src = readFileSync(join(SRC_DIR, 'lib', 'oracle', 'v2', 'index.ts'), 'utf8');
     expect(v2src).toContain("from '@/lib/single-pass-oracle-engine'");
-    expect(v2src).toContain("runSinglePass");
+    expect(v2src).toContain('v1Vector?: AssetScoreVector');
+    expect(v2src).toContain('v1Vector ?? runSinglePass(input)');
 
     const v3src = readFileSync(join(SRC_DIR, 'lib', 'oracle', 'v3', 'index.ts'), 'utf8');
-    expect(v3src).toContain("runV2SystemicEnrichment");
+    expect(v3src).toContain('v1Vector?: AssetScoreVector');
+    expect(v3src).toContain('runV2SystemicEnrichment(input, v1Vector)');
     expect(v3src).not.toMatch(/import.*amira-prediction-engine/);
   });
 
   // ─── ONE Lifecycle ─────────────────────────────────────────────────────
-  test('ONE Lifecycle — amira-prediction-lifecycle.ts is the single lifecycle source', () => {
-    const lifecycleFiles = allSrcFiles.filter((f) =>
-      /lifecycle\.tsx?$/.test(f),
-    );
-    // We allow: amira-prediction-lifecycle.ts (canonical) + prediction-lifecycle-tracker.tsx (UI)
-    const canonical = lifecycleFiles.filter((f) =>
-      f.endsWith('amira-prediction-lifecycle.ts'),
-    );
-    expect(canonical.length).toBe(1);
+  test('ONE Lifecycle — server-safe core and client facade have explicit boundaries', () => {
+    const corePath = join(SRC_DIR, 'lib', 'amira-prediction-lifecycle-core.ts');
+    const facadePath = join(SRC_DIR, 'lib', 'amira-prediction-lifecycle.ts');
+    expect(existsSync(corePath)).toBe(true);
+    expect(existsSync(facadePath)).toBe(true);
 
-    // closed-loop-learning.ts should derive from the lifecycle, not re-implement
+    const core = readFileSync(corePath, 'utf8');
+    expect(core).not.toContain("from 'react'");
+    expect(core).not.toContain("'use client'");
+    expect(core).not.toContain('amira-prediction-engine');
+
+    const facade = readFileSync(facadePath, 'utf8');
+    expect(facade).toContain("'use client'");
+    expect(facade).toContain("from 'react'");
+    expect(facade).toContain("./amira-prediction-lifecycle-core");
+
     const closedLoop = readFileSync(join(SRC_DIR, 'lib', 'closed-loop-learning.ts'), 'utf8');
-    expect(closedLoop).toContain("getLifecycleSnapshot");
-    expect(closedLoop).toContain("amira-prediction-lifecycle");
+    expect(closedLoop).toContain('getLifecycleSnapshot');
+    expect(closedLoop).toContain("./amira-prediction-lifecycle-core");
+  });
+
+  test('ONE Lifecycle — canonical server route cannot reach the React lifecycle facade directly', () => {
+    const canonicalRoute = readFileSync(join(API_DIR, 'oracle', 'single', 'route.ts'), 'utf8');
+    expect(canonicalRoute).not.toContain("@/lib/amira-prediction-lifecycle'");
+  });
+
+
+  test('ONE Lifecycle — KV ledger is storage adapter only, not a second lifecycle truth', () => {
+    const ledger = readFileSync(join(SRC_DIR, 'lib', 'amira-prediction-lifecycle-ledger.ts'), 'utf8');
+    expect(ledger).toContain("from './amira-prediction-lifecycle-core'");
+    expect(ledger).toContain('hydrateLifecycleEvents');
+    expect(ledger).toContain('lifecycleRecordPrediction');
+    expect(ledger).not.toMatch(/const\s+memory\s*=\s*new\s+Map/);
+    expect(ledger).not.toMatch(/interface\s+LifecycleLedgerRecord\s*\{/);
+  });
+
+  test('Lifecycle durability — outcomes and verifications are persisted with distinct event prefixes', () => {
+    const ledger = readFileSync(join(SRC_DIR, 'lib', 'amira-prediction-lifecycle-ledger.ts'), 'utf8');
+    expect(ledger).toContain("outcome: 'lifecycle:outcome:'");
+    expect(ledger).toContain("verification: 'lifecycle:verification:'");
+    expect(ledger).toContain('captureLifecycleOutcome');
+    expect(ledger).toContain('verifyLifecyclePrediction');
+    expect(ledger).toContain('recoverLifecycle');
+  });
+
+  test('Scenario and counterfactual reruns are explicitly synthetic and non-learning', () => {
+    for (const rel of ['oracle/v2/scenario-engine.ts', 'oracle/v3/counterfactual-engine.ts']) {
+      const source = readFileSync(join(SRC_DIR, 'lib', rel), 'utf8');
+      expect(source).toContain("data_class: 'SYNTHETIC'");
+      expect(source).toContain("live_prediction: false");
+      expect(source).toContain("lifecycle_persist_as_real: false");
+      expect(source).toContain("learning_eligible: false");
+    }
+  });
+
+  test('Canonical V1/V2/V3 paths do not assume scores[0] or assets[0]', () => {
+    const files = [
+      join(API_DIR, 'oracle', 'single', 'route.ts'),
+      join(SRC_DIR, 'lib', 'oracle', 'v2', 'index.ts'),
+      join(SRC_DIR, 'lib', 'oracle', 'v3', 'index.ts'),
+      join(SRC_DIR, 'lib', 'oracle', 'v2', 'scenario-engine.ts'),
+      join(SRC_DIR, 'lib', 'oracle', 'v3', 'counterfactual-engine.ts'),
+    ];
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8');
+      expect(source).not.toMatch(/\.scores\s*\[\s*0\s*\]/);
+      expect(source).not.toMatch(/\.assets\s*\[\s*0\s*\]/);
+    }
+  });
+
+  test('Cron — scheduled wrapper delegates once to canonical route and does not use key-count deltas as proof', () => {
+    const wrapperScript = readFileSync(join(SRC_DIR, '..', 'scripts', 'wrap-worker-with-cron.mjs'), 'utf8');
+    expect(wrapperScript).toContain('/api/oracle/cron');
+    expect(wrapperScript).toContain('persistence_ack?.durable');
+    expect(wrapperScript).not.toContain('countKeys');
+    expect(wrapperScript).not.toContain('kv_delta');
   });
 
   // ─── ONE Canonical API ──────────────────────────────────────────────────

@@ -25,6 +25,13 @@
 // for the model.
 
 import { setActiveWeights, getActiveWeights, DEFAULT_WEIGHTS, type LinearFactorWeights } from './linear-factor-model';
+import {
+  getLifecycleSnapshot,
+  getOutcomesLog,
+  getPredictionsLog,
+  getVerificationsLog,
+  type LifecycleSnapshot,
+} from './amira-prediction-lifecycle-core';
 
 // ─── Learning hyperparameters ─────────────────────────────────────────────
 //
@@ -58,36 +65,103 @@ export interface VerificationRecord {
 
 export interface LearningState {
   total_verifications: number;
-  mean_absolute_error: number;       // rolling MAE
-  directional_accuracy_rate: number; // rolling hit rate (0..1)
-  mean_brier_score: number;          // rolling brier
+  mean_absolute_error: number | null;       // rolling MAE; null until first verification
+  directional_accuracy_rate: number | null; // rolling hit rate; null until first verification
+  mean_brier_score: number | null;          // rolling brier; null until first verification
   weights_history: LinearFactorWeights[]; // last N weight snapshots
+  last_update_timestamp: string | null;
+  lifecycle: LifecycleSnapshot;
+}
+
+export interface LearningSummary {
+  status: 'NO_HISTORY' | 'READY';
+  sampleCount: number;
+  total_verifications: number;
+  mean_absolute_error: number | null;
+  directional_accuracy_rate: number | null;
+  mean_brier_score: number | null;
   last_update_timestamp: string | null;
 }
 
 let _learningState: LearningState = {
   total_verifications: 0,
-  mean_absolute_error: 0,
-  directional_accuracy_rate: 0.5,
-  mean_brier_score: 0,
+  mean_absolute_error: null,
+  directional_accuracy_rate: null,
+  mean_brier_score: null,
   weights_history: [{ ...DEFAULT_WEIGHTS }],
   last_update_timestamp: null,
+  lifecycle: getLifecycleSnapshot(),
 };
 
 export function getLearningState(): LearningState {
-  return { ..._learningState, weights_history: [..._learningState.weights_history] };
+  return {
+    ..._learningState,
+    weights_history: [..._learningState.weights_history],
+    lifecycle: getLifecycleSnapshot(),
+  };
+}
+
+
+export function getLearningSummary(): LearningSummary {
+  // Metrics are derived from the canonical verification log so isolate-local
+  // counters are never presented as durable learning truth.
+  const verifications = getVerificationsLog();
+  const sampleCount = verifications.length;
+  if (sampleCount === 0) {
+    return {
+      status: 'NO_HISTORY',
+      sampleCount: 0,
+      total_verifications: 0,
+      mean_absolute_error: null,
+      directional_accuracy_rate: null,
+      mean_brier_score: null,
+      last_update_timestamp: null,
+    };
+  }
+  return {
+    status: 'READY',
+    sampleCount,
+    total_verifications: sampleCount,
+    mean_absolute_error: verifications.reduce((sum, item) => sum + item.error_delta, 0) / sampleCount,
+    directional_accuracy_rate: verifications.reduce((sum, item) => sum + item.directional_accuracy, 0) / sampleCount,
+    mean_brier_score: verifications.reduce((sum, item) => sum + item.brier_like_score, 0) / sampleCount,
+    last_update_timestamp: verifications.at(-1)?.timestamp ?? null,
+  };
 }
 
 export function resetLearningState(): void {
   _learningState = {
     total_verifications: 0,
-    mean_absolute_error: 0,
-    directional_accuracy_rate: 0.5,
-    mean_brier_score: 0,
+    mean_absolute_error: null,
+    directional_accuracy_rate: null,
+    mean_brier_score: null,
     weights_history: [{ ...DEFAULT_WEIGHTS }],
     last_update_timestamp: null,
+    lifecycle: getLifecycleSnapshot(),
   };
   setActiveWeights({ ...DEFAULT_WEIGHTS });
+}
+
+/** Rebuild active weights deterministically from durable verified lifecycle events. */
+export function rebuildLearningStateFromLifecycle(): LearningSummary {
+  resetLearningState();
+  const predictions = new Map(getPredictionsLog().map((item) => [item.prediction_id, item]));
+  const outcomes = new Map(getOutcomesLog().map((item) => [item.outcome_id, item]));
+  for (const verification of getVerificationsLog()) {
+    const prediction = predictions.get(verification.prediction_id);
+    const outcome = outcomes.get(verification.outcome_id);
+    if (!prediction || !outcome) continue;
+    updateWeightsFromVerification({
+      prediction_id: prediction.prediction_id,
+      expected_return: prediction.expected_return,
+      realized_return: outcome.realized_return,
+      error_delta: verification.error_delta,
+      signed_error: verification.signed_error,
+      directional_accuracy: verification.directional_accuracy,
+      brier_like_score: verification.brier_like_score,
+    });
+  }
+  return getLearningSummary();
 }
 
 // ─── Slow-Decay Weight Update ─────────────────────────────────────────────
@@ -146,9 +220,9 @@ export function updateWeightsFromVerification(v: VerificationRecord): {
   // Update rolling learning state
   _learningState.total_verifications += 1;
   const n = _learningState.total_verifications;
-  _learningState.mean_absolute_error = ((_learningState.mean_absolute_error * (n - 1)) + v.error_delta) / n;
-  _learningState.directional_accuracy_rate = ((_learningState.directional_accuracy_rate * (n - 1)) + v.directional_accuracy) / n;
-  _learningState.mean_brier_score = ((_learningState.mean_brier_score * (n - 1)) + v.brier_like_score) / n;
+  _learningState.mean_absolute_error = (((_learningState.mean_absolute_error ?? 0) * (n - 1)) + v.error_delta) / n;
+  _learningState.directional_accuracy_rate = (((_learningState.directional_accuracy_rate ?? 0) * (n - 1)) + v.directional_accuracy) / n;
+  _learningState.mean_brier_score = (((_learningState.mean_brier_score ?? 0) * (n - 1)) + v.brier_like_score) / n;
   _learningState.weights_history.push({ ...next });
   if (_learningState.weights_history.length > 50) _learningState.weights_history.shift();
   _learningState.last_update_timestamp = new Date().toISOString();

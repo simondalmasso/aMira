@@ -177,13 +177,13 @@ export async function runV2SystemicEnrichment(
   const scenarios = runScenarioSweep(input);
 
   // R10 — Foundation model advisors (async)
-  const sanScore = v1.scores[0];
+  const sanScore = v1.scores.find((score) => score.asset === 'SAN') ?? null;
   const advisors = await runAdvisors({
     market_state,
-    oracle_forecast: {
+    oracle_forecast: sanScore ? {
       expected_return: sanScore.prediction.expected_return,
       confidence: sanScore.prediction.confidence,
-    },
+    } : null,
   });
 
   const v2: V2SystemicReport = {

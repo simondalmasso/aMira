@@ -99,11 +99,12 @@ export const AUDIT_TRAIL_VERSION = 'audit_trail_v2_r9';
 
 const MAX_AUDIT_ENTRIES = 1000;
 let _auditBuffer: AuditEntry[] = [];
+let _auditIdSequence = 0;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 function genDecisionId(): string {
-  return `dec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  return `dec_${Date.now().toString(36)}_${(++_auditIdSequence).toString(36)}`;
 }
 
 // ─── Public API: Record a Decision ─────────────────────────────────────────
@@ -211,4 +212,5 @@ export function getAuditTrailState(): AuditTrailState {
 
 export function clearAuditTrail(): void {
   _auditBuffer = [];
+  _auditIdSequence = 0;
 }

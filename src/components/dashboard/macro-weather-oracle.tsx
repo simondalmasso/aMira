@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useHedgeFundStore, type RiskAppetite, type ReturnTargetMode } from '@/store/hedge-fund-store';
 import {
@@ -129,9 +129,6 @@ const DATA_LABEL_STYLE: Record<string, { cls: string; text: string }> = {
 
 export function MacroWeatherOracle() {
   const { metrics, allocations, riskAppetite, setRiskAppetite, returnTargetMode, setReturnTargetMode } = useHedgeFundStore();
-  const [oracleData, setOracleData] = useState<OracleState | null>(null);
-  const [rebalanceData, setRebalanceData] = useState<RebalanceOracleOutput | null>(null);
-  const [projections, setProjections] = useState<ProjectionOutput | null>(null);
   const [macroRaw, setMacroRaw] = useState<Record<string, unknown> | null>(null);
   const [projectionHorizon, setProjectionHorizon] = useState<30 | 60 | 90>(30);
 
@@ -147,18 +144,14 @@ export function MacroWeatherOracle() {
       .catch(() => {});
   }, []);
 
-  // Recompute oracle when macro data or metrics or return target change
-  useEffect(() => {
-    if (!macroRaw || !metrics) return;
-
+  // Oracle/rebalance/projections are pure derived state; do not mirror them through effects.
+  const derived = useMemo(() => {
+    if (!macroRaw || !metrics) return null;
     const macro = buildMacroFromAPI(macroRaw);
-    if (!macro) return;
-
-    const oracle = computeOracle(macro);
-    setOracleData(oracle);
-
-    const rebalance = computeRebalance(
-      oracle,
+    if (!macro) return null;
+    const oracleData = computeOracle(macro);
+    const rebalanceData = computeRebalance(
+      oracleData,
       allocations.map(a => ({
         productId: a.productId,
         productName: a.productName,
@@ -168,15 +161,23 @@ export function MacroWeatherOracle() {
         category: a.category,
       })),
       metrics,
-      returnTargetMode
+      returnTargetMode,
     );
-    setRebalanceData(rebalance);
-
-    // Compute projections
-    const totalUSD = allocations.reduce((s, a) => s + a.amountUSD, 0);
-    const proj = computeProjections(oracle, metrics, totalUSD, riskAppetite, returnTargetMode, macro.source);
-    setProjections(proj);
+    const totalUSD = allocations.reduce((sum, allocation) => sum + allocation.amountUSD, 0);
+    const projections = computeProjections(
+      oracleData,
+      metrics,
+      totalUSD,
+      riskAppetite,
+      returnTargetMode,
+      macro.source,
+    );
+    return { oracleData, rebalanceData, projections };
   }, [macroRaw, metrics, allocations, riskAppetite, returnTargetMode]);
+
+  const oracleData = derived?.oracleData ?? null;
+  const rebalanceData = derived?.rebalanceData ?? null;
+  const projections = derived?.projections ?? null;
 
   // Auto-refresh every 60s
   useEffect(() => {

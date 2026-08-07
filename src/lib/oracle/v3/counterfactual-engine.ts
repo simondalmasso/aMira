@@ -48,6 +48,11 @@ export interface CounterfactualPerturbation {
 }
 
 export interface CounterfactualResult {
+  data_class: 'SYNTHETIC';
+  purpose: 'SCENARIO_OR_COUNTERFACTUAL';
+  live_prediction: false;
+  lifecycle_persist_as_real: false;
+  learning_eligible: false;
   /** What was changed */
   perturbation: CounterfactualPerturbation;
   /** Resulting score */
@@ -85,6 +90,9 @@ export interface VariableSensitivityRanking {
 }
 
 export interface CounterfactualReport {
+  status: 'READY' | 'PARTIAL';
+  warnings: string[];
+  data_class: 'SYNTHETIC';
   /** Baseline (unchanged) score */
   baseline: {
     score: number;
@@ -149,7 +157,7 @@ function runCounterfactual(
   baselineScore: AssetScore,
   variable: CounterfactualVariable,
   factor: number,
-): CounterfactualResult {
+): CounterfactualResult | null {
   const baseline = baselineInput[variable] ?? 0;
   let counterfactual: number;
 
@@ -163,7 +171,8 @@ function runCounterfactual(
 
   const perturbedInput: MarketStateInput = { ...baselineInput, [variable]: counterfactual };
   const vector = runSinglePass(perturbedInput);
-  const score = vector.scores[0];
+  const score = vector.scores.find((candidate) => candidate.asset === baselineScore.asset) ?? null;
+  if (score === null) return null;
 
   const delta = counterfactual - baseline;
   const relative_delta = baseline !== 0 ? delta / baseline : 0;
@@ -175,6 +184,11 @@ function runCounterfactual(
   const sensitivity = input_delta_abs > 1e-9 ? Math.abs(score_adjusted_delta) / input_delta_abs : 0;
 
   return {
+    data_class: 'SYNTHETIC',
+    purpose: 'SCENARIO_OR_COUNTERFACTUAL',
+    live_prediction: false,
+    lifecycle_persist_as_real: false,
+    learning_eligible: false,
     perturbation: {
       variable,
       baseline: round(baseline, 6),
@@ -254,10 +268,13 @@ export function runCounterfactuals(input: CounterfactualEngineInput): Counterfac
   );
 
   const results: CounterfactualResult[] = [];
+  const warnings: string[] = [];
   for (const v of variables) {
     const factors = input.custom_perturbations?.[v] ?? DEFAULT_PERTURBATIONS[v];
     for (const f of factors) {
-      results.push(runCounterfactual(input.baseline_input, input.baseline_score, v, f));
+      const result = runCounterfactual(input.baseline_input, input.baseline_score, v, f);
+      if (result) results.push(result);
+      else warnings.push(`NO_PRIMARY_SCORE:${v}:${f}`);
     }
   }
 
@@ -271,6 +288,9 @@ export function runCounterfactuals(input: CounterfactualEngineInput): Counterfac
     : `Sin counterfactuals evaluados.`;
 
   return {
+    status: warnings.length === 0 ? 'READY' : 'PARTIAL',
+    warnings,
+    data_class: 'SYNTHETIC',
     baseline: {
       score: round(input.baseline_score.score, 2),
       score_adjusted: round(input.baseline_score.score_adjusted, 2),

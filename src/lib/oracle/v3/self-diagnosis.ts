@@ -154,9 +154,10 @@ function severityFromStatus(status: HealthStatus): number {
 
 const MAX_ALERTS = 200;
 let _alerts: Alert[] = [];
+let _alertIdSequence = 0;
 
 function genAlertId(): string {
-  return `alert_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  return `alert_${Date.now().toString(36)}_${(++_alertIdSequence).toString(36)}`;
 }
 
 function pushAlert(alert: Alert): void {
@@ -188,6 +189,7 @@ export function getActiveAlerts(): Alert[] {
 
 export function clearAlerts(): void {
   _alerts = [];
+  _alertIdSequence = 0;
 }
 
 // ─── Drift Metric Computations ─────────────────────────────────────────────

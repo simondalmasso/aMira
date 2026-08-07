@@ -30,78 +30,44 @@ const LIVE_DATA_SRC = readFileSync(join(SRC_DIR, 'lib', 'live-data.ts'), 'utf8')
 describe('U7 — Failure Injection', () => {
 
   // ─── 1. Static audit: every fetch has fallback ─────────────────────────────
-  describe('Static audit — every data source has a fallback path', () => {
-
-    test('BCRA fetcher has a fallback object when proxy is unreachable', () => {
-      // fetchBCRAFromProxy should have a `const fallback: BCRARates` declaration
-      expect(LIVE_DATA_SRC).toMatch(/const fallback:\s*BCRARates\s*=/);
-      // Fallback should be returned when proxy is unreachable
-      expect(LIVE_DATA_SRC).toMatch(/if\s*\(!resp\s*\|\|\s*!resp\.ok\s*\|\|\s*!resp\.data\)\s*return fallback/);
+  describe('Static audit — every data source has truthful degradation metadata', () => {
+    test('Reconstructed values are never labeled REAL/OBSERVADO', () => {
+      expect(LIVE_DATA_SRC).toMatch(/label: input\.observed \? 'REAL' : 'RECONSTRUIDO'/);
+      expect(LIVE_DATA_SRC).toMatch(/fetchError: !input\.observed/);
+      expect(LIVE_DATA_SRC).toMatch(/observedAt: input\.observed \?/);
     });
 
-    test('CER fetcher has a fallback object', () => {
-      expect(LIVE_DATA_SRC).toMatch(/const fallback:\s*CERData\s*=/);
-      expect(LIVE_DATA_SRC).toMatch(/if\s*\(!resp\s*\|\|\s*!resp\.ok\s*\|\|\s*!resp\.lastValue[^)]*\)\s*return fallback/);
+    test('MEP fallback is explicitly reconstructed with limitation text', () => {
+      expect(LIVE_DATA_SRC).toContain("source: fx ? 'Bluelytics/DolarAPI' : 'Fallback operativo MEP'");
+      expect(LIVE_DATA_SRC).toContain('Cotización MEP no observada; valor reconstruido.');
     });
 
-    test('INDEC fetcher has a fallback object', () => {
-      expect(LIVE_DATA_SRC).toMatch(/const fallback:\s*INDECInflationData\s*=/);
-      expect(LIVE_DATA_SRC).toMatch(/if\s*\(!resp\s*\|\|\s*!resp\.ok\s*\|\|\s*resp\.lastMonthly\s*==\s*null\)\s*return fallback/);
+    test('Inflation, rates, CER, crawling peg and reserves expose reconstruction limitations', () => {
+      expect(LIVE_DATA_SRC).toContain('Inflación no observada en esta ejecución.');
+      expect(LIVE_DATA_SRC).toContain('Tasas no observadas.');
+      expect(LIVE_DATA_SRC).toContain('CER reconstruido desde inflación.');
+      expect(LIVE_DATA_SRC).toContain('Proxy derivado de brecha MEP/oficial.');
+      expect(LIVE_DATA_SRC).toContain('El fetcher no consulta reservas BCRA.');
     });
 
-    test('Bluelytics fetcher has explicit STALE label on failure (not ERROR)', () => {
-      // SA-03: fetch fail serving fallback = STALE (real-ish but not fresh).
-      // ERROR is reserved for "no data at all".
-      expect(LIVE_DATA_SRC).toMatch(/label:\s*bluelytics\s*\?\s*'REAL'\s*:\s*'STALE'/);
+    test('Source fetch failure returns null rather than fabricating observed data', () => {
+      expect(LIVE_DATA_SRC).toMatch(/export async function fetchBluelytics[\s\S]*catch \{[\s\S]*return null/);
     });
 
-    test('INDEC fetcher has explicit STALE label on failure', () => {
-      expect(LIVE_DATA_SRC).toMatch(/label:\s*indecData\.isReal\s*\?\s*'REAL'\s*:\s*'STALE'/);
-    });
-
-    test('BCRA fetcher has explicit STALE label on failure', () => {
-      expect(LIVE_DATA_SRC).toMatch(/label:\s*bcraData\.isReal\s*\?\s*'REAL'\s*:\s*'STALE'/);
-    });
-
-    test('fetchProxySource logs failure and returns null (no throw)', () => {
-      // fetchProxySource should have try/catch returning null
-      expect(LIVE_DATA_SRC).toMatch(/function fetchProxySource[\s\S]{0,800}try\s*\{/);
-      // FETCH FAILED log appears inside catch block, returns null
-      expect(LIVE_DATA_SRC).toMatch(/FETCH FAILED[\s\S]{0,200}return null/);
-    });
-
-    test('applyStaleDegradation downgrades REAL → STALE based on age threshold', () => {
+    test('applyStaleDegradation downgrades observed fields to STALE', () => {
       expect(LIVE_DATA_SRC).toContain('applyStaleDegradation');
       expect(LIVE_DATA_SRC).toContain('STALE_THRESHOLD_MINUTES');
-      // Should downgrades REAL to STALE
-      expect(LIVE_DATA_SRC).toMatch(/label:\s*'STALE'\s*as\s*DataLabel/);
+      expect(LIVE_DATA_SRC).toMatch(/item\.label === 'REAL' \|\| item\.label === 'OBSERVADO'/);
+      expect(LIVE_DATA_SRC).toMatch(/label: 'STALE'/);
     });
 
-    test('MacroState source field tracks degradation: REAL → STALE → ERROR', () => {
-      expect(LIVE_DATA_SRC).toMatch(/degraded\.source\s*=\s*'STALE'/);
+    test('MacroState source is PARTIAL_FALLBACK with any observation and ERROR with none', () => {
+      expect(LIVE_DATA_SRC).toContain("source: observed > 0 ? 'PARTIAL_FALLBACK' : 'ERROR'");
     });
 
-    test('No raw MODELO or SIMULADO labels in fetch fallbacks (SA-03)', () => {
-      // SIMULADO is only legitimate in computeSimulacion() — not in fetch fallbacks
-      const lines = LIVE_DATA_SRC.split('\n');
-      const fallbackLines = lines.filter((l, idx) =>
-        (l.includes('SIMULADO') || l.includes('MODELO')) &&
-        !l.trim().startsWith('//') &&  // skip comments
-        !l.includes("'SIMULADO'") &&    // type union declaration is OK
-        !l.includes('"SIMULADO"') &&
-        !l.includes('DataLabel')        // type annotations
-      );
-      // The remaining lines should only be the computeSimulacion block (L1130+)
-      // and historical scenario labels (L1085, L1097). These are documented
-      // as legitimate per IC-05.
-      const illegitimate = fallbackLines.filter(l =>
-        !l.includes('computeSimulacion') &&
-        !l.includes('computeSimulacionHistorica') &&
-        !l.includes('All data is model-constructed') &&
-        !l.includes('label: DataLabel') &&
-        !l.includes('Always SIMULADO')
-      );
-      expect(illegitimate.length).toBe(0);
+    test('No reconstructed fallback branch is labeled REAL', () => {
+      const fallbackLines = LIVE_DATA_SRC.split('\n').filter((line) => /Fallback|Estimación fija|Modelo bandas/.test(line));
+      expect(fallbackLines.some((line) => /label:\s*['"]REAL['"]/.test(line))).toBe(false);
     });
   });
 

@@ -11,62 +11,52 @@ export async function POST() {
     const multiResult = optimizePortfolioMulti(macro);
     const products = getProductsFromMacro(macro);
 
-    // Log rebalance to DB
+    let persistenceDurable = false;
+    let persistenceWarning: string | null = null;
     try {
-      await db.rebalanceLog.create({
-        data: {
-          previousAllocs: JSON.stringify([]),
-          newAllocs: JSON.stringify(result.allocations),
-          reason: 'manual',
-          metricsJson: JSON.stringify(result.metrics),
-        },
-      });
-    } catch {
-      // DB write failure shouldn't block the response
-    }
-
-    // Deactivate old allocations and create new ones
-    try {
-      await db.allocation.updateMany({
-        where: { isActive: true },
-        data: { isActive: false },
-      });
-
-      for (const alloc of result.allocations) {
-        await db.allocation.create({
+      const previousAllocs = await db.allocation.findMany({ where: { isActive: true } });
+      await db.$transaction(async (tx) => {
+        await tx.rebalanceLog.create({
           data: {
-            productId: alloc.productId,
-            weight: alloc.weight,
-            amountARS: alloc.amountARS,
-            amountUSD: alloc.amountUSD,
-            isActive: true,
+            previousAllocs: JSON.stringify(previousAllocs),
+            newAllocs: JSON.stringify(result.allocations),
+            reason: 'manual',
+            metricsJson: JSON.stringify(result.metrics),
           },
         });
-      }
-    } catch {
-      // DB write failure shouldn't block
+        await tx.allocation.updateMany({ where: { isActive: true }, data: { isActive: false } });
+        for (const allocation of result.allocations) {
+          await tx.allocation.create({
+            data: {
+              productId: allocation.productId,
+              weight: allocation.weight,
+              amountARS: allocation.amountARS,
+              amountUSD: allocation.amountUSD,
+              isActive: true,
+            },
+          });
+        }
+      });
+      persistenceDurable = true;
+    } catch (error) {
+      console.error('[rebalance] transactional persistence failed', error);
+      persistenceWarning = 'REBALANCE_PERSISTENCE_FAILED';
     }
 
     const equityCurve = generateEquityCurve(2000, result.allocations, products, macro, 90);
-
-    // Backtest + provenance
     const backtest = computeBacktest(products);
     const dataLabel = getOverallDataLabel(macro);
-
-    // Include all products (0-weight for unallocated)
-    const allocatedIds = new Set(result.allocations.map(a => a.productId));
+    const allocatedIds = new Set(result.allocations.map((allocation) => allocation.productId));
     const allAllocations = [
       ...result.allocations,
-      ...products
-        .filter(p => !allocatedIds.has(p.id))
-        .map(p => ({
-          productId: p.id,
-          productName: p.shortName,
-          weight: 0,
-          amountARS: 0,
-          amountUSD: 0,
-          category: p.category,
-        })),
+      ...products.filter((product) => !allocatedIds.has(product.id)).map((product) => ({
+        productId: product.id,
+        productName: product.shortName,
+        weight: 0,
+        amountARS: 0,
+        amountUSD: 0,
+        category: product.category,
+      })),
     ];
 
     return NextResponse.json({
@@ -74,7 +64,13 @@ export async function POST() {
       timestamp: result.timestamp,
       dataMode: result.dataMode,
       dataLabel,
-      message: 'Portfolio rebalanced successfully',
+      message: persistenceDurable ? 'Portfolio rebalanced and persisted' : 'Portfolio rebalance computed; persistence degraded',
+      persistence: {
+        state: persistenceDurable ? 'durable' : 'degraded',
+        durable: persistenceDurable,
+        transactional: true,
+        warning: persistenceWarning,
+      },
       allocations: allAllocations,
       metrics: result.metrics,
       scenarioResults: result.scenarioResults,
@@ -85,10 +81,7 @@ export async function POST() {
       provenance: macro.provenance,
     });
   } catch (error) {
-    return NextResponse.json({
-      success: false,
-      error: 'Rebalance failed',
-      timestamp: new Date().toISOString(),
-    }, { status: 500 });
+    console.error('[rebalance] computation failed', error);
+    return NextResponse.json({ success: false, code: 'REBALANCE_FAILED', error: 'Rebalance failed', timestamp: new Date().toISOString() }, { status: 500 });
   }
 }

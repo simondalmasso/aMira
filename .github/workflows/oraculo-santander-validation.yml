@@ -1,0 +1,179 @@
+name: Oraculo Santander Validation
+
+on:
+  push:
+    branches:
+      - feat/oraculo-santander-completion-sol
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oraculo-santander-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    name: Baseline and architecture inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Capture repository and tool inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p validation-evidence
+          {
+            echo "git_rev_parse_HEAD=$(git rev-parse HEAD)"
+            echo "mandatory_base=a76be0d2d1272b533c2fcfbb6d285718def8f6cc"
+            echo "git_status_short_branch_BEGIN"
+            git status --short --branch
+            echo "git_status_short_branch_END"
+            echo "node_version=$(node --version)"
+            echo "bun_version=$(bun --version)"
+            echo "package_manager=bun"
+            echo "root_lockfile=bun.lock"
+          } | tee validation-evidence/repository-status.txt
+
+          find . \
+            -path './.git' -prune -o \
+            -path './node_modules' -prune -o \
+            -path './.next' -prune -o \
+            -path './.open-next' -prune -o \
+            -type f -print | sort | tee validation-evidence/files.txt
+
+          find . -maxdepth 3 -type f \( \
+            -name 'bun.lock' -o -name 'bun.lockb' -o \
+            -name 'package-lock.json' -o -name 'pnpm-lock.yaml' -o \
+            -name 'yarn.lock' \
+          \) -print | sort | tee validation-evidence/package-locks.txt
+
+          git archive --format=tar.gz --output=validation-evidence/source-snapshot.tar.gz HEAD
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Capture baseline diagnostics
+        shell: bash
+        run: |
+          set +e
+
+          run_gate() {
+            local name="$1"
+            shift
+            echo "=== ${name}: COMMAND: $* ===" | tee "validation-evidence/${name}.log"
+            "$@" >> "validation-evidence/${name}.log" 2>&1
+            local code=$?
+            echo "=== ${name}: EXIT_CODE=${code} ===" | tee -a "validation-evidence/${name}.log"
+            echo "${name}=${code}" >> validation-evidence/exit-codes.txt
+            cat "validation-evidence/${name}.log"
+          }
+
+          run_gate typecheck-global bunx tsc --noEmit --pretty false
+          run_gate lint bun run lint
+          run_gate bun-test bun test
+          run_gate hardening-suite node scripts/hardening/run-all.mjs
+          run_gate next-build bun run build
+          run_gate opennext-build bunx opennextjs-cloudflare build
+
+          if [ -f .open-next/worker.js ]; then
+            run_gate wrap-worker node scripts/wrap-worker-with-cron.mjs
+          else
+            echo "wrap-worker=125" >> validation-evidence/exit-codes.txt
+            echo "OpenNext worker missing; wrapper not executed" | tee validation-evidence/wrap-worker.log
+          fi
+
+          python3 - <<'PY'
+          import collections
+          import json
+          import pathlib
+          import re
+
+          evidence = pathlib.Path('validation-evidence')
+          text = (evidence / 'typecheck-global.log').read_text(errors='replace')
+          pattern = re.compile(
+              r'^([^\s].*?\.(?:ts|tsx|mts|cts|js|jsx))\((\d+),(\d+)\): error (TS\d+): (.*)$',
+              re.MULTILINE,
+          )
+
+          def classify(path: str) -> str:
+              if path.startswith('santaninverter-oracle/'):
+                  return 'legacy_subproject'
+              if path == 'src/worker.ts':
+                  return 'unreferenced_alternate_runtime'
+              if path.startswith('scripts/'):
+                  return 'operational_scripts'
+              if path.startswith('tests/'):
+                  return 'tests'
+              if path.startswith('examples/') or path.startswith('dist-test/') or path.startswith('upload/'):
+                  return 'examples_fixtures_artifacts'
+              if path.startswith('src/'):
+                  return 'canonical_next_opennext_runtime'
+              return 'other_repository_scope'
+
+          rows = []
+          for match in pattern.finditer(text):
+              path, line, col, code, message = match.groups()
+              rows.append({
+                  'scope': classify(path),
+                  'path': path,
+                  'line': int(line),
+                  'column': int(col),
+                  'code': code,
+                  'message': message,
+              })
+
+          (evidence / 'typecheck-diagnostics.json').write_text(
+              json.dumps(rows, indent=2, ensure_ascii=False) + '\n'
+          )
+          with (evidence / 'typecheck-diagnostics.tsv').open('w') as output:
+              output.write('scope\tpath\tline\tcolumn\tcode\tmessage\n')
+              for row in rows:
+                  message = row['message'].replace('\t', ' ').replace('\n', ' ')
+                  output.write(
+                      f"{row['scope']}\t{row['path']}\t{row['line']}\t{row['column']}\t{row['code']}\t{message}\n"
+                  )
+
+          scope_counts = collections.Counter(row['scope'] for row in rows)
+          file_counts = collections.Counter(row['path'] for row in rows)
+          code_counts = collections.Counter(row['code'] for row in rows)
+          summary = {
+              'total_diagnostics': len(rows),
+              'by_scope': dict(sorted(scope_counts.items())),
+              'by_file': dict(sorted(file_counts.items())),
+              'by_code': dict(sorted(code_counts.items())),
+          }
+          (evidence / 'typecheck-summary.json').write_text(
+              json.dumps(summary, indent=2, ensure_ascii=False) + '\n'
+          )
+          print(json.dumps(summary, indent=2, ensure_ascii=False))
+          PY
+
+          echo "EXIT_CODES_BEGIN"
+          cat validation-evidence/exit-codes.txt
+          echo "EXIT_CODES_END"
+          exit 0
+
+      - name: Upload baseline evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oraculo-santander-baseline-${{ github.sha }}
+          path: validation-evidence
+          if-no-files-found: error
+          retention-days: 14

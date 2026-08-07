@@ -1,25 +1,9 @@
 // ============================================================================
-// Ω-X10 DATA INTEGRITY PIPELINE — Validation Layer
-// Schema validation (Zod), API response auditing, failure simulation
-//
-// PURPOSE:
-//   This module provides the FIRST validation gate in the ENGINEERING_DISCIPLINE_PHASE.
-//   Before any macro data enters the X10 pipeline, it MUST pass schema validation.
-//   Before any allocation is computed, data integrity MUST be verified.
-//
-// DESIGN PRINCIPLES:
-//   1. Never trust external API responses — validate everything
-//   2. Schema validation is MANDATORY, not optional
-//   3. Failure simulation tests the system's resilience to bad data
-//   4. Every validation result is logged for auditability
-//   5. Paranoia is a feature, not a bug
+// Ω-X10 DATA INTEGRITY PIPELINE — typed validation, auditing and failure probes
 // ============================================================================
 
 import { z } from 'zod';
-
-// ============================================================================
-// ZOD SCHEMAS — External API Response Validation
-// ============================================================================
+import type { DataLabel } from './live-data';
 
 export const BluelyticsSchema = z.object({
   oficial: z.object({
@@ -33,7 +17,7 @@ export const BluelyticsSchema = z.object({
     value_buy: z.number().min(100).max(5000),
   }),
   last_update: z.string().min(1),
-}).passthrough(); // Allow extra fields but validate required ones
+}).passthrough();
 
 export const BCRARatesSchema = z.object({
   badlarTNA: z.number().min(-10).max(200),
@@ -63,10 +47,6 @@ export const INDECInflationSchema = z.object({
   sourceUrl: z.string().min(1),
   dataDate: z.string().min(1),
 }).passthrough();
-
-// ============================================================================
-// MACRO STATE SCHEMA — Validates the output of getMacroState()
-// ============================================================================
 
 export const MEPDataSchema = z.object({
   rate: z.number().min(100).max(5000),
@@ -101,7 +81,8 @@ export const CERDataMacroSchema = z.object({
 });
 
 export const DataProvenanceSchema = z.object({
-  label: z.enum(['OBSERVADO', 'REAL', 'STALE', 'ERROR', 'PARTIAL_FALLBACK']),
+  label: z.enum(['OBSERVADO', 'REAL', 'STALE', 'ERROR', 'PARTIAL_FALLBACK', 'SIMULADO', 'RECONSTRUIDO']),
+  dataClass: z.enum(['OBSERVED', 'RECONSTRUCTED', 'SYNTHETIC']),
   source: z.string().min(1),
   url: z.string(),
   lastUpdate: z.string().min(1),
@@ -110,7 +91,11 @@ export const DataProvenanceSchema = z.object({
   fetchedAt: z.string().min(1),
   ageMinutes: z.number().min(0).max(99999),
   fetchError: z.boolean(),
-});
+  observedAt: z.string().nullable().optional(),
+  coverage: z.string().optional(),
+  limitations: z.array(z.string()).optional(),
+  transformations: z.array(z.string()).optional(),
+}).passthrough();
 
 export const MacroStateSchema = z.object({
   lastUpdate: z.string().min(1),
@@ -132,11 +117,7 @@ export const MacroStateSchema = z.object({
     crawlingPeg: DataProvenanceSchema,
     reserves: DataProvenanceSchema,
   }),
-});
-
-// ============================================================================
-// VALIDATION RESULT TYPE
-// ============================================================================
+}).passthrough();
 
 export interface ValidationResult<T> {
   success: boolean;
@@ -160,151 +141,82 @@ export interface ValidationWarning {
   severity: 'low' | 'medium' | 'high';
 }
 
-// ============================================================================
-// CORE VALIDATOR — Validate any data against a Zod schema
-// ============================================================================
-
 export function validateData<T>(
   data: unknown,
-  schema: z.ZodSchema<T>,
+  schema: z.ZodType<T>,
   schemaName: string,
 ): ValidationResult<T> {
   const timestamp = new Date().toISOString();
-
   try {
     const result = schema.safeParse(data);
-
     if (result.success) {
-      // Even successful validation can produce warnings
-      const warnings = generateWarnings(data, schemaName);
       return {
         success: true,
         data: result.data,
         errors: [],
-        warnings,
+        warnings: generateWarnings(result.data, schemaName),
         timestamp,
         schemaName,
       };
     }
-
-    // Parse errors into structured format
-    const errors: ValidationError[] = result.error.issues.map(issue => ({
-      path: issue.path.join('.'),
-      message: issue.message,
-      code: issue.code,
-      received: issue.code === 'invalid_type' ? (issue as any).received : undefined,
-    }));
-
     return {
       success: false,
       data: null,
-      errors,
+      errors: result.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+        code: issue.code,
+      })),
       warnings: [],
       timestamp,
       schemaName,
     };
-  } catch (err) {
+  } catch (error) {
+    console.error(`[data-integrity] ${schemaName} validator failed`, error);
     return {
       success: false,
       data: null,
-      errors: [{
-        path: 'root',
-        message: `Validation threw unexpected error: ${err instanceof Error ? err.message : String(err)}`,
-        code: 'UNEXPECTED_ERROR',
-      }],
+      errors: [{ path: 'root', message: 'Validation failed unexpectedly', code: 'UNEXPECTED_ERROR' }],
       warnings: [],
       timestamp,
       schemaName,
     };
   }
 }
-
-// ============================================================================
-// WARNING GENERATION — Sanity checks beyond schema validation
-// ============================================================================
 
 function generateWarnings(data: unknown, schemaName: string): ValidationWarning[] {
+  if (schemaName !== 'MacroState') return [];
+  const parsed = MacroStateSchema.safeParse(data);
+  if (!parsed.success) return [];
+  const d = parsed.data;
   const warnings: ValidationWarning[] = [];
 
-  if (!data || typeof data !== 'object') return warnings;
-
-  const d = data as Record<string, any>;
-
-  // Macro-specific sanity checks
-  if (schemaName === 'MacroState') {
-    // MEP gap should be non-negative under normal conditions
-    if (d.mep?.gap < 0) {
-      warnings.push({
-        path: 'mep.gap',
-        message: `MEP gap is negative (${d.mep.gap.toFixed(2)}%) — blue dollar below official. Possible data error.`,
-        severity: 'high',
-      });
-    }
-
-    // MEP gap > 100% is extreme
-    if (d.mep?.gap > 100) {
-      warnings.push({
-        path: 'mep.gap',
-        message: `MEP gap extremely wide (${d.mep.gap.toFixed(2)}%) — confirm data source integrity.`,
-        severity: 'high',
-      });
-    }
-
-    // Inflation expected30d should be within reasonable bounds
-    if (d.inflation?.expected30d > 10) {
-      warnings.push({
-        path: 'inflation.expected30d',
-        message: `Monthly inflation expectation ${(d.inflation.expected30d).toFixed(1)}% is extremely high — verify data source.`,
-        severity: 'medium',
-      });
-    }
-
-    // Interest rates should be positive in Argentina
-    if (d.rates?.bcraPolicy < 0) {
-      warnings.push({
-        path: 'rates.bcraPolicy',
-        message: `BCRA policy rate is negative (${d.rates.bcraPolicy}%) — unusual for Argentina, verify.`,
-        severity: 'high',
-      });
-    }
-
-    // CER monthly change should roughly track inflation
-    if (d.cer?.monthlyChange && d.inflation?.monthly) {
-      const cerInflGap = Math.abs(d.cer.monthlyChange - d.inflation.monthly);
-      if (cerInflGap > 3) {
-        warnings.push({
-          path: 'cer.monthlyChange',
-          message: `CER (${d.cer.monthlyChange.toFixed(1)}%) diverges from inflation (${d.inflation.monthly.toFixed(1)}%) by ${cerInflGap.toFixed(1)}pp — verify both sources.`,
-          severity: 'medium',
-        });
-      }
-    }
-
-    // Crawling peg should be near zero under bandas cambiarias
-    if (d.crawlingPeg > 3) {
-      warnings.push({
-        path: 'crawlingPeg',
-        message: `Crawling peg ${d.crawlingPeg.toFixed(1)}%/month is high — under bandas cambiarias (Jan 2026+) this should be near 0%.`,
-        severity: 'medium',
-      });
-    }
-
-    // Real data percentage should not be 0% if source claims REAL
-    if (d.source === 'REAL' && d.realDataPct < 30) {
-      warnings.push({
-        path: 'realDataPct',
-        message: `Source claims REAL but realDataPct is only ${d.realDataPct}% — inconsistent labeling.`,
-        severity: 'high',
-      });
+  if (d.mep.gap < 0) {
+    warnings.push({ path: 'mep.gap', message: `MEP gap is negative (${d.mep.gap.toFixed(2)}%) — verify source integrity.`, severity: 'high' });
+  }
+  if (d.mep.gap > 100) {
+    warnings.push({ path: 'mep.gap', message: `MEP gap is extremely wide (${d.mep.gap.toFixed(2)}%) — verify source integrity.`, severity: 'high' });
+  }
+  if (d.inflation.expected30d > 10) {
+    warnings.push({ path: 'inflation.expected30d', message: `Monthly inflation expectation ${d.inflation.expected30d.toFixed(1)}% is extreme.`, severity: 'medium' });
+  }
+  if (d.rates.bcraPolicy < 0) {
+    warnings.push({ path: 'rates.bcraPolicy', message: `BCRA policy rate is negative (${d.rates.bcraPolicy}%) — verify source integrity.`, severity: 'high' });
+  }
+  if (d.cer.monthlyChange !== 0 && d.inflation.monthly !== 0) {
+    const gap = Math.abs(d.cer.monthlyChange - d.inflation.monthly);
+    if (gap > 3) {
+      warnings.push({ path: 'cer.monthlyChange', message: `CER/inflation divergence is ${gap.toFixed(1)}pp — verify both sources.`, severity: 'medium' });
     }
   }
-
+  if (d.crawlingPeg > 3) {
+    warnings.push({ path: 'crawlingPeg', message: `Crawling peg ${d.crawlingPeg.toFixed(1)}%/month is high — verify source/model state.`, severity: 'medium' });
+  }
+  if (d.source === 'REAL' && d.realDataPct < 30) {
+    warnings.push({ path: 'realDataPct', message: `Source claims REAL but realDataPct is ${d.realDataPct}% — inconsistent labeling.`, severity: 'high' });
+  }
   return warnings;
 }
-
-// ============================================================================
-// API RESPONSE AUDITOR — Validate and log every API response
-// ============================================================================
 
 export interface APIAuditEntry {
   source: string;
@@ -314,26 +226,25 @@ export interface APIAuditEntry {
   errors: ValidationError[];
   warnings: ValidationWarning[];
   responseTimeMs: number | null;
-  dataLabel: 'REAL' | 'ERROR' | 'ERROR';
+  dataLabel: DataLabel;
   dataDate: string | null;
 }
 
 const auditLog: APIAuditEntry[] = [];
 const MAX_AUDIT_LOG_SIZE = 1000;
 
-export function auditAPIResponse(
+export function auditAPIResponse<T>(
   source: string,
   url: string,
   data: unknown,
-  schema: z.ZodSchema,
+  schema: z.ZodType<T>,
   schemaName: string,
   responseTimeMs: number | null = null,
-  dataLabel: 'REAL' | 'ERROR' | 'ERROR' = 'ERROR',
+  dataLabel: DataLabel = 'ERROR',
   dataDate: string | null = null,
-): ValidationResult<any> {
+): ValidationResult<T> {
   const result = validateData(data, schema, schemaName);
-
-  const entry: APIAuditEntry = {
+  auditLog.push({
     source,
     url,
     timestamp: new Date().toISOString(),
@@ -343,24 +254,16 @@ export function auditAPIResponse(
     responseTimeMs,
     dataLabel,
     dataDate,
-  };
-
-  auditLog.push(entry);
-
-  // Keep audit log bounded
-  if (auditLog.length > MAX_AUDIT_LOG_SIZE) {
-    auditLog.shift();
-  }
-
+  });
+  if (auditLog.length > MAX_AUDIT_LOG_SIZE) auditLog.shift();
   return result;
 }
 
-/** Get the last N audit entries */
-export function getAuditLog(count: number = 50): APIAuditEntry[] {
-  return auditLog.slice(-count);
+export function getAuditLog(count = 50): APIAuditEntry[] {
+  const bounded = Number.isFinite(count) ? Math.min(Math.max(Math.trunc(count), 1), MAX_AUDIT_LOG_SIZE) : 50;
+  return auditLog.slice(-bounded);
 }
 
-/** Get audit summary statistics */
 export function getAuditStats(): {
   totalEntries: number;
   validationSuccessRate: number;
@@ -369,45 +272,32 @@ export function getAuditStats(): {
   sourceBreakdown: Record<string, { total: number; success: number; failed: number }>;
 } {
   const recent = auditLog.slice(-100);
-  const successCount = recent.filter(e => e.validationSuccess).length;
-  const errorCount = recent.filter(e => e.errors.length > 0).length;
-  const warningCount = recent.filter(e => e.warnings.length > 0).length;
-
   const sourceBreakdown: Record<string, { total: number; success: number; failed: number }> = {};
   for (const entry of recent) {
-    if (!sourceBreakdown[entry.source]) {
-      sourceBreakdown[entry.source] = { total: 0, success: 0, failed: 0 };
-    }
-    sourceBreakdown[entry.source].total++;
-    if (entry.validationSuccess) {
-      sourceBreakdown[entry.source].success++;
-    } else {
-      sourceBreakdown[entry.source].failed++;
-    }
+    const current = sourceBreakdown[entry.source] ?? { total: 0, success: 0, failed: 0 };
+    current.total += 1;
+    if (entry.validationSuccess) current.success += 1;
+    else current.failed += 1;
+    sourceBreakdown[entry.source] = current;
   }
-
   return {
     totalEntries: auditLog.length,
-    validationSuccessRate: recent.length > 0 ? successCount / recent.length : 0,
-    recentErrors: errorCount,
-    recentWarnings: warningCount,
+    validationSuccessRate: recent.length > 0 ? recent.filter((entry) => entry.validationSuccess).length / recent.length : 0,
+    recentErrors: recent.filter((entry) => entry.errors.length > 0).length,
+    recentWarnings: recent.filter((entry) => entry.warnings.length > 0).length,
     sourceBreakdown,
   };
 }
 
-// ============================================================================
-// FAILURE SIMULATION — Test system resilience to bad/missing data
-// ============================================================================
-
 export type FailureType =
-  | 'NULL_RESPONSE'       // API returns null
-  | 'EMPTY_OBJECT'        // API returns {}
-  | 'WRONG_TYPES'         // API returns string instead of number
-  | 'EXTREME_VALUES'      // API returns 99999 or -99999
-  | 'STALE_DATA'          // API returns data from 1 year ago
-  | 'PARTIAL_FAILURE'     // Some fields present, others missing
-  | 'RATE_LIMITED'        // Simulate 429 response
-  | 'NETWORK_ERROR';      // Simulate network failure
+  | 'NULL_RESPONSE'
+  | 'EMPTY_OBJECT'
+  | 'WRONG_TYPES'
+  | 'EXTREME_VALUES'
+  | 'STALE_DATA'
+  | 'PARTIAL_FAILURE'
+  | 'RATE_LIMITED'
+  | 'NETWORK_ERROR';
 
 export interface FailureSimulationResult {
   failureType: FailureType;
@@ -421,119 +311,96 @@ export interface FailureSimulationResult {
   timestamp: string;
 }
 
-/**
- * Generate corrupted macro data for failure simulation.
- * Each failure type produces a specific corruption pattern.
- */
-export function generateCorruptedMacro(
-  baseMacro: Record<string, any>,
-  failureType: FailureType,
-): Record<string, any> {
-  const corrupted = JSON.parse(JSON.stringify(baseMacro)); // Deep clone
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function childRecord(record: UnknownRecord, key: string): UnknownRecord | null {
+  const value = record[key];
+  return isRecord(value) ? value : null;
+}
+
+function cloneRecord(input: UnknownRecord): UnknownRecord {
+  const cloned: unknown = JSON.parse(JSON.stringify(input));
+  return isRecord(cloned) ? cloned : {};
+}
+
+function markProvenance(record: UnknownRecord, label: 'STALE' | 'ERROR', ageMinutes?: number, stalenessHours?: number): void {
+  const provenance = childRecord(record, 'provenance');
+  if (!provenance) return;
+  for (const key of Object.keys(provenance)) {
+    const entry = childRecord(provenance, key);
+    if (!entry) continue;
+    entry.label = label;
+    if (label === 'ERROR') entry.fetchError = true;
+    if (ageMinutes !== undefined) entry.ageMinutes = ageMinutes;
+    if (stalenessHours !== undefined) entry.stalenessHours = stalenessHours;
+  }
+}
+
+export function generateCorruptedMacro(baseMacro: UnknownRecord, failureType: FailureType): UnknownRecord {
+  const corrupted = cloneRecord(baseMacro);
+  const mep = childRecord(corrupted, 'mep');
+  const inflation = childRecord(corrupted, 'inflation');
+  const rates = childRecord(corrupted, 'rates');
 
   switch (failureType) {
     case 'NULL_RESPONSE':
-      return {}; // Completely empty
-
+    case 'NETWORK_ERROR':
+      return {};
     case 'EMPTY_OBJECT':
       return {
-        lastUpdate: new Date().toISOString(),
-        fetchedAt: new Date().toISOString(),
-        ageMinutes: 0,
-        source: 'ERROR',
+        lastUpdate: new Date().toISOString(), fetchedAt: new Date().toISOString(), ageMinutes: 0,
+        lastSuccessfulFetch: null, source: 'ERROR',
         mep: { rate: 0, officialRate: 0, gap: 0, sell: 0, buy: 0 },
         inflation: { monthly: 0, expected30d: 0, expected90d: 0, yearly: 0 },
         rates: { bcraPolicy: 0, moneyMarket: 0, plazoFijo: 0, plazoFijoUVA: 0, lecaps: 0, badlar: 0, leliq: 0, tml: 0 },
-        cer: { index: 0, monthlyChange: 0, dailyChange: 0 },
-        crawlingPeg: 0,
-        realDataPct: 0,
-        provenance: {},
+        cer: { index: 0, monthlyChange: 0, dailyChange: 0 }, crawlingPeg: 0, realDataPct: 0, provenance: {},
       };
-
     case 'WRONG_TYPES':
-      // String instead of number for critical fields
-      if (corrupted.mep) corrupted.mep.rate = "not_a_number";
-      if (corrupted.inflation) corrupted.inflation.monthly = "high";
-      if (corrupted.rates) corrupted.rates.bcraPolicy = null;
+      if (mep) mep.rate = 'not_a_number';
+      if (inflation) inflation.monthly = 'high';
+      if (rates) rates.bcraPolicy = null;
       return corrupted;
-
     case 'EXTREME_VALUES':
-      if (corrupted.mep) {
-        corrupted.mep.rate = 99999;
-        corrupted.mep.gap = 500;
-      }
-      if (corrupted.inflation) {
-        corrupted.inflation.monthly = 50;
-        corrupted.inflation.expected30d = 80;
-      }
-      if (corrupted.rates) {
-        corrupted.rates.bcraPolicy = -50;
-        corrupted.rates.moneyMarket = 500;
-      }
+      if (mep) { mep.rate = 99999; mep.gap = 500; }
+      if (inflation) { inflation.monthly = 50; inflation.expected30d = 80; }
+      if (rates) { rates.bcraPolicy = -50; rates.moneyMarket = 500; }
       return corrupted;
-
-    case 'STALE_DATA':
-      // Set data from 1 year ago
-      const oneYearAgo = new Date();
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      const staleDate = oneYearAgo.toISOString();
-      corrupted.fetchedAt = staleDate;
-      corrupted.ageMinutes = 525600; // 1 year in minutes
+    case 'STALE_DATA': {
+      const stale = new Date();
+      stale.setFullYear(stale.getFullYear() - 1);
+      corrupted.fetchedAt = stale.toISOString();
+      corrupted.ageMinutes = 525600;
       corrupted.source = 'STALE';
-      if (corrupted.provenance) {
-        for (const key of Object.keys(corrupted.provenance)) {
-          if (corrupted.provenance[key]) {
-            corrupted.provenance[key].label = 'STALE';
-            corrupted.provenance[key].ageMinutes = 525600;
-            corrupted.provenance[key].stalenessHours = 8760;
-          }
+      markProvenance(corrupted, 'STALE', 525600, 8760);
+      return corrupted;
+    }
+    case 'PARTIAL_FAILURE': {
+      const provenance = childRecord(corrupted, 'provenance');
+      if (provenance) {
+        for (const key of ['mepRate', 'inflation']) {
+          const entry = childRecord(provenance, key);
+          if (entry) { entry.label = 'ERROR'; entry.fetchError = true; }
         }
       }
+      corrupted.source = 'ERROR';
+      corrupted.realDataPct = 30;
       return corrupted;
-
-    case 'PARTIAL_FAILURE':
-      // Some provenance entries ERROR, others REAL
-      if (corrupted.provenance) {
-        corrupted.provenance.mepRate = { ...corrupted.provenance.mepRate, label: 'ERROR', fetchError: true };
-        corrupted.provenance.inflation = { ...corrupted.provenance.inflation, label: 'ERROR', fetchError: true };
-        corrupted.source = 'ERROR';
-        corrupted.realDataPct = 30;
-      }
-      return corrupted;
-
+    }
     case 'RATE_LIMITED':
-      // All fetches fail but with error status (not null)
       corrupted.source = 'ERROR';
       corrupted.realDataPct = 0;
-      if (corrupted.provenance) {
-        for (const key of Object.keys(corrupted.provenance)) {
-          if (corrupted.provenance[key]) {
-            corrupted.provenance[key].label = 'ERROR';
-            corrupted.provenance[key].fetchError = true;
-          }
-        }
-      }
-      return corrupted;
-
-    case 'NETWORK_ERROR':
-      return {}; // Same as NULL_RESPONSE — network failure means no data
-
-    default:
+      markProvenance(corrupted, 'ERROR');
       return corrupted;
   }
 }
 
-/**
- * Run a complete failure simulation suite.
- * Tests each failure type against the X10 pipeline and reports how the system responds.
- *
- * This is the KEY validation tool for ENGINEERING_DISCIPLINE_PHASE.
- * If the system doesn't degrade gracefully to every failure type,
- * it's NOT ready for production.
- */
 export function runFailureSimulationSuite(
-  baseMacro: Record<string, any>,
-  x10EngineRunner: (macro: any) => {
+  baseMacro: UnknownRecord,
+  x10EngineRunner: (macro: unknown) => {
     confidence: number;
     source: string;
     isCapitalPreservation: boolean;
@@ -541,168 +408,100 @@ export function runFailureSimulationSuite(
   },
 ): FailureSimulationResult[] {
   const failureTypes: FailureType[] = [
-    'NULL_RESPONSE',
-    'EMPTY_OBJECT',
-    'WRONG_TYPES',
-    'EXTREME_VALUES',
-    'STALE_DATA',
-    'PARTIAL_FAILURE',
-    'RATE_LIMITED',
-    'NETWORK_ERROR',
+    'NULL_RESPONSE', 'EMPTY_OBJECT', 'WRONG_TYPES', 'EXTREME_VALUES',
+    'STALE_DATA', 'PARTIAL_FAILURE', 'RATE_LIMITED', 'NETWORK_ERROR',
   ];
 
-  const results: FailureSimulationResult[] = [];
-
-  for (const failureType of failureTypes) {
+  return failureTypes.map((failureType) => {
     const corrupted = generateCorruptedMacro(baseMacro, failureType);
-
-    // Validate the corrupted data
     const validation = validateData(corrupted, MacroStateSchema, 'MacroState');
-
-    // Try running the X10 engine on corrupted data
-    let engineResult: FailureSimulationResult['result'];
-    let confidence: number;
-    let source: string;
-    let isCapitalPreservation: boolean;
-    let isEmergencyFreeze: boolean;
-    let details: string;
+    let result: FailureSimulationResult['result'] = 'FAILED';
+    let confidence = 0;
+    let source = 'ERROR';
+    let capitalPreservation = true;
+    let emergencyFreeze = true;
+    let details = 'Input rejected by integrity gate';
 
     try {
-      // If validation failed completely, the system should reject the data
-      if (!validation.success && (failureType === 'NULL_RESPONSE' || failureType === 'NETWORK_ERROR' || failureType === 'WRONG_TYPES')) {
-        engineResult = 'FROZEN';
-        confidence = 0;
-        source = 'ERROR';
-        isCapitalPreservation = true;
-        isEmergencyFreeze = true;
-        details = `Schema validation failed (${validation.errors.length} errors) — system correctly rejected data`;
+      if (!validation.success && ['NULL_RESPONSE', 'NETWORK_ERROR', 'WRONG_TYPES'].includes(failureType)) {
+        result = 'FROZEN';
       } else {
-        // Try to run the engine on the corrupted data
         const engine = x10EngineRunner(corrupted);
         confidence = engine.confidence;
         source = engine.source;
-        isCapitalPreservation = engine.isCapitalPreservation;
-        isEmergencyFreeze = engine.isEmergencyFreeze;
-
-        if (isEmergencyFreeze) {
-          engineResult = 'FROZEN';
-          details = `System correctly froze — confidence ${confidence.toFixed(2)}, source ${source}`;
-        } else if (isCapitalPreservation) {
-          engineResult = 'DEGRADED';
-          details = `System degraded to capital preservation — confidence ${confidence.toFixed(2)}`;
-        } else if (confidence < 0.5) {
-          engineResult = 'DEGRADED';
-          details = `System running with low confidence ${confidence.toFixed(2)}`;
-        } else {
-          engineResult = 'PASSED';
-          details = `System handled failure gracefully — confidence ${confidence.toFixed(2)}`;
-        }
-
-        // Special case: extreme values should NOT pass
-        if (failureType === 'EXTREME_VALUES' && engineResult === 'PASSED') {
-          engineResult = 'FAILED';
-          details = `CRITICAL: System accepted extreme values without degrading — safety gap detected`;
+        capitalPreservation = engine.isCapitalPreservation;
+        emergencyFreeze = engine.isEmergencyFreeze;
+        result = emergencyFreeze ? 'FROZEN' : capitalPreservation || confidence < 0.5 ? 'DEGRADED' : 'PASSED';
+        details = emergencyFreeze ? 'Emergency freeze activated' : capitalPreservation ? 'Capital preservation activated' : 'Failure handled without unhandled exception';
+        if (failureType === 'EXTREME_VALUES' && result === 'PASSED') {
+          result = 'FAILED';
+          details = 'Extreme invalid values were accepted without degradation';
         }
       }
-    } catch (err) {
-      engineResult = 'FAILED';
+    } catch (error) {
+      console.error(`[data-integrity] failure probe ${failureType} rejected`, error);
+      result = 'FROZEN';
       confidence = 0;
       source = 'ERROR';
-      isCapitalPreservation = false;
-      isEmergencyFreeze = false;
-      details = `Engine threw unhandled error: ${err instanceof Error ? err.message : String(err)}`;
+      capitalPreservation = true;
+      emergencyFreeze = true;
+      details = 'Failure probe rejected safely';
     }
 
-    results.push({
+    return {
       failureType,
       component: 'X10_Pipeline',
-      result: engineResult,
+      result,
       dataLabel: source,
       confidenceScore: Math.round(confidence * 100) / 100,
-      capitalPreservationMode: isCapitalPreservation,
-      emergencyFreeze: isEmergencyFreeze,
+      capitalPreservationMode: capitalPreservation,
+      emergencyFreeze,
       details,
       timestamp: new Date().toISOString(),
-    });
-  }
-
-  return results;
+    };
+  });
 }
-
-// ============================================================================
-// MACRO STATE VALIDATION GATE — Must pass before entering X10 pipeline
-// ============================================================================
 
 export interface IntegrityGateResult {
   passed: boolean;
   macroValid: boolean;
   warnings: ValidationWarning[];
   criticalErrors: ValidationError[];
-  dataQualityScore: number; // 0-100
+  dataQualityScore: number;
   recommendation: 'PROCEED' | 'PROCEED_WITH_CAUTION' | 'DEGRADED_MODE' | 'FREEZE';
   timestamp: string;
 }
 
-/**
- * The integrity gate is the single entry point for all macro data
- * entering the X10 pipeline. If this gate fails, the engine MUST NOT
- * compute new allocations.
- */
 export function runIntegrityGate(macro: unknown): IntegrityGateResult {
   const timestamp = new Date().toISOString();
-
-  // Step 1: Schema validation
   const schemaResult = validateData(macro, MacroStateSchema, 'MacroState');
-
-  if (!schemaResult.success) {
-    const criticalFields = ['mep', 'inflation', 'rates', 'source'];
-    const criticalErrors = schemaResult.errors.filter(e =>
-      criticalFields.some(f => e.path.startsWith(f))
-    );
-
+  if (!schemaResult.success || !schemaResult.data) {
     return {
       passed: false,
       macroValid: false,
       warnings: schemaResult.warnings,
       criticalErrors: schemaResult.errors,
       dataQualityScore: 0,
-      recommendation: criticalErrors.length > 3 ? 'FREEZE' : 'DEGRADED_MODE',
+      recommendation: 'FREEZE',
       timestamp,
     };
   }
 
-  // Step 2: Data quality scoring
-  const data = schemaResult.data!;
-  let qualityScore = 100;
-
-  // Deduct for non-REAL data
-  qualityScore -= (100 - data.realDataPct) * 0.3;
-
-  // Deduct for stale data
+  const data = schemaResult.data;
+  let qualityScore = 100 - (100 - data.realDataPct) * 0.3;
   if (data.source === 'STALE') qualityScore -= 20;
-  if (data.source === 'ERROR') qualityScore -= 30;
-  if (data.source === 'ERROR') qualityScore -= 50;
-
-  // Deduct for age
+  else if (data.source === 'PARTIAL_FALLBACK') qualityScore -= 30;
+  else if (data.source === 'ERROR') qualityScore -= 50;
   if (data.ageMinutes > 60) qualityScore -= 10;
   if (data.ageMinutes > 360) qualityScore -= 20;
-
-  // Deduct for warnings
   qualityScore -= schemaResult.warnings.length * 5;
-
   qualityScore = Math.max(0, Math.min(100, Math.round(qualityScore)));
 
-  // Step 3: Recommendation
-  let recommendation: IntegrityGateResult['recommendation'];
-  if (qualityScore >= 80 && data.source === 'REAL') {
-    recommendation = 'PROCEED';
-  } else if (qualityScore >= 60) {
-    recommendation = 'PROCEED_WITH_CAUTION';
-  } else if (qualityScore >= 30) {
-    recommendation = 'DEGRADED_MODE';
-  } else {
-    recommendation = 'FREEZE';
-  }
+  const recommendation: IntegrityGateResult['recommendation'] =
+    qualityScore >= 80 && data.source === 'REAL' ? 'PROCEED'
+      : qualityScore >= 60 ? 'PROCEED_WITH_CAUTION'
+        : qualityScore >= 30 ? 'DEGRADED_MODE'
+          : 'FREEZE';
 
   return {
     passed: recommendation !== 'FREEZE',

@@ -16,6 +16,7 @@
 // ============================================================================
 
 import { test, expect } from 'bun:test';
+import { getHeapStatistics } from 'node:v8';
 import { GOLDEN_INPUTS, runEngine } from './_helpers';
 
 const TOTAL_RUNS = 10000;
@@ -222,14 +223,13 @@ test('U4.4 — Object count does not grow unboundedly', () => {
   // Use a heuristic: V8's heap statistics give us the number of allocated objects.
   // We sample before and after to check the delta is bounded.
   const inputKeys = Object.keys(GOLDEN_INPUTS);
-  const v8 = require('node:v8');
-  const statsBefore = v8.getHeapStatistics();
+  const statsBefore = getHeapStatistics();
 
   for (let i = 0; i < 5000; i++) {
     runEngine(GOLDEN_INPUTS[inputKeys[i % inputKeys.length]!]);
   }
   forceGc();
-  const statsAfter = v8.getHeapStatistics();
+  const statsAfter = getHeapStatistics();
 
   const objectCountDelta = statsAfter.used_heap_size - statsBefore.used_heap_size;
   console.log(`[U4.4] Heap stats — before used: ${(statsBefore.used_heap_size / 1024 / 1024).toFixed(2)}MB  after used: ${(statsAfter.used_heap_size / 1024 / 1024).toFixed(2)}MB  delta: ${(objectCountDelta / 1024).toFixed(2)}KB`);

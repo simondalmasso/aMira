@@ -84,8 +84,8 @@ const ROLES: Role[] = [
   {
     name: 'Portfolio Engine',
     canonicalFile: 'src/lib/oracle/portfolio-engine.ts',
-    description: 'The single portfolio optimizer with `optimizePortfolio` entry point.',
-    exportMarker: 'optimizePortfolio',
+    description: 'The single canonical portfolio authority; decisionEngineCore/buildPortfolio own portfolio decisions.',
+    exportMarker: 'export function decisionEngineCore',
     alternativesToDisallow: [],
   },
   {
@@ -97,9 +97,9 @@ const ROLES: Role[] = [
   },
   {
     name: 'Lifecycle',
-    canonicalFile: 'src/lib/amira-prediction-lifecycle.ts',
-    description: 'Single canonical lifecycle tracker for prediction states (PENDING → CONFIRMED → EXPIRED).',
-    exportMarker: 'export',
+    canonicalFile: 'src/lib/amira-prediction-lifecycle-core.ts',
+    description: 'Single server-side lifecycle truth for Prediction → Outcome → Verification; React facade and KV adapter delegate to this core.',
+    exportMarker: 'export function getLifecycleSnapshot',
     alternativesToDisallow: [],
   },
   {
@@ -232,8 +232,9 @@ describe('U5 — Architectural Proof (single instance per role)', () => {
       }
     }
 
-    mkdirSync('/home/z/my-project/download', { recursive: true });
-    writeFileSync('/home/z/my-project/download/ARCHITECTURAL_PROOF.md', lines.join('\n'));
+    const reportDir = process.env.RUNNER_TEMP || '/tmp';
+    mkdirSync(reportDir, { recursive: true });
+    writeFileSync(join(reportDir, 'ARCHITECTURAL_PROOF.md'), lines.join('\n'));
 
     expect(fails.length).toBe(0);
     expect(passes.length).toBe(ROLES.length);

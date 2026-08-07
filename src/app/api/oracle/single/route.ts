@@ -1,88 +1,250 @@
 // src/app/api/oracle/single/route.ts
-// oracle_santander_v1_bloomberg_minimal — CANONICAL ENDPOINT
-//
-// GET /api/oracle/single
-// Returns the output of the single_pass_oracle_engine + closed_loop_learning
-// state, in the canonical contract:
-//   {
-//     success: true,
-//     vector: AssetScoreVector,        // single engine output
-//     learning: LearningState          // closed-loop feedback state
-//   }
-//
-// This endpoint is the ONLY endpoint that the SingleOraclePanel reads.
-// It does NOT replace /api/oracle/{predictions,rankings,search,...} which
-// remain for backward compatibility with the legacy multi-oracle UI.
-//
-// Per spec `data_layer.refresh_mode`: "interval_60s" — we set revalidate=60
-// so Cloudflare caches for ~60s. The client also polls every 60s.
+// CANONICAL ORACLE ENDPOINT — one macro state, one V1→V2→V3 pipeline.
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { applyStaleDegradation, getMacroState } from '@/lib/live-data';
+import { macroStateToMarketInput } from '@/lib/macro-market-adapter';
 import { runSinglePass } from '@/lib/single-pass-oracle-engine';
-import { getLearningState } from '@/lib/closed-loop-learning';
-import { fetchBCRAData } from '@/lib/bcra-api';
-import { fetchBluelytics } from '@/lib/live-data';
+import { runV3IntelligenceEnrichment } from '@/lib/oracle/v3';
+import { getLifecycleLedgerSnapshot, recordLifecyclePrediction } from '@/lib/amira-prediction-lifecycle-ledger';
+import { getLearningSummary } from '@/lib/closed-loop-learning';
+import { flushTelemetryWrites, logEvent } from '@/lib/telemetry';
+import type { OracleSingleErrorResponse, OracleSingleResponse, OracleSingleSuccessResponse } from '@/lib/oracle/single-response';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 60;
 
-export async function GET() {
-  try {
-    // Fetch real data from BCRA + Bluelytics in parallel.
-    // Per spec data_layer.sources: [BCRA_API, INDEC_SERIES, BLUELYTICS_FX, LOCAL_MARKET_PRICES]
-    const [bcra, bluelytics] = await Promise.allSettled([
-      fetchBCRAData(),
-      fetchBluelytics(),
-    ]);
+const PAPER_REFERENCE_CAPITAL_USD = 2_000;
+const DEFAULT_ASSET = 'SAN' as const;
+const CANONICAL_CONTRACT = 'order2-canonical-v2' as const;
 
-    const bcraData = bcra.status === 'fulfilled' ? bcra.value : null;
-    const blue = bluelytics.status === 'fulfilled' ? bluelytics.value : null;
+const OracleSingleRequestSchema = z.object({
+  asset: z.literal(DEFAULT_ASSET).optional(),
+}).strict();
 
-    // Build MarketStateInput from real fetched data, with conservative fallbacks
-    const fx_mep = blue?.blue?.value_avg ?? bcraData?.officialRate ?? 1200;
-    const rates_tna = (bcraData?.bcraPolicyTNA ?? 30) / 100; // BCRA returns TNA as percent (e.g. 30 = 30%)
-    const inflation_monthly = 0.038; // INDEC monthly inflation — placeholder (would fetch from INDEC series)
-    const reserves_usd = bcraData?.reservesUSD ?? 26000;
-    const reserves_usd_prev = reserves_usd; // no prior snapshot in this call
+type OracleSingleRequest = z.infer<typeof OracleSingleRequestSchema>;
 
-    // FX gap (MEP vs official) — risk sentiment input
-    const official = bcraData?.officialRate ?? fx_mep;
-    const fx_gap_pct = ((fx_mep - official) / official) * 100;
+const productionDependencies = {
+  getMacroState,
+  applyStaleDegradation,
+  macroStateToMarketInput,
+  runSinglePass,
+  runV3IntelligenceEnrichment,
+  getLifecycleLedgerSnapshot,
+  recordLifecyclePrediction,
+  getLearningSummary,
+  flushTelemetryWrites,
+  logEvent,
+};
 
-    const sources: string[] = [];
-    if (bcra.status === 'fulfilled') sources.push('BCRA_API');
-    if (bluelytics.status === 'fulfilled') sources.push('BLUELYTICS_FX');
-    sources.push('INDEC_SERIES', 'LOCAL_MARKET_PRICES');
+export type OracleSingleDependencies = typeof productionDependencies;
 
-    const quality = sources.length >= 3 ? 'REAL' : sources.length >= 2 ? 'PARTIAL_FALLBACK' : 'STALE';
+function macroMetadata(
+  macro: Awaited<ReturnType<OracleSingleDependencies['getMacroState']>>,
+  adapter: ReturnType<OracleSingleDependencies['macroStateToMarketInput']>,
+): OracleSingleSuccessResponse['macro'] {
+  return {
+    source: macro.source,
+    overallLabel: adapter.overallLabel,
+    realDataPct: macro.realDataPct,
+    fetchedAt: macro.fetchedAt,
+    lastSuccessfulFetch: macro.lastSuccessfulFetch,
+    fieldProvenance: adapter.fieldProvenance,
+    limitations: adapter.limitations,
+  };
+}
 
-    // Run the single pass — deterministic
-    const vector = runSinglePass({
-      fx_mep,
-      inflation_monthly,
-      rates_tna,
-      reserves_usd,
-      reserves_usd_prev,
-      fx_gap_pct,
-      market_breadth: 0.5, // placeholder — local market breadth would come from a market data feed
-      sources,
-      quality: quality as 'REAL' | 'PARTIAL_FALLBACK' | 'STALE',
-    });
+function json(response: OracleSingleResponse, status = 200): NextResponse<OracleSingleResponse> {
+  return NextResponse.json(response, {
+    status,
+    headers: {
+      'X-aMira-Contract': CANONICAL_CONTRACT,
+      'Cache-Control': 'no-store',
+    },
+  });
+}
 
-    const learning = getLearningState();
+export function createOracleSingleHandlers(
+  overrides: Partial<OracleSingleDependencies> = {},
+): {
+  GET: () => Promise<NextResponse<OracleSingleResponse>>;
+  POST: (request: Request) => Promise<NextResponse<OracleSingleResponse>>;
+} {
+  const dependencies: OracleSingleDependencies = { ...productionDependencies, ...overrides };
 
-    return NextResponse.json({
-      success: true,
-      vector,
-      learning,
-    });
-  } catch (err) {
-    return NextResponse.json(
-      {
+  async function execute(request: OracleSingleRequest): Promise<NextResponse<OracleSingleResponse>> {
+    const startedAt = Date.now();
+    try {
+      const macro = dependencies.applyStaleDegradation(await dependencies.getMacroState());
+      const adapter = dependencies.macroStateToMarketInput(macro);
+      const v1 = dependencies.runSinglePass(adapter.input);
+      const primaryScore = v1.scores.find((score) => score.asset === (request.asset ?? DEFAULT_ASSET)) ?? null;
+
+      if (primaryScore === null) {
+        dependencies.logEvent({
+          eventType: 'PIPELINE_EXECUTION',
+          source: '/api/oracle/single',
+          data: { modelVersion: v1.model_version, macroQuality: adapter.quality, warning: 'NO_PRIMARY_SCORE' },
+          durationMs: Date.now() - startedAt,
+          success: false,
+          error: 'NO_PRIMARY_SCORE',
+        });
+        const [lifecycle, telemetryStorage] = await Promise.all([
+          dependencies.getLifecycleLedgerSnapshot(),
+          dependencies.flushTelemetryWrites(),
+        ]);
+        return json({
+          success: true,
+          status: 'PARTIAL',
+          warnings: ['NO_PRIMARY_SCORE'],
+          timestamp: new Date().toISOString(),
+          vector: v1,
+          learning: dependencies.getLearningSummary(),
+          lifecycle,
+          lifecycleRecord: null,
+          v2: null,
+          v3: null,
+          macro: macroMetadata(macro, adapter),
+          telemetryStorage,
+        });
+      }
+
+      const { v1: enrichedV1, v2, v3 } = await dependencies.runV3IntelligenceEnrichment(adapter.input, v1);
+      if (v3 === null) {
+        dependencies.logEvent({
+          eventType: 'PIPELINE_EXECUTION',
+          source: '/api/oracle/single',
+          data: { modelVersion: enrichedV1.model_version, macroQuality: adapter.quality, warning: 'ENRICHMENT_UNAVAILABLE' },
+          durationMs: Date.now() - startedAt,
+          success: false,
+          error: 'ENRICHMENT_UNAVAILABLE',
+        });
+        const [lifecycle, telemetryStorage] = await Promise.all([
+          dependencies.getLifecycleLedgerSnapshot(),
+          dependencies.flushTelemetryWrites(),
+        ]);
+        return json({
+          success: true,
+          status: 'PARTIAL',
+          warnings: ['ENRICHMENT_UNAVAILABLE'],
+          timestamp: new Date().toISOString(),
+          vector: enrichedV1,
+          learning: dependencies.getLearningSummary(),
+          lifecycle,
+          lifecycleRecord: null,
+          v2,
+          v3: null,
+          macro: macroMetadata(macro, adapter),
+          telemetryStorage,
+        });
+      }
+      const lifecycleRecord = await dependencies.recordLifecyclePrediction({
+        horizon_days: primaryScore.prediction.horizon_days,
+        asset_context: primaryScore.asset,
+        expected_return: primaryScore.prediction.expected_return,
+        expected_profit_usd: primaryScore.prediction.expected_return * PAPER_REFERENCE_CAPITAL_USD,
+        confidence_score: primaryScore.prediction.confidence,
+        data_sources: adapter.input.sources ?? [],
+        capital: PAPER_REFERENCE_CAPITAL_USD,
+        risk: Math.abs(primaryScore.prediction.risk_var_95),
+        stress_mode: primaryScore.regime.regime,
+        freshness: adapter.quality,
+        fallback_level: adapter.overallLabel,
+      });
+
+      dependencies.logEvent({
+        eventType: 'PIPELINE_EXECUTION',
+        source: '/api/oracle/single',
+        data: {
+          modelVersion: enrichedV1.model_version,
+          v2Version: v2.version,
+          v3Version: v3.version,
+          macroQuality: adapter.quality,
+          lifecyclePredictionId: lifecycleRecord.prediction_id,
+        },
+        durationMs: Date.now() - startedAt,
+        success: !lifecycleRecord.rejected,
+        error: lifecycleRecord.rejection_reason ?? undefined,
+      });
+      const [lifecycle, telemetryStorage] = await Promise.all([
+        dependencies.getLifecycleLedgerSnapshot(),
+        dependencies.flushTelemetryWrites(),
+      ]);
+      const durabilityWarnings: OracleSingleSuccessResponse['warnings'] = [];
+      if (lifecycle.storage !== 'durable') durabilityWarnings.push('LIFECYCLE_NOT_DURABLE');
+      if (telemetryStorage.state !== 'durable') durabilityWarnings.push('TELEMETRY_NOT_DURABLE');
+      return json({
+        success: true,
+        status: durabilityWarnings.length === 0 ? 'READY' : 'PARTIAL',
+        warnings: durabilityWarnings,
+        timestamp: new Date().toISOString(),
+        vector: enrichedV1,
+        learning: dependencies.getLearningSummary(),
+        lifecycle,
+        lifecycleRecord,
+        v2,
+        v3,
+        macro: macroMetadata(macro, adapter),
+        telemetryStorage,
+      });
+    } catch {
+      dependencies.logEvent({
+        eventType: 'SYSTEM_ERROR',
+        source: '/api/oracle/single',
+        data: { stage: 'canonical-v1-v2-v3' },
+        durationMs: Date.now() - startedAt,
         success: false,
-        error: err instanceof Error ? err.message : 'unknown error',
-      },
-      { status: 500 }
-    );
+        error: 'CANONICAL_ORACLE_PIPELINE_FAILED',
+      });
+      const telemetryStorage = await dependencies.flushTelemetryWrites();
+      const response: OracleSingleErrorResponse = {
+        success: false,
+        code: 'CANONICAL_ORACLE_PIPELINE_FAILED',
+        error: 'Canonical oracle pipeline failed',
+        telemetryStorage,
+        timestamp: new Date().toISOString(),
+      };
+      return json(response, 500);
+    }
   }
+
+  return {
+    GET: () => execute({ asset: DEFAULT_ASSET }),
+    POST: async (request: Request) => {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return json({
+          success: false,
+          code: 'INVALID_ORACLE_REQUEST',
+          error: 'Malformed JSON body',
+          telemetryStorage: await dependencies.flushTelemetryWrites(),
+          timestamp: new Date().toISOString(),
+        }, 400);
+      }
+      const parsed = OracleSingleRequestSchema.safeParse(body);
+      if (!parsed.success) {
+        return json({
+          success: false,
+          code: 'INVALID_ORACLE_REQUEST',
+          error: 'Invalid oracle request',
+          telemetryStorage: await dependencies.flushTelemetryWrites(),
+          timestamp: new Date().toISOString(),
+        }, 400);
+      }
+      return execute(parsed.data);
+    },
+  };
+}
+
+const handlers = createOracleSingleHandlers();
+
+export async function GET(): Promise<NextResponse<OracleSingleResponse>> {
+  return handlers.GET();
+}
+
+export async function POST(request: Request): Promise<NextResponse<OracleSingleResponse>> {
+  return handlers.POST(request);
 }

@@ -21,7 +21,7 @@
 // ============================================================================
 
 import { test, describe, expect } from 'bun:test';
-import { runEngine, assertAllFinite, stableHash } from './_helpers';
+import { runEngine, assertAllFinite, stableHash, sweepInputs } from './_helpers';
 import type { MarketStateInput } from '@/lib/single-market-state';
 
 // ─── Deterministic synthetic history generator ─────────────────────────────
@@ -138,7 +138,6 @@ describe('H6 — Replay Engine (365-day synthetic replay)', () => {
   test('diverse sweep — all 3 action signals appear across wide input space', () => {
     // Use the helper sweepInputs (uniform random in wide ranges) to verify
     // the engine CAN produce all 3 actions when inputs vary enough.
-    const { sweepInputs } = require('./_helpers');
     const inputs = sweepInputs(500);
     const counts: Record<string, number> = {
       rebalance_signal: 0,

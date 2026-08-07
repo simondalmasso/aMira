@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useHedgeFundStore } from '@/store/hedge-fund-store';
 import { type GoalInput, type GoalResult, type GoalHorizon, computeGoal } from '@/lib/goal-engine';
@@ -43,17 +43,11 @@ export function GoalSection() {
   const [horizon, setHorizon] = useState<GoalHorizon>(90);
   const [targetUSD, setTargetUSD] = useState(100);
 
-  // Result state
-  const [result, setResult] = useState<GoalResult | null>(null);
-
-  // Compute goal whenever inputs or macro change
-  const compute = useCallback(() => {
-    if (!macro) return;
-    const goalResult = computeGoal({ capitalUSD, horizon, targetUSD }, macro);
-    setResult(goalResult);
-  }, [macro, capitalUSD, horizon, targetUSD]);
-
-  useEffect(() => { compute(); }, [compute]);
+  // Goal output is pure derived state; unknown remains null until macro exists.
+  const result = useMemo<GoalResult | null>(
+    () => macro ? computeGoal({ capitalUSD, horizon, targetUSD }, macro) : null,
+    [macro, capitalUSD, horizon, targetUSD],
+  );
 
   if (!macro) {
     return (

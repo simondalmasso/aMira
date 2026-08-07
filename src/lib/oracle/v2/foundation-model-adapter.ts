@@ -51,6 +51,9 @@ export interface AdvisorForecast {
   method: string;
   /** Whether this forecast is from a real adapter or a stub */
   is_stub: boolean;
+  /** Explicit truth classification; built-in placeholders are never observed model inference. */
+  data_class: 'SYNTHETIC' | 'OBSERVED';
+  provider_kind: 'STUB' | 'REAL_ADAPTER';
 }
 
 export interface EnsembleResult {
@@ -84,6 +87,7 @@ export interface AdvisorReport {
     version: string;
     is_stub: boolean;
     enabled: boolean;
+    data_class: 'SYNTHETIC' | 'OBSERVED';
   }>;
   /** Forecasts produced this cycle (one per enabled adapter) */
   forecasts: AdvisorForecast[];
@@ -160,6 +164,8 @@ const timesfmStub: FoundationModelAdapter = {
       timestamp: new Date().toISOString(),
       method: 'stub: momentum-based placeholder for TimesFM foundation model',
       is_stub: true,
+      data_class: 'SYNTHETIC',
+      provider_kind: 'STUB',
     };
   },
 };
@@ -189,6 +195,8 @@ const mapieStub: FoundationModelAdapter = {
       timestamp: new Date().toISOString(),
       method: 'stub: conformal prediction placeholder for MAPIE',
       is_stub: true,
+      data_class: 'SYNTHETIC',
+      provider_kind: 'STUB',
     };
   },
 };
@@ -205,7 +213,7 @@ export interface AdvisorRunInput {
   oracle_forecast: {
     expected_return: number;
     confidence: number; // 0..1 (legacy AssetPrediction.confidence)
-  };
+  } | null;
   /** Weight given to Oracle in the ensemble (default 0.60) */
   oracle_weight?: number;
 }
@@ -220,8 +228,24 @@ export async function runAdvisors(input: AdvisorRunInput): Promise<AdvisorReport
   );
   const forecasts = await Promise.all(forecastPromises);
 
-  // Compute ensemble (Oracle + advisors). Oracle always has weight oracle_weight;
-  // the remaining (1 - oracle_weight) is split equally among advisors.
+  // Compute ensemble only when a canonical Oracle forecast exists. Stub forecasts
+  // remain visible as SYNTHETIC side-channel data but never become authority.
+  if (input.oracle_forecast === null) {
+    return {
+      registered_adapters: listAdapters().map((a) => ({
+        id: a.id,
+        name: a.name,
+        version: a.version,
+        is_stub: a.is_stub,
+        enabled: a.enabled,
+        data_class: a.is_stub ? 'SYNTHETIC' as const : 'OBSERVED' as const,
+      })),
+      forecasts,
+      ensemble: null,
+      engine_version: FOUNDATION_MODEL_VERSION,
+    };
+  }
+
   const advisorWeight = forecasts.length > 0 ? (1 - oracle_weight) / forecasts.length : 0;
 
   const contributions = forecasts.map((f) => ({
@@ -260,6 +284,7 @@ export async function runAdvisors(input: AdvisorRunInput): Promise<AdvisorReport
       version: a.version,
       is_stub: a.is_stub,
       enabled: a.enabled,
+      data_class: a.is_stub ? 'SYNTHETIC' as const : 'OBSERVED' as const,
     })),
     forecasts,
     ensemble,

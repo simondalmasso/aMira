@@ -1,40 +1,7 @@
-// ============================================================================
-// Ω-MYTHOS X10 ENGINE — L1 SIGNAL LAYER
-// Probabilistic signal extraction from L0 raw macro data
-// Each signal is: [0, 1] normalized + confidence-weighted + provenance-tagged
-// NO state degradation: signals preserve source label end-to-end
-// ============================================================================
-//
-// ARCHITECTURE:
-//   L0_DATA_LAYER (BCRA/INDEC/Bluelytics) → THIS FILE → L2_STRATEGY_LAYER
-//
-// SIGNAL MODULES:
-//   1. macro_regime_detector      — classify macro regime (CARRY/WARNING/CRISIS/RISK_OFF)
-//   2. inflation_trend_estimator  — inflation momentum + trend direction
-//   3. carry_spread_engine        — real carry spread + Fisher-adjusted
-//   4. volatility_regime_classifier — FX/rates/inflation volatility regime
-//   5. liquidity_stress_detector   — money market stress + reserve pressure
-//
-// X10 RULE: If data confidence < 0.7, reduce allocation aggressiveness automatically
-//
-// OPERATING MODEL (from Ω_X10_ORACLE_DEPLOYMENT_REALITY_CHECK):
-//   - Event-driven macro engine (NOT a trading machine)
-//   - Loop: ingest → classify → compute risk → allocate → simulate (NOT predict)
-//   - Output: allocation_map, risk_exposure_vector, regime_state, confidence_score, stress_test_band
-//   - Deploy for automation, discipline, no-human execution bias removal
-//   - NOT for profit generation by itself
-// ============================================================================
+// Canonical X10 L1 signal layer. Pure, deterministic, provenance-aware.
 
-import {
-  type MacroState,
-  type DataLabel,
-  type DataProvenance,
-  DATA_STALE_THRESHOLDS,
-} from './live-data';
+import type { DataLabel, DataProvenance, MacroState } from './live-data';
 
-// ============================================================================
-// CORE SIGNAL TYPES
-// ============================================================================
 export type SignalStrength = 'low' | 'medium' | 'high' | 'extreme';
 export type TrendDirection = 'accelerating' | 'stable' | 'decelerating' | 'reversing';
 export type VolatilityRegime = 'calm' | 'normal' | 'elevated' | 'stressed' | 'crisis';
@@ -42,482 +9,208 @@ export type LiquidityCondition = 'abundant' | 'normal' | 'tight' | 'stressed' | 
 export type MacroRegimeX10 = 'CARRY_FAVORABLE' | 'CARRY_NEUTRAL' | 'WARNING' | 'CRISIS' | 'GLOBAL_RISK_OFF';
 
 export interface SignalOutput {
-  /** Normalized signal value [0, 1] where 0=no stress/risk, 1=extreme */
   value: number;
-  /** Human-readable strength category */
   strength: SignalStrength;
-  /** Direction or trend of the signal */
   direction: TrendDirection;
-  /** Confidence in this signal based on data quality [0, 1] */
   confidence: number;
-  /** Data provenance of the primary inputs */
   sourceLabel: DataLabel;
-  /** Which inputs drove this signal */
   drivers: string[];
-  /** Timestamp of computation */
   timestamp: string;
-  /** Age of the underlying data in minutes */
   dataAgeMinutes: number;
-  /** Whether signal should be discounted due to stale/error data */
   isDiscounted: boolean;
 }
 
 export interface L1SignalBundle {
-  regime: {
-    regime: MacroRegimeX10;
-    signal: SignalOutput;
-  };
-  inflation: {
-    trend: TrendDirection;
-    momentum: number;         // monthly change in inflation rate (pp)
-    signal: SignalOutput;
-  };
-  carry: {
-    realSpread: number;       // Fisher-adjusted real carry spread
-    fisherRate: number;       // ((1+tna/12)/(1+ipc_mensual))-1
-    isViable: boolean;
-    signal: SignalOutput;
-  };
-  volatility: {
-    regime: VolatilityRegime;
-    fxVol: number;
-    ratesVol: number;
-    inflationVol: number;
-    signal: SignalOutput;
-  };
-  liquidity: {
-    condition: LiquidityCondition;
-    moneyMarketStress: number;
-    reservePressure: number;
-    signal: SignalOutput;
-  };
-  /** Aggregate data confidence [0, 1] — weighted average across all signals */
+  regime: { regime: MacroRegimeX10; signal: SignalOutput };
+  inflation: { trend: TrendDirection; momentum: number; signal: SignalOutput };
+  carry: { realSpread: number; fisherRate: number; isViable: boolean; signal: SignalOutput };
+  volatility: { regime: VolatilityRegime; fxVol: number; ratesVol: number; inflationVol: number; signal: SignalOutput };
+  liquidity: { condition: LiquidityCondition; moneyMarketStress: number; reservePressure: number; signal: SignalOutput };
   aggregateConfidence: number;
-  /** Whether any input is ERROR → triggers X10 freeze */
   hasError: boolean;
-  /** Whether all real inputs are STALE → triggers capital preservation mode */
   allStale: boolean;
-  /** Timestamp of the bundle */
   timestamp: string;
-  /** Source of the underlying macro data */
   macroSource: DataLabel;
-  /** Data age in minutes */
   dataAgeMinutes: number;
 }
 
-// ============================================================================
-// CONFIDENCE COMPUTATION — Data quality → signal confidence
-// ============================================================================
 const LABEL_CONFIDENCE: Record<DataLabel, number> = {
   OBSERVADO: 0.95,
   REAL: 0.85,
   PARTIAL_FALLBACK: 0.50,
+  RECONSTRUIDO: 0.40,
   SIMULADO: 0.30,
   STALE: 0.20,
   ERROR: 0.05,
 };
 
-/** Compute confidence from a set of provenance entries, weighted by importance */
-function computeConfidenceFromProvenance(
+const round = (value: number, digits = 2): number => {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+};
+const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
+const strength = (value: number): SignalStrength => value < 0.25 ? 'low' : value < 0.5 ? 'medium' : value < 0.75 ? 'high' : 'extreme';
+
+function confidenceFrom(
   provenance: Record<string, DataProvenance>,
-  weightMap: Record<string, number>
+  weights: Record<string, number>,
 ): number {
-  let totalWeight = 0;
-  let weightedConf = 0;
-  for (const [key, weight] of Object.entries(weightMap)) {
-    const p = provenance[key];
-    if (!p) continue;
-    const baseConf = LABEL_CONFIDENCE[p.label] ?? 0.30;
-    // Age penalty: reduce confidence as data gets older
-    const agePenalty = Math.min(0.3, (p.ageMinutes / 1440) * 0.3); // up to -0.3 per day of age
-    const fetchErrorPenalty = p.fetchError ? 0.15 : 0;
-    const conf = Math.max(0.05, baseConf - agePenalty - fetchErrorPenalty);
-    weightedConf += conf * weight;
-    totalWeight += weight;
+  let weighted = 0;
+  let total = 0;
+  for (const [key, weight] of Object.entries(weights)) {
+    const item = provenance[key];
+    if (!item) continue;
+    const agePenalty = Math.min(0.3, (item.ageMinutes / 1440) * 0.3);
+    const errorPenalty = item.fetchError ? 0.15 : 0;
+    weighted += Math.max(0.05, LABEL_CONFIDENCE[item.label] - agePenalty - errorPenalty) * weight;
+    total += weight;
   }
-  return totalWeight > 0 ? weightedConf / totalWeight : 0.10;
+  return total === 0 ? 0.1 : weighted / total;
 }
 
-/** Determine if a signal should be discounted (confidence < 0.7) */
-function isDiscounted(confidence: number): boolean {
-  return confidence < 0.7;
+function signal(
+  macro: MacroState,
+  value: number,
+  direction: TrendDirection,
+  confidence: number,
+  drivers: string[],
+  sourceLabel: DataLabel = macro.source,
+): SignalOutput {
+  return {
+    value: round(clamp01(value), 3),
+    strength: strength(clamp01(value)),
+    direction,
+    confidence: round(clamp01(confidence), 2),
+    sourceLabel,
+    drivers,
+    timestamp: new Date().toISOString(),
+    dataAgeMinutes: macro.ageMinutes,
+    isDiscounted: confidence < 0.7,
+  };
 }
 
-/** Map value [0,1] to SignalStrength */
-function toStrength(v: number): SignalStrength {
-  if (v < 0.25) return 'low';
-  if (v < 0.50) return 'medium';
-  if (v < 0.75) return 'high';
-  return 'extreme';
-}
-
-// ============================================================================
-// MODULE 1: MACRO REGIME DETECTOR
-// ============================================================================
-function detectMacroRegime(macro: MacroState): { regime: MacroRegimeX10; signal: SignalOutput } {
+function regimeSignal(macro: MacroState): L1SignalBundle['regime'] {
   const gap = macro.mep.gap;
-  const inflation30d = macro.inflation.expected30d;
+  const inflation = macro.inflation.expected30d;
   const carry = macro.rates.moneyMarket / 12 - macro.crawlingPeg;
-  const netCarryPositive = carry > 1.0;
-  const gapLow = gap < 15;
-  const inflLow = inflation30d < 3.0;
-
   let regime: MacroRegimeX10;
   let value: number;
-  let direction: TrendDirection;
+  let direction: TrendDirection = 'stable';
   let drivers: string[];
 
-  if (gap > 50 || inflation30d > 6) {
-    regime = 'CRISIS';
-    value = Math.min(1, Math.max(gap / 80, inflation30d / 10));
-    direction = 'accelerating';
-    drivers = gap > 50 ? ['MEP gap extremo', `gap=${gap.toFixed(1)}%`] : ['Inflación severa', `IPC 30d=${inflation30d.toFixed(1)}%`];
+  if (gap > 50 || inflation > 6) {
+    regime = 'CRISIS'; value = Math.max(gap / 80, inflation / 10); direction = 'accelerating';
+    drivers = [`gap=${gap.toFixed(1)}%`, `IPC 30d=${inflation.toFixed(1)}%`];
   } else if (carry < 0.5 && gap > 20) {
-    regime = 'GLOBAL_RISK_OFF';
-    value = Math.min(1, (1 - carry) * 0.5 + gap / 100);
-    direction = 'accelerating';
-    drivers = ['Carry insuficiente', `net carry=${carry.toFixed(2)}%`, `gap=${gap.toFixed(1)}%`];
-  } else if (gap > 25 || inflation30d > 3.5) {
-    regime = 'WARNING';
-    value = Math.min(1, Math.max(gap / 60, (inflation30d - 2) / 6));
-    direction = gap > 30 ? 'accelerating' : 'stable';
-    drivers = gap > 25 ? ['Brecha elevada', `gap=${gap.toFixed(1)}%`] : ['Inflación moderada-alta', `IPC 30d=${inflation30d.toFixed(1)}%`];
-  } else if (netCarryPositive && gapLow && inflLow) {
-    regime = 'CARRY_FAVORABLE';
-    value = Math.min(1, carry / 3);
-    direction = 'stable';
-    drivers = ['Carry positivo', `net=${carry.toFixed(2)}%`, 'Gap bajo', 'Inflación baja'];
+    regime = 'GLOBAL_RISK_OFF'; value = (1 - carry) * 0.5 + gap / 100; direction = 'accelerating';
+    drivers = [`net carry=${carry.toFixed(2)}%`, `gap=${gap.toFixed(1)}%`];
+  } else if (gap > 25 || inflation > 3.5) {
+    regime = 'WARNING'; value = Math.max(gap / 60, (inflation - 2) / 6); direction = gap > 30 ? 'accelerating' : 'stable';
+    drivers = [`gap=${gap.toFixed(1)}%`, `IPC 30d=${inflation.toFixed(1)}%`];
+  } else if (carry > 1 && gap < 15 && inflation < 3) {
+    regime = 'CARRY_FAVORABLE'; value = carry / 3;
+    drivers = [`net carry=${carry.toFixed(2)}%`, 'gap bajo', 'inflación baja'];
   } else {
-    regime = 'CARRY_NEUTRAL';
-    value = Math.min(1, 0.3 + Math.max(0, (3 - carry) / 5));
-    direction = 'stable';
-    drivers = ['Carry moderado', `net=${carry.toFixed(2)}%`];
+    regime = 'CARRY_NEUTRAL'; value = 0.3 + Math.max(0, (3 - carry) / 5);
+    drivers = [`net carry=${carry.toFixed(2)}%`];
   }
 
-  const confidence = computeConfidenceFromProvenance(macro.provenance, {
-    mepRate: 0.35,
-    inflation: 0.25,
-    rates: 0.25,
-    crawlingPeg: 0.15,
-  });
-
-  const signal: SignalOutput = {
-    value: Math.round(value * 1000) / 1000,
-    strength: toStrength(value),
-    direction,
-    confidence: Math.round(confidence * 100) / 100,
-    sourceLabel: macro.source,
-    drivers,
-    timestamp: new Date().toISOString(),
-    dataAgeMinutes: macro.ageMinutes,
-    isDiscounted: isDiscounted(confidence),
-  };
-
-  return { regime, signal };
+  const confidence = confidenceFrom(macro.provenance, { mepRate: 0.35, inflation: 0.25, rates: 0.25, crawlingPeg: 0.15 });
+  return { regime, signal: signal(macro, value, direction, confidence, drivers) };
 }
 
-// ============================================================================
-// MODULE 2: INFLATION TREND ESTIMATOR
-// ============================================================================
-function estimateInflationTrend(macro: MacroState): { trend: TrendDirection; momentum: number; signal: SignalOutput } {
-  const monthly = macro.inflation.monthly;
-  const expected30d = macro.inflation.expected30d;
-  const expected90d = macro.inflation.expected90d;
-  const cerMonthly = macro.cer.monthlyChange;
-
-  // Momentum: expected30d - current monthly (positive = accelerating)
-  const momentum = expected30d - monthly;
-
-  // Trend classification
-  let trend: TrendDirection;
-  if (momentum > 0.5) trend = 'accelerating';
-  else if (momentum < -0.5) trend = 'decelerating';
-  else if (Math.abs(momentum) <= 0.5 && monthly > 4) trend = 'stable'; // high but stable
-  else if (momentum < -1.0) trend = 'reversing';
-  else trend = 'stable';
-
-  // Inflation stress value [0, 1]
-  // Use combination of level + momentum + CER confirmation
-  const levelStress = Math.min(1, monthly / 8);
-  const momentumStress = Math.min(1, Math.max(0, momentum) / 3);
-  const cerConfirmation = cerMonthly > 0 ? Math.min(1, cerMonthly / 6) : 0.5;
-  const inflationValue = levelStress * 0.5 + momentumStress * 0.3 + cerConfirmation * 0.2;
-
-  const drivers: string[] = [];
-  if (momentum > 0.3) drivers.push(`Acelerando +${momentum.toFixed(2)}pp`);
-  else if (momentum < -0.3) drivers.push(`Desacelerando ${momentum.toFixed(2)}pp`);
-  else drivers.push(`Estable (${monthly.toFixed(1)}%/mes)`);
-  if (cerMonthly > monthly + 0.5) drivers.push(`CER > IPC (${cerMonthly.toFixed(1)} vs ${monthly.toFixed(1)})`);
-
-  const confidence = computeConfidenceFromProvenance(macro.provenance, {
-    inflation: 0.50,
-    cer: 0.30,
-    rates: 0.20,
-  });
-
-  const signal: SignalOutput = {
-    value: Math.round(inflationValue * 1000) / 1000,
-    strength: toStrength(inflationValue),
-    direction: trend,
-    confidence: Math.round(confidence * 100) / 100,
-    sourceLabel: macro.provenance.inflation?.label ?? macro.source,
-    drivers,
-    timestamp: new Date().toISOString(),
-    dataAgeMinutes: macro.ageMinutes,
-    isDiscounted: isDiscounted(confidence),
-  };
-
-  return { trend, momentum: Math.round(momentum * 100) / 100, signal };
-}
-
-// ============================================================================
-// MODULE 3: CARRY SPREAD ENGINE — Fisher-adjusted real carry
-// ============================================================================
-function computeCarrySpread(macro: MacroState): { realSpread: number; fisherRate: number; isViable: boolean; signal: SignalOutput } {
-  const tna = macro.rates.moneyMarket;
-  const ipcMensual = macro.inflation.monthly;
-  const crawlingPeg = macro.crawlingPeg;
-
-  // Fisher Formula: ((1 + tna/12) / (1 + ipc_mensual)) - 1
-  const fisherRate = ((1 + tna / 12 / 100) / (1 + ipcMensual / 100)) - 1;
-
-  // Real spread in USD terms: carry after FX depreciation
-  const nominal30d = tna / 12 / 100;
-  const deval30d = crawlingPeg / 100;
-  const realSpread = ((1 + nominal30d) / (1 + deval30d) - 1) * 100;
-
-  // Alternative: if gap is large, use gap-adjusted devaluation expectation
-  const gap = macro.mep.gap;
-  const impliedDevalExpectation = gap > 30 ? deval30d + gap / 100 / 12 : deval30d;
-  const adjustedRealSpread = ((1 + nominal30d) / (1 + impliedDevalExpectation) - 1) * 100;
-
-  const isViable = adjustedRealSpread > 0;
-
-  // Carry stress: how far from "comfortable" carry (positive spread > 0.5%/month)
-  const carryValue = Math.min(1, Math.max(0, (1 - adjustedRealSpread / 3)));
-
-  const drivers: string[] = [];
-  if (adjustedRealSpread > 1) drivers.push(`Carry fuerte +${adjustedRealSpread.toFixed(2)}% real`);
-  else if (adjustedRealSpread > 0) drivers.push(`Carry marginal +${adjustedRealSpread.toFixed(2)}% real`);
-  else drivers.push(`Carry negativo ${adjustedRealSpread.toFixed(2)}% real`);
-  if (gap > 20) drivers.push(`Gap riesgo: ${gap.toFixed(1)}%`);
-
-  const confidence = computeConfidenceFromProvenance(macro.provenance, {
-    rates: 0.40,
-    inflation: 0.30,
-    mepRate: 0.20,
-    crawlingPeg: 0.10,
-  });
-
-  const signal: SignalOutput = {
-    value: Math.round(carryValue * 1000) / 1000,
-    strength: toStrength(carryValue),
-    direction: isViable ? 'stable' : 'accelerating',
-    confidence: Math.round(confidence * 100) / 100,
-    sourceLabel: macro.source,
-    drivers,
-    timestamp: new Date().toISOString(),
-    dataAgeMinutes: macro.ageMinutes,
-    isDiscounted: isDiscounted(confidence),
-  };
-
+function inflationSignal(macro: MacroState): L1SignalBundle['inflation'] {
+  const momentum = macro.inflation.expected30d - macro.inflation.monthly;
+  const trend: TrendDirection = momentum > 0.5 ? 'accelerating' : momentum < -1 ? 'reversing' : momentum < -0.5 ? 'decelerating' : 'stable';
+  const level = clamp01(macro.inflation.monthly / 8);
+  const momentumStress = clamp01(Math.max(0, momentum) / 3);
+  const cer = macro.cer.monthlyChange > 0 ? clamp01(macro.cer.monthlyChange / 6) : 0.5;
+  const value = level * 0.5 + momentumStress * 0.3 + cer * 0.2;
+  const confidence = confidenceFrom(macro.provenance, { inflation: 0.5, cer: 0.3, rates: 0.2 });
   return {
-    realSpread: Math.round(adjustedRealSpread * 100) / 100,
-    fisherRate: Math.round(fisherRate * 10000) / 100, // in basis points
-    isViable,
-    signal,
+    trend,
+    momentum: round(momentum),
+    signal: signal(macro, value, trend, confidence, [`IPC=${macro.inflation.monthly.toFixed(1)}%`, `momentum=${momentum.toFixed(2)}pp`], macro.provenance.inflation.label),
   };
 }
 
-// ============================================================================
-// MODULE 4: VOLATILITY REGIME CLASSIFIER
-// ============================================================================
-function classifyVolatilityRegime(macro: MacroState): { regime: VolatilityRegime; fxVol: number; ratesVol: number; inflationVol: number; signal: SignalOutput } {
-  // FX volatility proxy: gap width * gap volatility proxy
-  const gap = macro.mep.gap;
-  const fxVol = Math.min(1, gap / 60); // Wider gap = higher FX vol
-
-  // Rates volatility: spread between BCRA policy and market rates
-  const rateSpread = Math.abs(macro.rates.bcraPolicy - macro.rates.moneyMarket);
-  const ratesVol = Math.min(1, rateSpread / 15);
-
-  // Inflation volatility: difference between expected 30d and 90d (term structure slope)
-  const inflationTermSpread = Math.abs(macro.inflation.expected30d - macro.inflation.expected90d / 3);
-  const inflationVol = Math.min(1, (inflationTermSpread + macro.inflation.monthly) / 10);
-
-  // Composite volatility
-  const compositeVol = fxVol * 0.40 + ratesVol * 0.25 + inflationVol * 0.35;
-
-  // Regime classification
-  let regime: VolatilityRegime;
-  if (compositeVol < 0.15) regime = 'calm';
-  else if (compositeVol < 0.35) regime = 'normal';
-  else if (compositeVol < 0.55) regime = 'elevated';
-  else if (compositeVol < 0.75) regime = 'stressed';
-  else regime = 'crisis';
-
-  const drivers: string[] = [];
-  if (fxVol > 0.5) drivers.push(`FX vol alta (gap=${gap.toFixed(1)}%)`);
-  if (ratesVol > 0.3) drivers.push(`Dispersión tasas (${rateSpread.toFixed(1)}pp)`);
-  if (inflationVol > 0.4) drivers.push(`Vol inflación (${inflationTermSpread.toFixed(2)}pp term)`);
-
-  const confidence = computeConfidenceFromProvenance(macro.provenance, {
-    mepRate: 0.40,
-    rates: 0.30,
-    inflation: 0.30,
-  });
-
-  const signal: SignalOutput = {
-    value: Math.round(compositeVol * 1000) / 1000,
-    strength: toStrength(compositeVol),
-    direction: compositeVol > 0.5 ? 'accelerating' : 'stable',
-    confidence: Math.round(confidence * 100) / 100,
-    sourceLabel: macro.source,
-    drivers,
-    timestamp: new Date().toISOString(),
-    dataAgeMinutes: macro.ageMinutes,
-    isDiscounted: isDiscounted(confidence),
-  };
-
+function carrySignal(macro: MacroState): L1SignalBundle['carry'] {
+  const nominal = macro.rates.moneyMarket / 12 / 100;
+  const inflation = macro.inflation.monthly / 100;
+  const fisher = (1 + nominal) / (1 + inflation) - 1;
+  const devaluation = macro.crawlingPeg / 100 + (macro.mep.gap > 30 ? macro.mep.gap / 100 / 12 : 0);
+  const realSpread = ((1 + nominal) / (1 + devaluation) - 1) * 100;
+  const value = clamp01(1 - realSpread / 3);
+  const confidence = confidenceFrom(macro.provenance, { rates: 0.4, inflation: 0.3, mepRate: 0.2, crawlingPeg: 0.1 });
   return {
-    regime,
-    fxVol: Math.round(fxVol * 100) / 100,
-    ratesVol: Math.round(ratesVol * 100) / 100,
-    inflationVol: Math.round(inflationVol * 100) / 100,
-    signal,
+    realSpread: round(realSpread),
+    fisherRate: round(fisher * 100, 2),
+    isViable: realSpread > 0,
+    signal: signal(macro, value, realSpread > 0 ? 'stable' : 'accelerating', confidence, [`real spread=${realSpread.toFixed(2)}%`, `gap=${macro.mep.gap.toFixed(1)}%`]),
   };
 }
 
-// ============================================================================
-// MODULE 5: LIQUIDITY STRESS DETECTOR
-// ============================================================================
-function detectLiquidityStress(macro: MacroState): { condition: LiquidityCondition; moneyMarketStress: number; reservePressure: number; signal: SignalOutput } {
-  // Money market stress: policy rate vs money market spread (inverted — high spread = stress)
-  const mmSpread = Math.abs(macro.rates.bcraPolicy - macro.rates.moneyMarket);
-  const moneyMarketStress = Math.min(1, mmSpread / 10);
-
-  // Reserve pressure proxy: rate spread + crawling peg intensity
-  const crawlingIntensity = Math.min(1, macro.crawlingPeg / 5);
-  const rateGapUSD = Math.max(0, macro.rates.moneyMarket - 5) / 40; // How far from USD-neutral
-  const reservePressure = Math.min(1, (crawlingIntensity * 0.5 + rateGapUSD * 0.5));
-
-  // Liquidity condition
-  const liquidityStress = moneyMarketStress * 0.5 + reservePressure * 0.5;
-
-  let condition: LiquidityCondition;
-  if (liquidityStress < 0.15) condition = 'abundant';
-  else if (liquidityStress < 0.35) condition = 'normal';
-  else if (liquidityStress < 0.55) condition = 'tight';
-  else if (liquidityStress < 0.75) condition = 'stressed';
-  else condition = 'frozen';
-
-  const drivers: string[] = [];
-  if (mmSpread > 3) drivers.push(`Spread tasas ${mmSpread.toFixed(1)}pp`);
-  if (macro.crawlingPeg > 2) drivers.push(`Crawling peg alto ${macro.crawlingPeg.toFixed(1)}%/mes`);
-  if (macro.rates.moneyMarket > 30) drivers.push(`Tasa MM elevada ${macro.rates.moneyMarket.toFixed(1)}%`);
-
-  const confidence = computeConfidenceFromProvenance(macro.provenance, {
-    rates: 0.50,
-    reserves: 0.30,
-    crawlingPeg: 0.20,
-  });
-
-  const signal: SignalOutput = {
-    value: Math.round(liquidityStress * 1000) / 1000,
-    strength: toStrength(liquidityStress),
-    direction: liquidityStress > 0.5 ? 'accelerating' : 'stable',
-    confidence: Math.round(confidence * 100) / 100,
-    sourceLabel: macro.source,
-    drivers,
-    timestamp: new Date().toISOString(),
-    dataAgeMinutes: macro.ageMinutes,
-    isDiscounted: isDiscounted(confidence),
-  };
-
+function volatilitySignal(macro: MacroState): L1SignalBundle['volatility'] {
+  const fxVol = clamp01(macro.mep.gap / 60);
+  const ratesVol = clamp01(Math.abs(macro.rates.bcraPolicy - macro.rates.moneyMarket) / 15);
+  const inflationVol = clamp01((Math.abs(macro.inflation.expected30d - macro.inflation.expected90d / 3) + macro.inflation.monthly) / 10);
+  const value = fxVol * 0.4 + ratesVol * 0.25 + inflationVol * 0.35;
+  const regime: VolatilityRegime = value < 0.15 ? 'calm' : value < 0.35 ? 'normal' : value < 0.55 ? 'elevated' : value < 0.75 ? 'stressed' : 'crisis';
+  const confidence = confidenceFrom(macro.provenance, { mepRate: 0.4, rates: 0.3, inflation: 0.3 });
   return {
-    condition,
-    moneyMarketStress: Math.round(moneyMarketStress * 100) / 100,
-    reservePressure: Math.round(reservePressure * 100) / 100,
-    signal,
+    regime, fxVol: round(fxVol), ratesVol: round(ratesVol), inflationVol: round(inflationVol),
+    signal: signal(macro, value, value > 0.5 ? 'accelerating' : 'stable', confidence, [`FX vol=${round(fxVol)}`, `rates vol=${round(ratesVol)}`, `inflation vol=${round(inflationVol)}`]),
   };
 }
 
-// ============================================================================
-// X10 DIRECTIVES — Confidence-based allocation throttle
-// ============================================================================
-
-/**
- * X10 RULE: If data confidence < 0.7, reduce allocation aggressiveness automatically.
- * Returns a multiplier [0, 1] that scales risk-taking.
- *   - confidence >= 0.7 → multiplier = 1.0 (no throttling)
- *   - confidence = 0.5  → multiplier = 0.5
- *   - confidence = 0.3  → multiplier = 0.2
- *   - confidence = 0.0  → multiplier = 0.0 (capital preservation only)
- */
-export function computeX10ConfidenceMultiplier(aggregateConfidence: number): number {
-  if (aggregateConfidence >= 0.7) return 1.0;
-  if (aggregateConfidence >= 0.5) return (aggregateConfidence - 0.3) / 0.4; // 0.5 → 0.5, 0.7 → 1.0
-  if (aggregateConfidence >= 0.3) return (aggregateConfidence - 0.2) / 1.5; // 0.3 → 0.067, 0.5 → 0.2
-  return Math.max(0, aggregateConfidence / 0.3 * 0.05); // Near zero
+function liquiditySignal(macro: MacroState): L1SignalBundle['liquidity'] {
+  const moneyMarketStress = clamp01(Math.abs(macro.rates.bcraPolicy - macro.rates.moneyMarket) / 10);
+  const reservePressure = clamp01(clamp01(macro.crawlingPeg / 5) * 0.5 + clamp01(Math.max(0, macro.rates.moneyMarket - 5) / 40) * 0.5);
+  const value = (moneyMarketStress + reservePressure) / 2;
+  const condition: LiquidityCondition = value < 0.15 ? 'abundant' : value < 0.35 ? 'normal' : value < 0.55 ? 'tight' : value < 0.75 ? 'stressed' : 'frozen';
+  const confidence = confidenceFrom(macro.provenance, { rates: 0.5, reserves: 0.3, crawlingPeg: 0.2 });
+  return {
+    condition, moneyMarketStress: round(moneyMarketStress), reservePressure: round(reservePressure),
+    signal: signal(macro, value, value > 0.5 ? 'accelerating' : 'stable', confidence, [`money-market stress=${round(moneyMarketStress)}`, `reserve pressure=${round(reservePressure)}`]),
+  };
 }
 
-/**
- * X10 FALLBACK: If all macro inputs STALE → revert to capital preservation mode.
- * Capital preservation = 70% money market + 30% CER, zero MEP, zero risk.
- */
+export function computeX10ConfidenceMultiplier(confidence: number): number {
+  if (confidence >= 0.7) return 1;
+  if (confidence >= 0.5) return (confidence - 0.3) / 0.4;
+  if (confidence >= 0.3) return (confidence - 0.2) / 1.5;
+  return Math.max(0, confidence / 0.3 * 0.05);
+}
+
 export function isCapitalPreservationMode(bundle: L1SignalBundle): boolean {
   return bundle.allStale || bundle.aggregateConfidence < 0.25;
 }
 
-/**
- * X10 EMERGENCY: If ERROR state detected → freeze strategy updates.
- * Returns true if strategy engine should NOT compute new allocations.
- */
 export function isEmergencyFreeze(bundle: L1SignalBundle): boolean {
   return bundle.hasError;
 }
 
-// ============================================================================
-// MAIN: COMPUTE L1 SIGNAL BUNDLE
-// ============================================================================
 export function computeL1Signals(macro: MacroState): L1SignalBundle {
-  const regimeResult = detectMacroRegime(macro);
-  const inflationResult = estimateInflationTrend(macro);
-  const carryResult = computeCarrySpread(macro);
-  const volatilityResult = classifyVolatilityRegime(macro);
-  const liquidityResult = detectLiquidityStress(macro);
-
-  // Aggregate confidence: weighted average across all signal confidences
-  const confidenceWeights = {
-    regime: 0.30,
-    inflation: 0.25,
-    carry: 0.20,
-    volatility: 0.15,
-    liquidity: 0.10,
-  };
-
-  const aggregateConfidence =
-    regimeResult.signal.confidence * confidenceWeights.regime +
-    inflationResult.signal.confidence * confidenceWeights.inflation +
-    carryResult.signal.confidence * confidenceWeights.carry +
-    volatilityResult.signal.confidence * confidenceWeights.volatility +
-    liquidityResult.signal.confidence * confidenceWeights.liquidity;
-
-  // Check for ERROR in any provenance
-  const hasError = Object.values(macro.provenance).some(p => p.label === 'ERROR');
-
-  // Check if ALL real inputs are STALE (no fresh data at all)
-  const allStale = !hasError && Object.values(macro.provenance)
-    .filter(p => p.label !== 'ERROR' && p.label !== 'PARTIAL_FALLBACK') // exclude always-simulated
-    .every(p => p.label === 'STALE' || p.label === 'ERROR');
-
+  const regime = regimeSignal(macro);
+  const inflation = inflationSignal(macro);
+  const carry = carrySignal(macro);
+  const volatility = volatilitySignal(macro);
+  const liquidity = liquiditySignal(macro);
+  const aggregateConfidence = round(
+    regime.signal.confidence * 0.3 +
+    inflation.signal.confidence * 0.25 +
+    carry.signal.confidence * 0.2 +
+    volatility.signal.confidence * 0.15 +
+    liquidity.signal.confidence * 0.1,
+    2,
+  );
+  const provenance = Object.values(macro.provenance);
+  const hasError = provenance.some((item) => item.label === 'ERROR');
+  const relevant = provenance.filter((item) => !['ERROR', 'PARTIAL_FALLBACK', 'SIMULADO', 'RECONSTRUIDO'].includes(item.label));
+  const allStale = !hasError && relevant.length > 0 && relevant.every((item) => item.label === 'STALE');
   return {
-    regime: regimeResult,
-    inflation: inflationResult,
-    carry: carryResult,
-    volatility: volatilityResult,
-    liquidity: liquidityResult,
-    aggregateConfidence: Math.round(aggregateConfidence * 100) / 100,
+    regime, inflation, carry, volatility, liquidity,
+    aggregateConfidence,
     hasError,
     allStale,
     timestamp: new Date().toISOString(),
