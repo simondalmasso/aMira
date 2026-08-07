@@ -3,6 +3,7 @@ import { createOracleSingleHandlers, type OracleSingleDependencies } from '@/app
 import { runSinglePass, type AssetScoreVector } from '@/lib/single-pass-oracle-engine';
 import type { MarketStateInput } from '@/lib/single-market-state';
 import { resetLearningState, getLearningSummary } from '@/lib/closed-loop-learning';
+import type { LifecycleLedgerSnapshot } from '@/lib/amira-prediction-lifecycle-ledger';
 
 const INPUT: MarketStateInput = {
   fx_mep: 1_250,
@@ -27,7 +28,7 @@ const TELEMETRY = {
   lastError: null,
 };
 
-const LIFECYCLE = {
+const LIFECYCLE: LifecycleLedgerSnapshot = {
   storage: 'durable',
   binding: 'ORACLE_PREDICTIONS',
   total_predictions: 0,
@@ -35,7 +36,32 @@ const LIFECYCLE = {
   rejected: 0,
   latest_prediction: null,
   records: [],
+  canonical: {
+    active_stage: 'EMPTY',
+    latest_prediction: null,
+    latest_outcome: null,
+    latest_verification: null,
+    counts: { total_predictions: 0, pending: 0, outcome_captured: 0, verified: 0, expired: 0, rejected: 0 },
+    pending_outcomes: 0,
+    verification_score: {
+      brier_like: null,
+      mae: null,
+      directional_accuracy_pct: null,
+      sample_count: 0,
+      status: 'NO_HISTORY',
+      label: 'Sin histórico suficiente (0/5 verif.)',
+    },
+    drift_indicator: { signal: 0, threshold: 0.15, detected: false, label: 'Sin drift significativo (0.00%)' },
+    audit_mode: true,
+    all_predictions_have_id: true,
+    all_predictions_have_sources_or_rejected: true,
+    log_size_predictions: 0,
+    log_size_outcomes: 0,
+    log_size_verifications: 0,
+  },
   last_error: null,
+  last_successful_read_at: new Date(0).toISOString(),
+  last_successful_write_at: new Date(0).toISOString(),
 };
 
 function dependenciesFor(vector: AssetScoreVector, counters: { v1: number; v3: number; lifecycle: number }) {
