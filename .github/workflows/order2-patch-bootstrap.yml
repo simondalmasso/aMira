@@ -14,25 +14,61 @@ jobs:
     timeout-minutes: 15
     env:
       TARGET_BRANCH: feat/oraculo-santander-completion-sol
-      EXPECTED_OLD_SHA: 20faf52e4d55aa38056724ab9f7fcd627fe27700
+      EXPECTED_OLD_SHA: aff82f66f741da48a2475ced7692ed51221c4c26
     steps:
       - name: Checkout staging controller
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Repair exact target head
+      - name: Repair deterministic identifiers on exact target head
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin "$TARGET_BRANCH"
           git checkout --detach "origin/$TARGET_BRANCH"
           test "$(git rev-parse HEAD)" = "$EXPECTED_OLD_SHA"
-          python3 -c "from pathlib import Path; p=Path('scripts/d-post-deploy-validation.ts'); s=p.read_text(); old=\"const checks = await Promise.all(endpoints.map(async (ep) => {\"; new=\"const checks: GateResult['checks'] = await Promise.all(endpoints.map(async (ep): Promise<GateResult['checks'][number]> => {\"; assert s.count(old)==1; p.write_text(s.replace(old,new))"
-          python3 -c "from pathlib import Path; p=Path('src/lib/oracle-multi/cron.ts'); s=p.read_text(); old=\"): Promise<CronJobResult['persistence_ack']> {\"; new=\"): Promise<NonNullable<CronJobResult['persistence_ack']>> {\"; assert s.count(old)==1; p.write_text(s.replace(old,new))"
-          python3 -c "from pathlib import Path; p=Path('tests/hardening/u6-kv-persistence-audit.test.ts'); s=p.read_text(); old=\"const raw = await failingKv.get<string>('any-key');\"; new=\"const raw = await failingKv.get('any-key');\"; assert s.count(old)==1; p.write_text(s.replace(old,new))"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def once(path, old, new):
+              p=Path(path); s=p.read_text()
+              if s.count(old) != 1:
+                  raise SystemExit(f'{path}: expected one match, found {s.count(old)}')
+              p.write_text(s.replace(old,new))
+
+          once('src/lib/oracle/v2/adaptive-weights.ts',
+               "let _lastUpdateTimestamp: string | null = null;",
+               "let _lastUpdateTimestamp: string | null = null;\nlet _journalIdSequence = 0;")
+          once('src/lib/oracle/v2/adaptive-weights.ts',
+               "function genId(): string {\n  return `awje_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;\n}",
+               "function genId(): string {\n  return `awje_${Date.now().toString(36)}_${(++_journalIdSequence).toString(36)}`;\n}")
+          once('src/lib/oracle/v2/adaptive-weights.ts',
+               "  _lastUpdateTimestamp = null;\n  setActiveWeights({ ...DEFAULT_WEIGHTS });",
+               "  _lastUpdateTimestamp = null;\n  _journalIdSequence = 0;\n  setActiveWeights({ ...DEFAULT_WEIGHTS });")
+
+          once('src/lib/oracle/v2/audit-trail.ts',
+               "let _auditBuffer: AuditEntry[] = [];",
+               "let _auditBuffer: AuditEntry[] = [];\nlet _auditIdSequence = 0;")
+          once('src/lib/oracle/v2/audit-trail.ts',
+               "function genDecisionId(): string {\n  return `dec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;\n}",
+               "function genDecisionId(): string {\n  return `dec_${Date.now().toString(36)}_${(++_auditIdSequence).toString(36)}`;\n}")
+          once('src/lib/oracle/v2/audit-trail.ts',
+               "export function clearAuditTrail(): void {\n  _auditBuffer = [];\n}",
+               "export function clearAuditTrail(): void {\n  _auditBuffer = [];\n  _auditIdSequence = 0;\n}")
+
+          once('src/lib/oracle/v3/self-diagnosis.ts',
+               "let _alerts: Alert[] = [];",
+               "let _alerts: Alert[] = [];\nlet _alertIdSequence = 0;")
+          once('src/lib/oracle/v3/self-diagnosis.ts',
+               "function genAlertId(): string {\n  return `alert_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;\n}",
+               "function genAlertId(): string {\n  return `alert_${Date.now().toString(36)}_${(++_alertIdSequence).toString(36)}`;\n}")
+          once('src/lib/oracle/v3/self-diagnosis.ts',
+               "export function clearAlerts(): void {\n  _alerts = [];\n}",
+               "export function clearAlerts(): void {\n  _alerts = [];\n  _alertIdSequence = 0;\n}")
+          PY
+          ! grep -R "Math.random" src/lib/oracle/v2/adaptive-weights.ts src/lib/oracle/v2/audit-trail.ts src/lib/oracle/v3/self-diagnosis.ts
           git diff --check
-          git diff --stat
 
       - name: Commit and fast-forward target
         shell: bash
@@ -40,8 +76,8 @@ jobs:
           set -euo pipefail
           git config user.name "aMira ARQ"
           git config user.email "actions@users.noreply.github.com"
-          git add scripts/d-post-deploy-validation.ts src/lib/oracle-multi/cron.ts tests/hardening/u6-kv-persistence-audit.test.ts
-          git commit -m "fix(order2): clear remaining strict TypeScript diagnostics"
+          git add src/lib/oracle/v2/adaptive-weights.ts src/lib/oracle/v2/audit-trail.ts src/lib/oracle/v3/self-diagnosis.ts
+          git commit -m "fix(order2): make audit identifiers deterministic"
           NEW_SHA="$(git rev-parse HEAD)"
           git merge-base --is-ancestor "$EXPECTED_OLD_SHA" "$NEW_SHA"
           git push origin "HEAD:refs/heads/$TARGET_BRANCH"
@@ -51,7 +87,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: order2-typescript-repair-${{ github.sha }}
+          name: order2-determinism-repair-${{ github.sha }}
           path: /tmp/order2-repair-result.txt
           if-no-files-found: warn
           retention-days: 14
