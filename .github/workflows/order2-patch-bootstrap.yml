@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 15
     env:
       TARGET_BRANCH: feat/oraculo-santander-completion-sol
-      EXPECTED_OLD_SHA: 4482e25baa769203e0c2600d5072cc0e8f8cc78a
+      EXPECTED_OLD_SHA: 20faf52e4d55aa38056724ab9f7fcd627fe27700
     steps:
       - name: Checkout staging controller
         uses: actions/checkout@v4
@@ -28,72 +28,9 @@ jobs:
           git fetch origin "$TARGET_BRANCH"
           git checkout --detach "origin/$TARGET_BRANCH"
           test "$(git rev-parse HEAD)" = "$EXPECTED_OLD_SHA"
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def replace(path: str, old: str, new: str):
-              p = Path(path)
-              s = p.read_text()
-              if s.count(old) != 1:
-                  raise SystemExit(f"expected exactly one match in {path}, got {s.count(old)}")
-              p.write_text(s.replace(old, new))
-
-          replace(
-              'scripts/d-post-deploy-validation.ts',
-              "const checks = await Promise.all(endpoints.map(async (ep) => {",
-              "const checks: GateResult['checks'] = await Promise.all(endpoints.map(async (ep): Promise<GateResult['checks'][number]> => {",
-          )
-          replace(
-              'src/lib/oracle-multi/cron.ts',
-              "): Promise<CronJobResult['persistence_ack']> {",
-              "): Promise<NonNullable<CronJobResult['persistence_ack']>> {",
-          )
-          replace(
-              'tests/hardening/u6-kv-persistence-audit.test.ts',
-              "const raw = await failingKv.get<string>('any-key');",
-              "const raw = await failingKv.get('any-key');",
-          )
-
-          p = Path('tests/oracle-single-runtime.test.tsx')
-          s = p.read_text()
-          old_import = "import { resetLearningState, getLearningSummary } from '@/lib/closed-loop-learning';"
-          new_import = old_import + "\nimport type { LifecycleLedgerSnapshot } from '@/lib/amira-prediction-lifecycle-ledger';"
-          if s.count(old_import) != 1:
-              raise SystemExit('runtime test import mismatch')
-          s = s.replace(old_import, new_import)
-          start = s.index('const LIFECYCLE = {')
-          end = s.index('\n};', start) + 3
-          block = """const LIFECYCLE: LifecycleLedgerSnapshot = {
-  storage: 'durable',
-  binding: 'ORACLE_PREDICTIONS',
-  total_predictions: 0,
-  pending: 0,
-  rejected: 0,
-  latest_prediction: null,
-  records: [],
-  canonical: {
-    active_stage: 'EMPTY',
-    latest_prediction: null,
-    latest_outcome: null,
-    latest_verification: null,
-    counts: { total_predictions: 0, pending: 0, outcome_captured: 0, verified: 0, expired: 0, rejected: 0 },
-    pending_outcomes: 0,
-    verification_score: { brier_like: null, mae: null, directional_accuracy_pct: null, sample_count: 0, status: 'NO_HISTORY', label: 'Sin histórico suficiente (0/5 verif.)' },
-    drift_indicator: { signal: 0, threshold: 0.15, detected: false, label: 'Sin drift significativo (0.00%)' },
-    audit_mode: true,
-    all_predictions_have_id: true,
-    all_predictions_have_sources_or_rejected: true,
-    log_size_predictions: 0,
-    log_size_outcomes: 0,
-    log_size_verifications: 0,
-  },
-  last_error: null,
-  last_successful_read_at: new Date(0).toISOString(),
-  last_successful_write_at: new Date(0).toISOString(),
-};"""
-          s = s[:start] + block + s[end:]
-          p.write_text(s)
-          PY
+          python3 -c "from pathlib import Path; p=Path('scripts/d-post-deploy-validation.ts'); s=p.read_text(); old=\"const checks = await Promise.all(endpoints.map(async (ep) => {\"; new=\"const checks: GateResult['checks'] = await Promise.all(endpoints.map(async (ep): Promise<GateResult['checks'][number]> => {\"; assert s.count(old)==1; p.write_text(s.replace(old,new))"
+          python3 -c "from pathlib import Path; p=Path('src/lib/oracle-multi/cron.ts'); s=p.read_text(); old=\"): Promise<CronJobResult['persistence_ack']> {\"; new=\"): Promise<NonNullable<CronJobResult['persistence_ack']>> {\"; assert s.count(old)==1; p.write_text(s.replace(old,new))"
+          python3 -c "from pathlib import Path; p=Path('tests/hardening/u6-kv-persistence-audit.test.ts'); s=p.read_text(); old=\"const raw = await failingKv.get<string>('any-key');\"; new=\"const raw = await failingKv.get('any-key');\"; assert s.count(old)==1; p.write_text(s.replace(old,new))"
           git diff --check
           git diff --stat
 
@@ -103,8 +40,8 @@ jobs:
           set -euo pipefail
           git config user.name "aMira ARQ"
           git config user.email "actions@users.noreply.github.com"
-          git add scripts/d-post-deploy-validation.ts src/lib/oracle-multi/cron.ts tests/hardening/u6-kv-persistence-audit.test.ts tests/oracle-single-runtime.test.tsx
-          git commit -m "fix(order2): clear strict TypeScript diagnostics"
+          git add scripts/d-post-deploy-validation.ts src/lib/oracle-multi/cron.ts tests/hardening/u6-kv-persistence-audit.test.ts
+          git commit -m "fix(order2): clear remaining strict TypeScript diagnostics"
           NEW_SHA="$(git rev-parse HEAD)"
           git merge-base --is-ancestor "$EXPECTED_OLD_SHA" "$NEW_SHA"
           git push origin "HEAD:refs/heads/$TARGET_BRANCH"
