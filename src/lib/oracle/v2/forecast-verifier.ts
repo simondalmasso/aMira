@@ -3,16 +3,18 @@
 // contains no React hooks and does not create a second prediction model.
 
 export interface ForecastVerificationReport {
+  status: 'NO_HISTORY' | 'READY';
+  sample_count: number;
   total_verifications: number;
-  MAE: number;
-  RMSE: number;
+  MAE: number | null;
+  RMSE: number | null;
   MAPE: number | null;
-  HitRate: number;
-  DirectionalAccuracy: number;
-  Calibration: number;
-  mean_expected_return: number;
-  mean_realized_return: number;
-  bias: number;
+  HitRate: number | null;
+  DirectionalAccuracy: number | null;
+  Calibration: number | null;
+  mean_expected_return: number | null;
+  mean_realized_return: number | null;
+  bias: number | null;
   window_size: number;
   computed_at: string;
   verifier_version: string;
@@ -57,16 +59,18 @@ export function computeForecastVerification(): ForecastVerificationReport {
   const count = pairs.length;
   if (count === 0) {
     return {
+      status: 'NO_HISTORY',
+      sample_count: 0,
       total_verifications: 0,
-      MAE: 0,
-      RMSE: 0,
+      MAE: null,
+      RMSE: null,
       MAPE: null,
-      HitRate: 0.5,
-      DirectionalAccuracy: 50,
-      Calibration: 0,
-      mean_expected_return: 0,
-      mean_realized_return: 0,
-      bias: 0,
+      HitRate: null,
+      DirectionalAccuracy: null,
+      Calibration: null,
+      mean_expected_return: null,
+      mean_realized_return: null,
+      bias: null,
       window_size: 0,
       computed_at: new Date().toISOString(),
       verifier_version: FORECAST_VERIFIER_VERSION,
@@ -89,6 +93,8 @@ export function computeForecastVerification(): ForecastVerificationReport {
   ) / validMape.length * 100;
 
   return {
+    status: 'READY',
+    sample_count: count,
     total_verifications: count,
     MAE: round(mae, 6),
     RMSE: round(Math.sqrt(mse), 6),

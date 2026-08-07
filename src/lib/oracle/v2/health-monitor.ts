@@ -26,7 +26,7 @@
 
 import { getLineageBuffer, getLineageStats } from './lineage';
 import { getVerificationBuffer } from './forecast-verifier';
-import { getLifecycleSnapshot } from '@/lib/amira-prediction-lifecycle';
+import { getLifecycleSnapshot } from '@/lib/amira-prediction-lifecycle-core';
 
 // ─── Public Types ──────────────────────────────────────────────────────────
 

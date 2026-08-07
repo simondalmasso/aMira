@@ -113,42 +113,53 @@ describe('H8 — Architectural Invariant Tests', () => {
   });
 
   // ─── ONE Prediction Pipeline ────────────────────────────────────────────
-  test('ONE Prediction Pipeline — no parallel prediction models in canonical route', () => {
+  test('ONE Prediction Pipeline — route executes V1 once and delegates enrichment through V3', () => {
     const canonicalRoute = readFileSync(join(API_DIR, 'oracle', 'single', 'route.ts'), 'utf8');
-    // Should NOT import parallel prediction models
     expect(canonicalRoute).not.toContain("amira-prediction-engine");
     expect(canonicalRoute).not.toContain("oracle-fci/predict");
     expect(canonicalRoute).not.toContain("oracle-multi/predict");
-    // V2 + V3 orchestrators are OK — they wrap the single engine, don't replace it
-    expect(canonicalRoute).toContain("oracle/v2");
+    expect(canonicalRoute).toContain("runSinglePass");
     expect(canonicalRoute).toContain("oracle/v3");
+    expect(canonicalRoute).not.toContain("from '@/lib/oracle/v2'");
   });
 
-  test('ONE Prediction Pipeline — V2/V3 orchestrators wrap runSinglePass, not replace it', () => {
+  test('ONE Prediction Pipeline — V2/V3 reuse a precomputed canonical V1 vector', () => {
     const v2src = readFileSync(join(SRC_DIR, 'lib', 'oracle', 'v2', 'index.ts'), 'utf8');
     expect(v2src).toContain("from '@/lib/single-pass-oracle-engine'");
-    expect(v2src).toContain("runSinglePass");
+    expect(v2src).toContain('v1Vector?: AssetScoreVector');
+    expect(v2src).toContain('v1Vector ?? runSinglePass(input)');
 
     const v3src = readFileSync(join(SRC_DIR, 'lib', 'oracle', 'v3', 'index.ts'), 'utf8');
-    expect(v3src).toContain("runV2SystemicEnrichment");
+    expect(v3src).toContain('v1Vector?: AssetScoreVector');
+    expect(v3src).toContain('runV2SystemicEnrichment(input, v1Vector)');
     expect(v3src).not.toMatch(/import.*amira-prediction-engine/);
   });
 
   // ─── ONE Lifecycle ─────────────────────────────────────────────────────
-  test('ONE Lifecycle — amira-prediction-lifecycle.ts is the single lifecycle source', () => {
-    const lifecycleFiles = allSrcFiles.filter((f) =>
-      /lifecycle\.tsx?$/.test(f),
-    );
-    // We allow: amira-prediction-lifecycle.ts (canonical) + prediction-lifecycle-tracker.tsx (UI)
-    const canonical = lifecycleFiles.filter((f) =>
-      f.endsWith('amira-prediction-lifecycle.ts'),
-    );
-    expect(canonical.length).toBe(1);
+  test('ONE Lifecycle — server-safe core and client facade have explicit boundaries', () => {
+    const corePath = join(SRC_DIR, 'lib', 'amira-prediction-lifecycle-core.ts');
+    const facadePath = join(SRC_DIR, 'lib', 'amira-prediction-lifecycle.ts');
+    expect(existsSync(corePath)).toBe(true);
+    expect(existsSync(facadePath)).toBe(true);
 
-    // closed-loop-learning.ts should derive from the lifecycle, not re-implement
+    const core = readFileSync(corePath, 'utf8');
+    expect(core).not.toContain("from 'react'");
+    expect(core).not.toContain("'use client'");
+    expect(core).not.toContain('amira-prediction-engine');
+
+    const facade = readFileSync(facadePath, 'utf8');
+    expect(facade).toContain("'use client'");
+    expect(facade).toContain("from 'react'");
+    expect(facade).toContain("./amira-prediction-lifecycle-core");
+
     const closedLoop = readFileSync(join(SRC_DIR, 'lib', 'closed-loop-learning.ts'), 'utf8');
-    expect(closedLoop).toContain("getLifecycleSnapshot");
-    expect(closedLoop).toContain("amira-prediction-lifecycle");
+    expect(closedLoop).toContain('getLifecycleSnapshot');
+    expect(closedLoop).toContain("./amira-prediction-lifecycle-core");
+  });
+
+  test('ONE Lifecycle — canonical server route cannot reach the React lifecycle facade directly', () => {
+    const canonicalRoute = readFileSync(join(API_DIR, 'oracle', 'single', 'route.ts'), 'utf8');
+    expect(canonicalRoute).not.toContain("@/lib/amira-prediction-lifecycle'");
   });
 
   // ─── ONE Canonical API ──────────────────────────────────────────────────

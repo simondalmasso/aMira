@@ -25,7 +25,7 @@
 // for the model.
 
 import { setActiveWeights, getActiveWeights, DEFAULT_WEIGHTS, type LinearFactorWeights } from './linear-factor-model';
-import { getLifecycleSnapshot, type LifecycleSnapshot } from './amira-prediction-lifecycle';
+import { getLifecycleSnapshot, type LifecycleSnapshot } from './amira-prediction-lifecycle-core';
 
 // ─── Learning hyperparameters ─────────────────────────────────────────────
 //
@@ -67,6 +67,16 @@ export interface LearningState {
   lifecycle: LifecycleSnapshot;
 }
 
+export interface LearningSummary {
+  status: 'NO_HISTORY' | 'READY';
+  sampleCount: number;
+  total_verifications: number;
+  mean_absolute_error: number | null;
+  directional_accuracy_rate: number | null;
+  mean_brier_score: number | null;
+  last_update_timestamp: string | null;
+}
+
 let _learningState: LearningState = {
   total_verifications: 0,
   mean_absolute_error: 0,
@@ -82,6 +92,21 @@ export function getLearningState(): LearningState {
     ..._learningState,
     weights_history: [..._learningState.weights_history],
     lifecycle: getLifecycleSnapshot(),
+  };
+}
+
+
+export function getLearningSummary(): LearningSummary {
+  const sampleCount = _learningState.total_verifications;
+  const hasHistory = sampleCount > 0;
+  return {
+    status: hasHistory ? 'READY' : 'NO_HISTORY',
+    sampleCount,
+    total_verifications: sampleCount,
+    mean_absolute_error: hasHistory ? _learningState.mean_absolute_error : null,
+    directional_accuracy_rate: hasHistory ? _learningState.directional_accuracy_rate : null,
+    mean_brier_score: hasHistory ? _learningState.mean_brier_score : null,
+    last_update_timestamp: _learningState.last_update_timestamp,
   };
 }
 

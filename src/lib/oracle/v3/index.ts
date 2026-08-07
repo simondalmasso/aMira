@@ -148,13 +148,14 @@ function computeCompositeVerdict(
 
 export async function runV3IntelligenceEnrichment(
   input: MarketStateInput,
+  v1Vector?: AssetScoreVector,
 ): Promise<{
   v1: AssetScoreVector;
   v2: V2SystemicReport;
   v3: V3IntelligenceReport;
 }> {
   // 1. Run V1 + V2 enrichment (canonical pipeline)
-  const { v1, v2 } = await runV2SystemicEnrichment(input);
+  const { v1, v2 } = await runV2SystemicEnrichment(input, v1Vector);
 
   // Get the primary asset (SAN)
   const sanScore: AssetScore = v1.scores[0];
