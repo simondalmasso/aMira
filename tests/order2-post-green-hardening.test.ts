@@ -3,10 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = process.cwd();
-
-function source(path: string): string {
-  return readFileSync(join(ROOT, path), 'utf8');
-}
+function source(path: string): string { return readFileSync(join(ROOT, path), 'utf8'); }
 
 describe('Order #2 post-green persistence and API hardening', () => {
   test('no-data cron evidence is durable without overwriting canonical observation snapshots', () => {
@@ -23,11 +20,7 @@ describe('Order #2 post-green persistence and API hardening', () => {
   });
 
   test('mutating class refresh routes fail closed when durable bindings are unavailable', () => {
-    for (const route of [
-      'src/app/api/oracle/bonds/route.ts',
-      'src/app/api/oracle/stocks/route.ts',
-      'src/app/api/oracle/cedears/route.ts',
-    ]) {
+    for (const route of ['src/app/api/oracle/bonds/route.ts', 'src/app/api/oracle/stocks/route.ts', 'src/app/api/oracle/cedears/route.ts']) {
       const text = source(route);
       expect(text).toContain('hasDurableBindings');
       expect(text).toContain('ORACLE_STORAGE_BINDINGS_UNAVAILABLE');
@@ -36,12 +29,7 @@ describe('Order #2 post-green persistence and API hardening', () => {
   });
 
   test('public oracle class routes never echo raw caught exception messages', () => {
-    for (const route of [
-      'src/app/api/oracle/fci/route.ts',
-      'src/app/api/oracle/bonds/route.ts',
-      'src/app/api/oracle/stocks/route.ts',
-      'src/app/api/oracle/cedears/route.ts',
-    ]) {
+    for (const route of ['src/app/api/oracle/fci/route.ts', 'src/app/api/oracle/bonds/route.ts', 'src/app/api/oracle/stocks/route.ts', 'src/app/api/oracle/cedears/route.ts']) {
       const text = source(route);
       expect(text).not.toContain('error: msg');
       expect(text).not.toContain('${msg}');
@@ -80,7 +68,7 @@ describe('Order #2 post-green persistence and API hardening', () => {
     expect(engine).toContain('runX10Engine(snapshot,');
   });
 
-  test('audit and PaperBroker API paths sanitize server errors and avoid unsafe casts', () => {
+  test('audit, telemetry and PaperBroker APIs sanitize server errors', () => {
     const audit = source('src/app/api/audit/route.ts');
     expect(audit).toContain('INVALID_AUDIT_QUERY');
     expect(audit).toContain('AUDIT_OPERATION_FAILED');
@@ -91,5 +79,19 @@ describe('Order #2 post-green persistence and API hardening', () => {
     expect(paper).toContain("persistence: 'ephemeral-isolate'");
     expect(paper).toContain('PAPER_BROKER_OPERATION_FAILED');
     expect(paper).not.toContain("error: error instanceof Error ? error.message");
+
+    const telemetry = source('src/app/api/telemetry/route.ts');
+    expect(telemetry).toContain('TELEMETRY_READ_FAILED');
+    expect(telemetry).not.toContain("error: error instanceof Error ? error.message");
+  });
+
+  test('backtest cannot relabel synthetic fixtures as real because telemetry exists', () => {
+    const route = source('src/app/api/backtest/route.ts');
+    expect(route).toContain("dataLabel: 'SIMULADO'");
+    expect(route).toContain("dataOrigin: 'TRAINING_MEMORY_ESTIMATE'");
+    expect(route).toContain('realDataIntegrated: false');
+    expect(route).toContain("role: 'AUXILIARY_CONTEXT_ONLY'");
+    expect(route).not.toContain("const dataLabel = readyForRealBacktest ? 'REAL' : 'SIMULADO'");
+    expect(route).not.toContain('as StrategicMode');
   });
 });

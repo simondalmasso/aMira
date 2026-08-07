@@ -1,99 +1,94 @@
 // ============================================================================
-// API ROUTE: /api/backtest — Run historical replay backtest
-// ============================================================================
-// DATA ORIGIN: TRAINING_MEMORY_ESTIMATE + REAL_DECISIONS_LOG (when available)
-// Backtest results use synthetic snapshots UNTIL the telemetry KV accumulates
-// enough real decisions. See FIX_CRON_TELEMETRY_BACKTEST (Fix 3).
+// API ROUTE: /api/backtest — synthetic/reconstructed historical replay
+// DATA ORIGIN IS ALWAYS TRAINING_MEMORY_ESTIMATE for this engine.
+// Persisted telemetry is auxiliary context; it does not convert fixtures to observed history.
 // ============================================================================
 
 import { NextResponse } from 'next/server';
-import { runBacktest, computeCalibration, type StrategicMode } from '@/lib/backtest-engine';
+import { z } from 'zod';
+import { runBacktest, computeCalibration } from '@/lib/backtest-engine';
 import { logEvent, getTelemetrySummary } from '@/lib/telemetry';
 
-// FIX_CRON_TELEMETRY_BACKTEST (Fix 3): threshold (in days of history) at which
-// we declare the backtest "REAL" instead of "SIMULADO". Below this we still
-// run the synthetic replay but flag it.
-const MIN_DAYS_FOR_REAL_BACKTEST = 9;
+const querySchema = z.object({
+  mode: z.enum(['CONSERVATIVE', 'MODERATE', 'AGGRESSIVE']).default('MODERATE'),
+  capital: z.coerce.number().finite().positive().max(1_000_000_000).default(2000),
+}).strict();
+
+function invalidQuery(error: z.ZodError) {
+  return NextResponse.json({
+    success: false,
+    code: 'INVALID_BACKTEST_QUERY',
+    issues: error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message, code: issue.code })),
+    timestamp: new Date().toISOString(),
+  }, { status: 422 });
+}
 
 export async function GET(request: Request) {
-  const startTime = Date.now();
+  const startedAt = Date.now();
+  const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams.entries()));
+  if (!parsed.success) return invalidQuery(parsed.error);
+  const { mode, capital } = parsed.data;
 
   try {
-    const { searchParams } = new URL(request.url);
-    const mode = (searchParams.get('mode') ?? 'MODERATE') as StrategicMode;
-    const capital = parseFloat(searchParams.get('capital') ?? '2000');
-
-    // Validate mode
-    const validModes: StrategicMode[] = ['CONSERVATIVE', 'MODERATE', 'AGGRESSIVE'];
-    const safeMode = validModes.includes(mode) ? mode : 'MODERATE';
-
-    // Run backtest
-    const result = runBacktest(safeMode, capital);
-
-    // Run calibration
+    const result = runBacktest(mode, capital);
     const calibration = computeCalibration(result.periodResults);
-
-    // FIX_CRON_TELEMETRY_BACKTEST (Fix 3): read real telemetry state from KV.
-    // Previously this was hardcoded as `realDataIntegrated: false as const`.
-    // Now it actually reflects whether the cron has been accumulating decisions.
     const telemetrySummary = await getTelemetrySummary();
     const totalDecisions = telemetrySummary.totalDecisions ?? 0;
     const daysOfHistory = telemetrySummary.daysOfHistory ?? 0;
-    const realDataIntegrated = totalDecisions > 0;
-    const readyForRealBacktest = daysOfHistory >= MIN_DAYS_FOR_REAL_BACKTEST;
-    const dataLabel = readyForRealBacktest ? 'REAL' : 'SIMULADO';
 
-    // Log event
     logEvent({
       eventType: 'BACKTEST_RUN',
       source: '/api/backtest',
-      data: { mode: safeMode, capital, assessment: result.assessment, totalDecisions, daysOfHistory, dataLabel },
-      durationMs: Date.now() - startTime,
+      data: {
+        mode,
+        capital,
+        assessment: result.assessment,
+        fixtureOrigin: 'TRAINING_MEMORY_ESTIMATE',
+        telemetryDecisionsAvailable: totalDecisions,
+        telemetryDaysAvailable: daysOfHistory,
+      },
+      durationMs: Date.now() - startedAt,
       success: true,
     });
 
-    // API-01: Top-level disclaimer about data origin
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
-      mode: safeMode,
+      mode,
       capital,
       backtest: result,
       calibration,
-      durationMs: Date.now() - startTime,
-      // API-01: Data origin disclaimer — top level
-      dataLabel,
-      dataOrigin: readyForRealBacktest ? 'REAL_DECISIONS_LOG' : 'TRAINING_MEMORY_ESTIMATE',
-      disclaimer: readyForRealBacktest
-        ? 'Backtest basado parcialmente en decisiones reales persistidas por el cron. Aún contiene escenarios sintéticos. No usar para decisiones de inversión.'
-        : 'Resultados calculados contra snapshots sintéticos generados por LLM. No constituyen backtest con datos reales. No usar para decisiones de inversión.',
+      durationMs: Date.now() - startedAt,
+      dataLabel: 'SIMULADO' as const,
+      dataOrigin: 'TRAINING_MEMORY_ESTIMATE' as const,
+      disclaimer: 'Resultados calculados contra snapshots sintéticos/reconstruidos. La existencia de telemetría real no convierte estas fixtures en historia observada. No usar como evidencia de rendimiento real.',
       validUntil: null,
-      // FIX_CRON_TELEMETRY_BACKTEST (Fix 3): replaced `false as const` hardcode
-      realDataIntegrated,
-      // New fields for transparency
-      totalDecisions,
-      daysOfHistory,
-      minDecisionsForReal: MIN_DAYS_FOR_REAL_BACKTEST,
-      readyForRealBacktest,
+      realDataIntegrated: false as const,
+      telemetryContext: {
+        available: totalDecisions > 0,
+        totalDecisions,
+        daysOfHistory,
+        role: 'AUXILIARY_CONTEXT_ONLY' as const,
+      },
     }, {
       headers: {
-        // API-02: HTTP headers warning about data origin
-        'X-Data-Label': dataLabel,
-        'X-Data-Origin': readyForRealBacktest ? 'REAL_DECISIONS_LOG' : 'TRAINING_MEMORY_ESTIMATE',
+        'X-Data-Label': 'SIMULADO',
+        'X-Data-Origin': 'TRAINING_MEMORY_ESTIMATE',
       },
     });
   } catch (error) {
+    console.error('[backtest] execution failed', error);
     logEvent({
       eventType: 'BACKTEST_RUN',
       source: '/api/backtest',
       success: false,
-      error: error instanceof Error ? error.message : String(error),
-      durationMs: Date.now() - startTime,
+      error: 'BACKTEST_EXECUTION_FAILED',
+      durationMs: Date.now() - startedAt,
     });
-
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      code: 'BACKTEST_EXECUTION_FAILED',
+      error: 'Backtest execution failed',
       timestamp: new Date().toISOString(),
     }, { status: 500 });
   }
