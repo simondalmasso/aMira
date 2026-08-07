@@ -11,7 +11,6 @@ function source(path: string): string {
 describe('Order #2 post-green persistence and API hardening', () => {
   test('no-data cron evidence is durable without overwriting canonical observation snapshots', () => {
     const cron = source('src/lib/oracle-multi/cron.ts');
-
     expect(cron).toContain("const NO_DATA_STATUS_PREFIX = 'snap:status'");
     expect(cron).toContain('`${NO_DATA_STATUS_PREFIX}:${cls}:${snapshotDate}`');
     expect(cron).toContain("source: 'OBSERVED_UNAVAILABLE'");
@@ -33,7 +32,6 @@ describe('Order #2 post-green persistence and API hardening', () => {
       expect(text).toContain('hasDurableBindings');
       expect(text).toContain('ORACLE_STORAGE_BINDINGS_UNAVAILABLE');
     }
-
     expect(source('src/app/api/oracle/fci/route.ts')).toContain('ORACLE_FCI_HISTORY_UNAVAILABLE');
   });
 
@@ -54,5 +52,44 @@ describe('Order #2 post-green persistence and API hardening', () => {
     const route = source('src/app/api/oracle/cedears/route.ts');
     expect(route).toContain("type !== 'single' && type !== 'etf' && type !== 'all'");
     expect(route).toContain('INVALID_CEDEAR_TYPE');
+  });
+
+  test('data integrity layer is typed and does not double-penalize ERROR source state', () => {
+    const integrity = source('src/lib/data-integrity.ts');
+    expect(integrity).not.toContain('Record<string, any>');
+    expect(integrity).not.toContain('ValidationResult<any>');
+    expect(integrity).not.toContain("'REAL' | 'ERROR' | 'ERROR'");
+    expect(integrity).not.toContain('as any');
+    expect((integrity.match(/data\.source === 'ERROR'/g) ?? []).length).toBe(1);
+    expect(integrity).toContain("data.source === 'PARTIAL_FALLBACK'");
+  });
+
+  test('temporal API validates query input and never exposes caught error details', () => {
+    const route = source('src/app/api/temporal-validation/route.ts');
+    expect(route).toContain('INVALID_TEMPORAL_VALIDATION_QUERY');
+    expect(route).toContain("z.enum(['CONSERVATIVE', 'MODERATE', 'AGGRESSIVE'])");
+    expect(route).not.toContain('as StrategicMode');
+    expect(route).not.toContain('details: error');
+  });
+
+  test('temporal engine uses typed reconstructed MacroState and attribution adapters', () => {
+    const engine = source('src/lib/temporal-validation-engine.ts');
+    expect(engine).not.toContain('as unknown as MacroState');
+    expect(engine).not.toContain('as any');
+    expect(engine).toContain('bucketForIndex');
+    expect(engine).toContain('runX10Engine(snapshot,');
+  });
+
+  test('audit and PaperBroker API paths sanitize server errors and avoid unsafe casts', () => {
+    const audit = source('src/app/api/audit/route.ts');
+    expect(audit).toContain('INVALID_AUDIT_QUERY');
+    expect(audit).toContain('AUDIT_OPERATION_FAILED');
+    expect(audit).not.toContain('as any');
+    expect(audit).not.toContain('error instanceof Error ? error.message');
+
+    const paper = source('src/app/api/paper-broker/route.ts');
+    expect(paper).toContain("persistence: 'ephemeral-isolate'");
+    expect(paper).toContain('PAPER_BROKER_OPERATION_FAILED');
+    expect(paper).not.toContain("error: error instanceof Error ? error.message");
   });
 });
